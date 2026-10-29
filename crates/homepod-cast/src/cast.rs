@@ -72,12 +72,53 @@ pub fn save_hotkey(mods: u32, vk: u32) {
 }
 
 /// Discover AirPlay 2 audio devices on the LAN, HomePods first.
+/// Automatically detects and groups stereo-paired HomePods, selecting the leader.
 pub async fn discover(timeout: Duration) -> anyhow::Result<Vec<Device>> {
     let browser = ServiceBrowser::new()?;
     let mut devices = browser.scan(timeout).await?;
     devices.retain(|d| d.supports_airplay2() && d.addresses.iter().any(|a| a.is_ipv4()));
-    devices.sort_by_key(|d| u8::from(!d.model.starts_with("AudioAccessory")));
-    Ok(devices)
+
+    use std::collections::HashMap;
+    let mut groups: HashMap<String, Vec<Device>> = HashMap::new();
+    let mut order: Vec<String> = Vec::new();
+
+    for d in devices {
+        let key = if let Some(tsid) = d.tight_sync_id {
+            format!("tsid:{}", tsid)
+        } else if let Some(ref gpn) = d.group_public_name {
+            format!("gpn:{}", gpn)
+        } else if let Some(gid) = d.group_id {
+            if d.is_group_leader || d.group_contains_discoverable_leader {
+                format!("gid:{}", gid)
+            } else {
+                format!("id:{}", d.id.to_mac_string())
+            }
+        } else {
+            format!("id:{}", d.id.to_mac_string())
+        };
+
+        if !groups.contains_key(&key) {
+            order.push(key.clone());
+        }
+        groups.entry(key).or_default().push(d);
+    }
+
+    let mut result = Vec::new();
+    for key in order {
+        if let Some(mut members) = groups.remove(&key) {
+            members.sort_by_key(|d| u8::from(!d.is_group_leader));
+            let mut leader = members.remove(0);
+            if !members.is_empty() {
+                if let Some(ref gpn) = leader.group_public_name {
+                    leader.name = format!("{} (立體聲配對)", gpn);
+                }
+            }
+            result.push(leader);
+        }
+    }
+
+    result.sort_by_key(|d| u8::from(!d.model.starts_with("AudioAccessory")));
+    Ok(result)
 }
 
 /// An active stream to one device: the AirPlay connection plus the background

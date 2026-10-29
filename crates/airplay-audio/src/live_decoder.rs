@@ -22,6 +22,7 @@ pub struct LivePcmFrame {
 }
 
 /// Sender for pushing live PCM frames to a LiveAudioDecoder.
+#[derive(Clone)]
 pub struct LiveFrameSender {
     tx: Sender<LivePcmFrame>,
 }

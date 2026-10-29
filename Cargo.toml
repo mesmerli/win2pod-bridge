@@ -13,13 +13,14 @@ members = [
     "crates/airplay-bluetooth",
     "crates/airplay-resampler",
     "crates/homepod-cast",
+    "crates/homepod-cast-gui",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "GPL-2.0"
-repository = "https://github.com/example/airplay2-sender"
+repository = "https://github.com/mesmerli/win2pod-bridge"
 
 [workspace.dependencies]
 # Async runtime

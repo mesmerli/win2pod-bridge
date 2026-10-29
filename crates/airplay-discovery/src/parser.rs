@@ -94,13 +94,17 @@ impl TxtRecordParser {
         // Parse HomeKit home UUID
         let homekit_home_id = txt.get("hkid").cloned();
 
+        // Helper to parse standard or compound UUID (e.g. "UUID+1+UUID" used in HomePod stereo pairs)
+        let parse_compound_uuid = |s: &str| -> Result<uuid::Uuid, ParseError> {
+            let base = s.split('+').next().unwrap_or(s);
+            uuid::Uuid::parse_str(base)
+                .map_err(|_| ParseError::InvalidValue(format!("invalid UUID: {}", s)))
+        };
+
         // Parse group UUID
         let group_id = txt
             .get("gid")
-            .map(|gid| {
-                uuid::Uuid::parse_str(gid)
-                    .map_err(|_| ParseError::InvalidValue(format!("invalid UUID: {}", gid)))
-            })
+            .map(|gid| parse_compound_uuid(gid))
             .transpose()?;
 
         // Parse is group leader flag
@@ -127,10 +131,7 @@ impl TxtRecordParser {
         // Parse parent group UUID
         let parent_group_id = txt
             .get("pgid")
-            .map(|pgid| {
-                uuid::Uuid::parse_str(pgid)
-                    .map_err(|_| ParseError::InvalidValue(format!("invalid UUID: {}", pgid)))
-            })
+            .map(|pgid| parse_compound_uuid(pgid))
             .transpose()?;
 
         // Parse parent group contains discoverable leader
@@ -142,10 +143,7 @@ impl TxtRecordParser {
         // Parse tight sync UUID
         let tight_sync_id = txt
             .get("tsid")
-            .map(|tsid| {
-                uuid::Uuid::parse_str(tsid)
-                    .map_err(|_| ParseError::InvalidValue(format!("invalid UUID: {}", tsid)))
-            })
+            .map(|tsid| parse_compound_uuid(tsid))
             .transpose()?;
 
         Ok(Device {

@@ -293,7 +293,7 @@ fn sender_thread_main(
 
                     // Log burst with significant jitter
                     if abs_jitter > 2.0 * burst_size as f64 {
-                        tracing::warn!(
+                        tracing::trace!(
                             "JITTER burst#{}: interval={:.3}ms target={:.3}ms jitter={:+.3}ms",
                             packet_count / burst_size as u64, interval_ms, target_ms, jitter_ms
                         );
@@ -303,7 +303,7 @@ fn sender_thread_main(
                     if packet_count % 500 < burst_size as u64 {
                         let bursts = packet_count / burst_size as u64;
                         let avg_jitter = if bursts > 1 { jitter_sum_ms / (bursts - 1) as f64 } else { 0.0 };
-                        tracing::info!(
+                        tracing::debug!(
                             "TIMING STATS after {} pkts ({} bursts): avg_jitter={:.3}ms max_jitter={:.3}ms exceeds={}",
                             packet_count, bursts, avg_jitter, max_jitter_ms, jitter_exceed_count
                         );
@@ -344,7 +344,7 @@ fn sender_thread_main(
                     // Catch up if we've fallen behind by more than one burst
                     let now_ns = monotonic_now_ns();
                     if now_ns > next_deadline_ns + burst_duration_ns {
-                        tracing::warn!(
+                        tracing::trace!(
                             "Sender thread fell behind by {:.2}ms, resetting deadline",
                             (now_ns - next_deadline_ns) as f64 / 1_000_000.0
                         );
@@ -356,7 +356,7 @@ fn sender_thread_main(
                     next_deadline += frame_duration * burst_size as u32;
                     let now = std::time::Instant::now();
                     if now > next_deadline + frame_duration * burst_size as u32 {
-                        tracing::warn!(
+                        tracing::trace!(
                             "Sender thread fell behind by {:.2}ms, resetting deadline",
                             (now - next_deadline).as_secs_f64() * 1000.0
                         );
@@ -671,13 +671,17 @@ impl AudioStreamer {
         self.state_cache.store(StreamerState::Buffering as u8, Ordering::Relaxed);
 
         // For live streaming, wait for initial buffer fill before streaming.
-        // This prevents startup artifacts from sending packets before we have
-        // enough audio data buffered. Target ~500ms of buffer (about 60 packets
-        // at 352 frames/packet, 44.1kHz).
-        tracing::info!("Live streaming: waiting for initial buffer fill...");
+        // Target a small buffer:
+        // - Low latency (latency_min <= 11025): ~100ms (5% of 2000ms buffer, ~12 packets) for snappy video sync
+        // - Standard (latency_min > 11025): ~240ms (12% of 2000ms buffer, ~30 packets) for jitter tolerance
+        let is_low_latency = {
+            let inner = self.inner.lock().await;
+            inner.config.latency_min <= 11025
+        };
+        let target_fill_pct = if is_low_latency { 5.0 } else { 12.0 };
+        tracing::info!("Live streaming: waiting for initial buffer fill (target: {:.1}%)...", target_fill_pct);
         let buffer_start = std::time::Instant::now();
-        let max_wait = std::time::Duration::from_secs(5);
-        let target_fill_pct = 50.0; // Wait for 50% of 2000ms buffer = 1000ms
+        let max_wait = std::time::Duration::from_millis(1500);
 
         loop {
             // Try to decode some frames into the buffer
@@ -995,15 +999,23 @@ async fn run_streamer(
                     guard.clock_offset = Some(latest);
                 }
             }
-            // Keep buffer above 40% but don't decode too aggressively
-            // to avoid blocking the send loop with decode operations.
-            // With 50% initial fill, we have plenty of headroom.
-            if guard.buffer.fill_percentage() < 40.0 {
+            let is_live = guard.live_decoder.is_some();
+            let refill_threshold = if is_live {
+                if guard.config.latency_min <= 11025 {
+                    5.0 // Keep live buffer small (~100ms) to eliminate AV lip-sync delay!
+                } else {
+                    12.0 // Standard mode (~240ms)
+                }
+            } else {
+                40.0 // File streaming: 40% (800ms) for high headroom
+            };
+
+            if guard.buffer.fill_percentage() < refill_threshold {
                 let decode_start = Instant::now();
                 decode_some_inner(&mut guard)?;
                 let decode_elapsed = decode_start.elapsed();
                 if decode_elapsed.as_millis() > 10 {
-                    tracing::warn!(
+                    tracing::trace!(
                         "Decode took {:.2}ms (blocking send loop!)",
                         decode_elapsed.as_secs_f64() * 1000.0
                     );
@@ -1012,7 +1024,8 @@ async fn run_streamer(
 
             // Check for recovery from Buffering state
             if guard.state == StreamerState::Buffering {
-                if guard.buffer.fill_percentage() > 10.0 {
+                let min_pct = if is_live { 2.0 } else { 10.0 };
+                if guard.buffer.fill_percentage() > min_pct {
                     guard.state = StreamerState::Streaming;
                     state_cache.store(StreamerState::Streaming as u8, Ordering::Relaxed);
                 } else {
@@ -1053,7 +1066,7 @@ async fn run_streamer(
                         (sum / frame.samples.len() as f64).sqrt()
                     };
                     let max_abs = frame.samples.iter().map(|s| s.unsigned_abs()).max().unwrap_or(0);
-                    tracing::info!(
+                    tracing::debug!(
                         "DIAG PCM frame #{}: samples={}, rms={:.1}, max_abs={}, first_4={:?}",
                         diag, frame.samples.len(), rms, max_abs,
                         &frame.samples[..frame.samples.len().min(4)]
@@ -1081,7 +1094,7 @@ async fn run_streamer(
                 // Diagnostic: log encoded ALAC data and timing for first few packets
                 if diag < 5 || diag % 500 == 0 {
                     let all_zero = packet.data.iter().all(|&b| b == 0);
-                    tracing::info!(
+                    tracing::debug!(
                         "DIAG ALAC packet #{}: encoded_len={}, all_zero={}, first_8={:02x?}, encode_time={:.2}ms",
                         diag, packet.data.len(), all_zero,
                         &packet.data[..packet.data.len().min(8)],
@@ -1098,7 +1111,7 @@ async fn run_streamer(
                 let adjusted = if let Some(offset) = guard.clock_offset {
                     let result = guard.clock.apply_offset(local_wall, &offset);
                     if diag < 3 {
-                        tracing::info!(
+                        tracing::debug!(
                             "CLOCK OFFSET: offset_ns={}, local_wall={}, adjusted={}, diff={}",
                             offset.offset_ns,
                             local_wall,
@@ -1109,7 +1122,7 @@ async fn run_streamer(
                     result
                 } else {
                     if diag < 3 {
-                        tracing::warn!("CLOCK OFFSET: None - using local time directly (may cause timing issues!)");
+                        tracing::debug!("CLOCK OFFSET: None - using local time directly (may cause timing issues!)");
                     }
                     local_wall
                 };
@@ -1124,7 +1137,7 @@ async fn run_streamer(
                 let first_packet = !guard.first_packet_sent;
                 let marker = first_packet;
                 if marker {
-                    tracing::info!("Sending first audio packet with marker bit set");
+                    tracing::debug!("Sending first audio packet with marker bit set");
                 }
 
                 let rtp_ts = packet.timestamp as u32;
@@ -1158,7 +1171,7 @@ async fn run_streamer(
                         }
 
                         if diag < 5 || diag % 500 == 0 {
-                            tracing::info!(
+                            tracing::debug!(
                                 "DIAG timing #{}: encode={:.2}ms, targets={} (sender thread handles send timing)",
                                 diag,
                                 encode_elapsed.as_secs_f64() * 1000.0,
@@ -1236,7 +1249,7 @@ async fn run_streamer(
             } else {
                 let count = underrun_counter.fetch_add(1, Ordering::Relaxed) + 1;
                 if count <= 5 || count % 50 == 0 {
-                    tracing::warn!("Buffer underrun #{} (buffer empty, packet skipped)", count);
+                    tracing::debug!("Buffer underrun #{} (buffer empty, packet skipped)", count);
                 }
                 guard.state = StreamerState::Buffering;
                 state_cache.store(StreamerState::Buffering as u8, Ordering::Relaxed);

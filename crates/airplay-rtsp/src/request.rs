@@ -151,6 +151,12 @@ impl RtspRequest {
             .body(body)
     }
 
+    pub fn get_parameter_volume(uri: impl Into<String>) -> Self {
+        Self::new(RtspMethod::GetParameter, uri)
+            .header("Content-Type", "text/parameters")
+            .body(b"volume\r\n".to_vec())
+    }
+
     pub fn setpeers(_session_id: &str, body: Vec<u8>) -> Self {
         Self::new(RtspMethod::SetPeers, "/peer-list-changed")
             .content_type_bplist()

@@ -481,7 +481,7 @@ impl RtpSender {
             // Debug: log nonce and tag for first few packets
             if seq_before % 500 == 0 {
                 if let (Some(nonce), Some(tag)) = (&encrypted.nonce, &encrypted.tag) {
-                    tracing::info!(
+                    tracing::debug!(
                         "Encrypted packet: seq={}, ts={}, ssrc={:08x}, nonce={:02x?}, tag_first4={:02x?}, payload_len={}",
                         seq_before, timestamp, self.ssrc, nonce, &tag[..4], payload.len()
                     );
@@ -513,7 +513,7 @@ impl RtpSender {
         // Diagnostic: log first packet's wire format to verify structure
         if self.sequence == 0 {
             let has_cipher = self.cipher.is_some();
-            tracing::info!(
+            tracing::debug!(
                 "DIAG first audio packet: wire_len={}, payload_len={}, encrypted={}, dest={}, \
                  header_first4={:02x?}, pt={}, marker={}, ssrc={:08x}",
                 serialized.len(), payload.len(), has_cipher, self.dest,
@@ -526,7 +526,7 @@ impl RtpSender {
         let idx = self.sequence as usize % PACKET_HISTORY_SIZE;
         self.packet_history[idx] = Some(serialized);
 
-        tracing::debug!("Audio packet prepared: seq={}, ts={}, len={}", self.sequence, timestamp, payload.len());
+        tracing::trace!("Audio packet prepared: seq={}, ts={}, len={}", self.sequence, timestamp, payload.len());
         self.sequence = self.sequence.wrapping_add(1);
 
         // Return a reference to the stored copy (avoids clone since we just stored it)
@@ -618,7 +618,7 @@ impl RtpSender {
         if self.sync_sequence <= 2 {
             let ntp_secs = (ntp_timestamp >> 32) as u32;
             let ntp_frac = ntp_timestamp as u32;
-            tracing::info!(
+            tracing::debug!(
                 "DIAG sync #{}: dest={}, rtp_ts={}, ntp_secs={}, ntp_frac={}, first_byte=0x{:02x}, pkt={:02x?}",
                 self.sync_sequence - 1, dest, rtp_timestamp, ntp_secs, ntp_frac,
                 packet[0], &packet[..20]
@@ -657,7 +657,7 @@ impl RtpSender {
         if self.sync_sequence <= 2 {
             let ntp_secs = (ntp_timestamp >> 32) as u32;
             let ntp_frac = ntp_timestamp as u32;
-            tracing::info!(
+            tracing::debug!(
                 "DIAG sync #{}: dest={}, rtp_ts={}, ntp_secs={}, ntp_frac={}, first_byte=0x{:02x}, pkt={:02x?}",
                 self.sync_sequence - 1, dest, rtp_timestamp, ntp_secs, ntp_frac,
                 packet[0], &packet[..20]
@@ -730,7 +730,7 @@ impl RtpSender {
         packet[20..28].copy_from_slice(master_clock_id);
 
         if self.sync_sequence <= 2 {
-            tracing::info!(
+            tracing::debug!(
                 "DIAG PTP sync #{}: dest={}, rtp_ts={}, ptp_secs={}, ptp_frac={}, clock_id={:02x?}",
                 self.sync_sequence - 1, dest, current_rtp_ts, ptp_secs, ptp_frac, master_clock_id
             );

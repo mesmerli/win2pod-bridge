@@ -3,7 +3,7 @@
 use airplay_core::{Device, StreamConfig, error::Result};
 use airplay_core::error::{Error as CoreError, RtspError};
 use airplay_core::features::AuthMethod;
-use airplay_rtsp::{RtspConnection, RtspSession, SessionState, RtspRequest};
+use airplay_rtsp::{RtspConnection, RtspSession, SessionState, RtspRequest, RtspResponse};
 use airplay_pairing::{PairingSession, PairVerify, PairSetup, ControllerIdentity};
 use airplay_crypto::ed25519::IdentityKeyPair;
 use std::path::PathBuf;
@@ -38,6 +38,26 @@ fn generate_device_id() -> String {
         rng.gen::<u8>(),
         rng.gen::<u8>()
     )
+}
+
+/// Verify that an RTSP response for pair-setup or pair-verify succeeded.
+/// If an error status code (e.g. 470 or 403) was returned, convert it into a clear, actionable error.
+fn verify_pairing_response(resp: &RtspResponse, phase: &str) -> Result<()> {
+    if resp.is_success() {
+        return Ok(());
+    }
+    match resp.status_code {
+        470 => Err(RtspError::SetupFailed(format!(
+            "{phase} failed: 470 Connection Authorization Required"
+        )).into()),
+        403 => Err(RtspError::SetupFailed(format!(
+            "{phase} failed: 403 Forbidden"
+        )).into()),
+        401 => Err(RtspError::SetupFailed(format!(
+            "{phase} failed: 401 Unauthorized"
+        )).into()),
+        code => Err(RtspError::UnexpectedStatus(code).into()),
+    }
 }
 
 /// Persisted sender identity for pair-verify after initial pair-setup.
@@ -212,8 +232,12 @@ pub struct Connection {
     ptp_master_sync_task: Option<JoinHandle<()>>,
     /// Control port receiver (keeps the UDP socket alive so HomePod doesn't get ICMP unreachable)
     control_receiver: Option<Arc<RtpReceiver>>,
-    /// Reverse connection to device's events port (required before RECORD)
-    events_stream: Option<TcpStream>,
+    /// Background task reading from device's events port
+    events_task: Option<JoinHandle<()>>,
+    /// Channel sender for volume updates
+    volume_events_tx: Option<tokio::sync::mpsc::UnboundedSender<f32>>,
+    /// Channel for volume updates received from the device's events stream
+    volume_events_rx: Option<tokio::sync::mpsc::UnboundedReceiver<f32>>,
     /// Remote PTP master clock identity (from BMCA yield flow)
     ptp_master_clock_id: Option<[u8; 8]>,
     /// Render delay in ms added to NTP timestamps for extra retransmit headroom.
@@ -224,6 +248,8 @@ pub struct Connection {
     eq_params: Option<Arc<EqParams>>,
     /// Stream statistics (shared with control channel threads).
     stream_stats: Arc<crate::stats::StreamStats>,
+    /// Consecutive timeouts on feedback requests
+    feedback_timeout_count: u32,
 }
 
 impl Connection {
@@ -278,6 +304,7 @@ impl Connection {
         let m1 = pairing.start_transient_pairing_with_pin(pin)?;
         let pair_setup_req = RtspRequest::pair_setup(m1, &client_device_id, 4);
         let m2_resp = rtsp.send(pair_setup_req).await?;
+        verify_pairing_response(&m2_resp, "Pair-setup M2")?;
 
         let m2_body = m2_resp.body.as_deref().unwrap_or(&[]);
         let m3 = pairing.continue_transient_pairing(m2_body)?;
@@ -285,6 +312,7 @@ impl Connection {
         if let Some(m3_data) = m3 {
             let pair_setup_req = RtspRequest::pair_setup(m3_data, &client_device_id, 4);
             let m4_resp = rtsp.send(pair_setup_req).await?;
+            verify_pairing_response(&m4_resp, "Pair-setup M4")?;
             let m4_body = m4_resp.body.as_deref().unwrap_or(&[]);
             pairing.continue_transient_pairing(m4_body)?;
         }
@@ -321,6 +349,8 @@ impl Connection {
 
         session.set_paired()?;
 
+        let (volume_events_tx, volume_events_rx) = tokio::sync::mpsc::unbounded_channel::<f32>();
+
         Ok(Self {
             device,
             rtsp,
@@ -338,11 +368,14 @@ impl Connection {
             ptp_master_clock_id: None,
             control_receiver: None,
             control_task: None,
-            events_stream: None,
+            events_task: None,
+            volume_events_tx: Some(volume_events_tx),
+            volume_events_rx: Some(volume_events_rx),
             render_delay_ms: 0,
             eq_config: None,
             eq_params: None,
             stream_stats: crate::stats::StreamStats::new(),
+            feedback_timeout_count: 0,
         })
     }
 
@@ -436,6 +469,7 @@ impl Connection {
 
         let pair_verify_req = RtspRequest::pair_verify(m1, 3);
         let m2_resp = rtsp.send(pair_verify_req).await?;
+        verify_pairing_response(&m2_resp, "Pair-verify M2")?;
 
         let m2_body = m2_resp.body.as_deref().unwrap_or(&[]);
         debug!("Pair-verify M2: {} bytes", m2_body.len());
@@ -453,6 +487,7 @@ impl Connection {
 
         let pair_verify_req = RtspRequest::pair_verify(m3, 3);
         let m4_resp = rtsp.send(pair_verify_req).await?;
+        verify_pairing_response(&m4_resp, "Pair-verify M4")?;
 
         let m4_body = m4_resp.body.as_deref().unwrap_or(&[]);
         debug!("Pair-verify M4: {} bytes", m4_body.len());
@@ -486,6 +521,8 @@ impl Connection {
 
         session.set_paired()?;
 
+        let (volume_events_tx, volume_events_rx) = tokio::sync::mpsc::unbounded_channel::<f32>();
+
         Ok(Self {
             device,
             rtsp,
@@ -503,11 +540,14 @@ impl Connection {
             ptp_master_clock_id: None,
             control_receiver: None,
             control_task: None,
-            events_stream: None,
+            events_task: None,
+            volume_events_tx: Some(volume_events_tx),
+            volume_events_rx: Some(volume_events_rx),
             render_delay_ms: 0,
             eq_config: None,
             eq_params: None,
             stream_stats: crate::stats::StreamStats::new(),
+            feedback_timeout_count: 0,
         })
     }
 
@@ -574,6 +614,7 @@ impl Connection {
         debug!("Pair-setup M1: {} bytes", m1.len());
 
         let m2_resp = rtsp.send(RtspRequest::pair_setup(m1, &client_device_id, 3)).await?;
+        verify_pairing_response(&m2_resp, "Pair-setup M2")?;
         let m2_body = m2_resp.body.as_deref().unwrap_or(&[]);
         debug!("Pair-setup M2: {} bytes", m2_body.len());
 
@@ -588,6 +629,7 @@ impl Connection {
         debug!("Pair-setup M3: {} bytes", m3.len());
 
         let m4_resp = rtsp.send(RtspRequest::pair_setup(m3, &client_device_id, 3)).await?;
+        verify_pairing_response(&m4_resp, "Pair-setup M4")?;
         let m4_body = m4_resp.body.as_deref().unwrap_or(&[]);
         debug!("Pair-setup M4: {} bytes", m4_body.len());
 
@@ -602,6 +644,7 @@ impl Connection {
         debug!("Pair-setup M5: {} bytes", m5.len());
 
         let m6_resp = rtsp.send(RtspRequest::pair_setup(m5, &client_device_id, 3)).await?;
+        verify_pairing_response(&m6_resp, "Pair-setup M6")?;
         let m6_body = m6_resp.body.as_deref().unwrap_or(&[]);
         debug!("Pair-setup M6: {} bytes", m6_body.len());
 
@@ -687,6 +730,8 @@ impl Connection {
 
         session.set_paired()?;
 
+        let (volume_events_tx, volume_events_rx) = tokio::sync::mpsc::unbounded_channel::<f32>();
+
         Ok(Self {
             device,
             rtsp,
@@ -704,11 +749,14 @@ impl Connection {
             ptp_master_clock_id: None,
             control_receiver: None,
             control_task: None,
-            events_stream: None,
+            events_task: None,
+            volume_events_tx: Some(volume_events_tx),
+            volume_events_rx: Some(volume_events_rx),
             render_delay_ms: 0,
             eq_config: None,
             eq_params: None,
             stream_stats: crate::stats::StreamStats::new(),
+            feedback_timeout_count: 0,
         })
     }
 
@@ -797,7 +845,7 @@ impl Connection {
         match TcpStream::connect(events_addr).await {
             Ok(stream) => {
                 tracing::info!("Events connection established");
-                self.events_stream = Some(stream);
+                self.start_events_listener(stream);
             }
             Err(e) => {
                 // Not fatal - owntone says "proceeding anyway" if this fails
@@ -977,6 +1025,12 @@ impl Connection {
         if let Some(task) = self.timing_task.take() {
             task.abort();
         }
+
+        if let Some(task) = self.events_task.take() {
+            task.abort();
+        }
+        self.volume_events_rx = None;
+        self.volume_events_tx = None;
 
         // Stop timing server
         if let Some(mut server) = self.timing_server.take() {
@@ -1458,7 +1512,24 @@ impl Connection {
         let req = RtspRequest::feedback(uri);
         match tokio::time::timeout(std::time::Duration::from_secs(2), self.rtsp.send(req)).await {
             Ok(Ok(resp)) => {
+                self.feedback_timeout_count = 0;
                 tracing::trace!("Feedback response: status={}", resp.status_code);
+                if resp.status_code >= 400 {
+                    return Err(CoreError::Rtsp(RtspError::UnexpectedStatus(resp.status_code)));
+                }
+                if let Some(ref body) = resp.body {
+                    if !body.is_empty() {
+                        if let Some(vol) = parse_volume_from_event(resp.header("Content-Type"), body) {
+                            if (self.volume - vol).abs() > 0.005 {
+                                tracing::info!("HomePod reported volume via feedback: {:.3} (was {:.3})", vol, self.volume);
+                                self.volume = vol;
+                                if let Some(ref tx) = self.volume_events_tx {
+                                    let _ = tx.send(vol);
+                                }
+                            }
+                        }
+                    }
+                }
                 Ok(())
             }
             Ok(Err(e)) => {
@@ -1466,8 +1537,50 @@ impl Connection {
                 Err(e)
             }
             Err(_) => {
-                tracing::debug!("Feedback request timed out");
-                Ok(()) // Don't fail on timeout - it's just a keepalive
+                self.feedback_timeout_count = self.feedback_timeout_count.saturating_add(1);
+                tracing::debug!("Feedback request timed out (count={})", self.feedback_timeout_count);
+                if self.feedback_timeout_count >= 2 {
+                    Err(CoreError::Timeout)
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    /// Query current volume from device using GET_PARAMETER.
+    pub async fn get_volume(&mut self) -> Result<Option<f32>> {
+        let uri = self.session.request_uri();
+        let req = RtspRequest::get_parameter_volume(uri);
+        match tokio::time::timeout(std::time::Duration::from_millis(800), self.rtsp.send(req)).await {
+            Ok(Ok(resp)) => {
+                if resp.status_code == 200 {
+                    if let Some(ref body) = resp.body {
+                        if !body.is_empty() {
+                            if let Some(vol) = parse_volume_from_event(resp.header("Content-Type"), body) {
+                                if (self.volume - vol).abs() > 0.005 {
+                                    tracing::info!("HomePod reported volume via GET_PARAMETER: {:.3} (was {:.3})", vol, self.volume);
+                                    self.volume = vol;
+                                    if let Some(ref tx) = self.volume_events_tx {
+                                        let _ = tx.send(vol);
+                                    }
+                                }
+                                return Ok(Some(vol));
+                            } else {
+                                tracing::debug!("GET_PARAMETER 200 unparsed body: len={}, text={}", body.len(), String::from_utf8_lossy(body));
+                            }
+                        }
+                    }
+                }
+                Ok(None)
+            }
+            Ok(Err(e)) => {
+                tracing::debug!("GET_PARAMETER volume failed: {}", e);
+                Ok(None)
+            }
+            Err(_) => {
+                tracing::debug!("GET_PARAMETER volume timed out");
+                Ok(None)
             }
         }
     }
@@ -1521,7 +1634,7 @@ impl Connection {
         match tokio::net::TcpStream::connect(events_addr).await {
             Ok(stream) => {
                 tracing::info!("Events connection established");
-                self.events_stream = Some(stream);
+                self.start_events_listener(stream);
             }
             Err(e) => {
                 warn!("Could not connect to events port {} (proceeding anyway): {}", events_addr, e);
@@ -1679,7 +1792,7 @@ impl Connection {
         match TcpStream::connect(events_addr).await {
             Ok(stream) => {
                 tracing::info!("Events connection established (group member)");
-                self.events_stream = Some(stream);
+                self.start_events_listener(stream);
             }
             Err(e) => {
                 warn!("Could not connect to events port {} (proceeding anyway): {}", events_addr, e);
@@ -1885,12 +1998,271 @@ impl Connection {
         self.control_receiver.as_ref()
             .and_then(|rx| rx.try_clone_socket().ok().flatten())
     }
+
+    /// Internal helper to launch the reverse events stream listener.
+    fn start_events_listener(&mut self, stream: TcpStream) {
+        let tx = if let Some(ref tx) = self.volume_events_tx {
+            tx.clone()
+        } else {
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<f32>();
+            self.volume_events_rx = Some(rx);
+            self.volume_events_tx = Some(tx.clone());
+            tx
+        };
+        let task = tokio::spawn(run_events_listener(stream, tx));
+        self.events_task = Some(task);
+    }
+
+    /// Take the volume events receiver channel if available.
+    pub fn take_volume_events_rx(&mut self) -> Option<tokio::sync::mpsc::UnboundedReceiver<f32>> {
+        self.volume_events_rx.take()
+    }
+}
+
+/// Helper to convert AirPlay volume in decibels or linear fraction to 0.0..=1.0 scale.
+pub fn db_or_linear_to_volume(val: f32) -> f32 {
+    if val <= -140.0 {
+        0.0
+    } else if val <= 0.0 {
+        10.0_f32.powf(val / 20.0).clamp(0.0, 1.0)
+    } else if val <= 1.0 {
+        val
+    } else {
+        1.0
+    }
+}
+
+/// Recursively search a plist Value for volume or relativeVolume keys.
+pub fn find_volume_in_plist(val: &plist::Value) -> Option<f32> {
+    match val {
+        plist::Value::Dictionary(dict) => {
+            for (k, v) in dict {
+                let k_lower = k.to_ascii_lowercase();
+                if k_lower == "volume"
+                    || k_lower == "device-volume"
+                    || k_lower == "devicevolume"
+                    || k_lower == "mastervolume"
+                    || k_lower == "speakervolume"
+                    || k_lower == "volumelevel"
+                {
+                    if let Some(num) = v.as_real() {
+                        return Some(db_or_linear_to_volume(num as f32));
+                    } else if let Some(int_val) = v.as_signed_integer() {
+                        return Some(db_or_linear_to_volume(int_val as f32));
+                    } else if let Some(uint_val) = v.as_unsigned_integer() {
+                        return Some(db_or_linear_to_volume(uint_val as f32));
+                    } else if let Some(s) = v.as_string() {
+                        if let Ok(num) = s.trim().parse::<f32>() {
+                            return Some(db_or_linear_to_volume(num));
+                        }
+                    }
+                } else if k_lower == "relativevolume" {
+                    if let Some(num) = v.as_real() {
+                        return Some((num as f32).clamp(0.0, 1.0));
+                    }
+                }
+                if let Some(found) = find_volume_in_plist(v) {
+                    return Some(found);
+                }
+            }
+        }
+        plist::Value::Array(arr) => {
+            for item in arr {
+                if let Some(found) = find_volume_in_plist(item) {
+                    return Some(found);
+                }
+            }
+        }
+        _ => {}
+    }
+    None
+}
+
+/// Parse volume from an AirPlay event body (plist or text).
+pub fn parse_volume_from_event(content_type: Option<&str>, body: &[u8]) -> Option<f32> {
+    // 1. Try plist first if header suggests plist or body has plist magic
+    if content_type.map_or(false, |ct| ct.contains("plist"))
+        || body.starts_with(b"bplist00")
+        || body.starts_with(b"<?xml")
+    {
+        if let Ok(plist_val) = plist::Value::from_reader(std::io::Cursor::new(body)) {
+            if let Some(vol) = find_volume_in_plist(&plist_val) {
+                return Some(vol);
+            }
+        }
+    }
+
+    // 2. Try text/parameters parsing
+    if let Ok(text) = std::str::from_utf8(body) {
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if let Some((k, v)) = trimmed.split_once(':') {
+                let k = k.trim().to_ascii_lowercase();
+                if k == "volume" || k == "device-volume" || k == "devicevolume" || k == "master-volume" {
+                    if let Ok(val) = v.trim().parse::<f32>() {
+                        return Some(db_or_linear_to_volume(val));
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Fallback: try plist parsing even if header didn't specify
+    if let Ok(plist_val) = plist::Value::from_reader(std::io::Cursor::new(body)) {
+        if let Some(vol) = find_volume_in_plist(&plist_val) {
+            return Some(vol);
+        }
+    }
+
+    None
+}
+
+/// Background task that reads incoming events (like volume changes) on the reverse events stream.
+async fn run_events_listener(
+    stream: TcpStream,
+    volume_tx: tokio::sync::mpsc::UnboundedSender<f32>,
+) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let (mut read_half, mut write_half) = stream.into_split();
+    let mut buf = [0u8; 4096];
+    let mut buffer = Vec::new();
+
+    loop {
+        let n = match read_half.read(&mut buf).await {
+            Ok(0) => {
+                tracing::debug!("Events connection closed by remote peer");
+                return;
+            }
+            Ok(n) => n,
+            Err(e) => {
+                tracing::debug!("Error reading from events connection: {}", e);
+                return;
+            }
+        };
+
+        buffer.extend_from_slice(&buf[..n]);
+
+        // Process any complete messages in buffer
+        while !buffer.is_empty() {
+            if let Some(header_end) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
+                let header_bytes = &buffer[..header_end];
+                let header_text = String::from_utf8_lossy(header_bytes);
+
+                let mut content_length = 0usize;
+                let mut content_type = None;
+                let mut cseq = None;
+
+                for line in header_text.lines() {
+                    let trimmed = line.trim();
+                    if let Some((k, v)) = trimmed.split_once(':') {
+                        let k = k.trim().to_ascii_lowercase();
+                        let v = v.trim();
+                        if k == "content-length" {
+                            content_length = v.parse::<usize>().unwrap_or(0);
+                        } else if k == "content-type" {
+                            content_type = Some(v.to_string());
+                        } else if k == "cseq" {
+                            cseq = Some(v.to_string());
+                        }
+                    }
+                }
+
+                let total_len = header_end + 4 + content_length;
+                if buffer.len() < total_len {
+                    // Need more bytes to complete the body
+                    break;
+                }
+
+                let body = &buffer[header_end + 4..total_len];
+                tracing::debug!(
+                    "Events connection incoming request: {} (content_len={})",
+                    header_text.lines().next().unwrap_or(""),
+                    content_length
+                );
+
+                if let Some(vol) = parse_volume_from_event(content_type.as_deref(), body) {
+                    tracing::info!("Received volume from HomePod reverse event: {:.3}", vol);
+                    let _ = volume_tx.send(vol);
+                }
+
+                // Send 200 OK reply
+                let response = if let Some(ref seq) = cseq {
+                    format!(
+                        "RTSP/1.0 200 OK\r\nCSeq: {}\r\nServer: AirTunes/366.0\r\nContent-Length: 0\r\n\r\n",
+                        seq
+                    )
+                } else {
+                    "HTTP/1.1 200 OK\r\nServer: AirTunes/366.0\r\nContent-Length: 0\r\n\r\n".to_string()
+                };
+
+                if let Err(e) = write_half.write_all(response.as_bytes()).await {
+                    tracing::debug!("Error sending response on events connection: {}", e);
+                    return;
+                }
+
+                buffer.drain(..total_len);
+            } else if buffer.starts_with(b"bplist00") {
+                if let Ok(plist_val) = plist::Value::from_reader(std::io::Cursor::new(&buffer)) {
+                    if let Some(vol) = find_volume_in_plist(&plist_val) {
+                        tracing::info!("Received volume from HomePod raw bplist: {:.3}", vol);
+                        let _ = volume_tx.send(vol);
+                    }
+                }
+                buffer.clear();
+                break;
+            } else if buffer.len() > 65536 {
+                tracing::warn!("Events connection buffer overflow, clearing {} bytes", buffer.len());
+                buffer.clear();
+                break;
+            } else {
+                break;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::net::Ipv6Addr;
+
+    #[test]
+    fn test_db_or_linear_conversion() {
+        // Max volume 0 dB -> 1.0
+        assert!((db_or_linear_to_volume(0.0) - 1.0).abs() < 1e-4);
+        // Mute -144 dB -> 0.0
+        assert_eq!(db_or_linear_to_volume(-144.0), 0.0);
+        // -6.02 dB -> ~0.5
+        let vol_half = db_or_linear_to_volume(-6.0206);
+        assert!((vol_half - 0.5).abs() < 1e-2);
+        // Linear fractions: 0.7 -> 0.7
+        assert_eq!(db_or_linear_to_volume(0.7), 0.7);
+    }
+
+    #[test]
+    fn test_parse_volume_text_params() {
+        let body = b"volume: -15.50\r\n";
+        let vol = parse_volume_from_event(Some("text/parameters"), body);
+        assert!(vol.is_some());
+        let expected = 10.0_f32.powf(-15.50 / 20.0);
+        assert!((vol.unwrap() - expected).abs() < 1e-3);
+    }
+
+    #[test]
+    fn test_parse_volume_xml_plist() {
+        let plist_xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>volume</key>
+    <real>-6.0206</real>
+</dict>
+</plist>"#;
+        let vol = parse_volume_from_event(Some("application/x-apple-binary-plist"), plist_xml);
+        assert!(vol.is_some());
+        assert!((vol.unwrap() - 0.5).abs() < 1e-2);
+    }
 
     // ============================================================================
     // Helper Function Tests
