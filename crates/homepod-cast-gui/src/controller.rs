@@ -132,6 +132,7 @@ impl Default for ControllerState {
 
 pub enum GuiCmd {
     RefreshDevices,
+    DevicesRefreshed(Vec<DeviceItem>),
     RefreshAudioDevices,
     SetAudioDevice(String),
     Connect(Vec<DeviceItem>),
@@ -1124,6 +1125,7 @@ pub fn spawn_controller(
             let mut keepalive_interval = tokio::time::interval(Duration::from_secs(3));
             keepalive_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             let mut last_reconnect_time = tokio::time::Instant::now() - Duration::from_secs(10);
+            let mut is_refreshing_devices = false;
 
             // Spawn background discovery and auto-connection immediately so event loop is never blocked
             let bg_tx = cmd_tx.clone();
@@ -1350,12 +1352,34 @@ pub fn spawn_controller(
                                 broadcast(&state);
                             }
                             GuiCmd::RefreshDevices => {
-                                state.status = DeviceStatus::Idle;
-                                broadcast(&state);
-                                if let Ok(devs) = discover(Duration::from_secs(4)).await {
-                                    state.devices = devs;
-                                    broadcast(&state);
+                                if !is_refreshing_devices {
+                                    is_refreshing_devices = true;
+                                    tracing::info!("[CONTROLLER] Initiating background device refresh scan...");
+                                    let refresh_tx = cmd_tx.clone();
+                                    tokio::spawn(async move {
+                                        let devs = discover(Duration::from_secs(3)).await.unwrap_or_default();
+                                        let _ = refresh_tx.send(GuiCmd::DevicesRefreshed(devs)).await;
+                                    });
                                 }
+                            }
+                            GuiCmd::DevicesRefreshed(fresh_devs) => {
+                                is_refreshing_devices = false;
+                                tracing::info!("[CONTROLLER] Background device refresh completed: found {} device(s)", fresh_devs.len());
+                                let mut merged = fresh_devs;
+                                // Crucial: Keep currently connected active streaming devices in the list
+                                // even if mDNS dropped packets during this quick scan!
+                                for active in &current_connected_devices {
+                                    let active_id = active.id_string();
+                                    if !merged.iter().any(|d| d.id_string().eq_ignore_ascii_case(&active_id)) {
+                                        merged.push(active.clone());
+                                    }
+                                }
+                                state.devices = merged;
+                                // If the controller was previously in an error state (and not streaming), reset to idle
+                                if matches!(state.status, DeviceStatus::Error(_)) {
+                                    state.status = DeviceStatus::Idle;
+                                }
+                                broadcast(&state);
                             }
                             GuiCmd::RefreshAudioDevices => {
                                 state.audio_devices = get_audio_render_devices();
