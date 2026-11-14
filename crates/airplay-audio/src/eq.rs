@@ -81,21 +81,66 @@ pub struct EqParams {
     gains: Vec<AtomicI32>,
     /// Whether the EQ is bypassed.
     pub bypass: AtomicBool,
+    /// Manual pre-amplifier gain in tenths of a dB (default 0).
+    preamp: AtomicI32,
+    /// Whether automatic pre-amp headroom management is enabled (default true).
+    auto_preamp: AtomicBool,
 }
 
 impl EqParams {
-    /// Create new EQ parameters with all gains at 0 dB.
+    /// Create new EQ parameters with all gains at 0 dB and auto pre-amp enabled.
     pub fn new(num_bands: usize) -> Self {
         let gains = (0..num_bands).map(|_| AtomicI32::new(0)).collect();
         Self {
             gains,
             bypass: AtomicBool::new(false),
+            preamp: AtomicI32::new(0),
+            auto_preamp: AtomicBool::new(true),
         }
     }
 
     /// Get the number of bands.
     pub fn num_bands(&self) -> usize {
         self.gains.len()
+    }
+
+    /// Get the manual pre-amp gain in dB.
+    pub fn get_preamp_db(&self) -> f32 {
+        self.preamp.load(Ordering::Relaxed) as f32 / 10.0
+    }
+
+    /// Set the manual pre-amp gain in dB (clamped between -24.0 and 12.0).
+    pub fn set_preamp_db(&self, db: f32) {
+        let clamped = db.clamp(-24.0, 12.0);
+        self.preamp.store((clamped * 10.0) as i32, Ordering::Relaxed);
+    }
+
+    /// Check if auto pre-amp headroom management is enabled.
+    pub fn is_auto_preamp_enabled(&self) -> bool {
+        self.auto_preamp.load(Ordering::Relaxed)
+    }
+
+    /// Set auto pre-amp headroom management enabled.
+    pub fn set_auto_preamp(&self, enabled: bool) {
+        self.auto_preamp.store(enabled, Ordering::Relaxed);
+    }
+
+    /// Calculate the effective pre-amp gain in dB.
+    ///
+    /// When auto_preamp is enabled, this automatically computes the maximum positive boost
+    /// across all bands, and attenuates the pre-amp by that amount to prevent digital clipping/distortion.
+    pub fn get_effective_preamp_db(&self) -> f32 {
+        let manual = self.get_preamp_db();
+        if self.is_auto_preamp_enabled() {
+            let max_boost = self
+                .gains
+                .iter()
+                .map(|g| g.load(Ordering::Relaxed) as f32 / 10.0)
+                .fold(0.0f32, f32::max);
+            manual - max_boost
+        } else {
+            manual
+        }
     }
 
     /// Get the gain in dB for a specific band.
@@ -177,6 +222,10 @@ pub struct Equalizer {
     sample_rate: f32,
     /// Cached gains to detect when coefficients need updating.
     cached_gains: Vec<i32>,
+    /// Cached effective pre-amp gain in tenths of a dB.
+    cached_preamp_db: i32,
+    /// Cached linear multiplier for pre-amp.
+    cached_preamp_linear: f32,
 }
 
 impl Equalizer {
@@ -196,6 +245,9 @@ impl Equalizer {
         }
 
         let cached_gains = vec![0i32; num_bands];
+        let effective_preamp = params.get_effective_preamp_db();
+        let cached_preamp_db = (effective_preamp * 10.0) as i32;
+        let cached_preamp_linear = 10.0f32.powf(effective_preamp / 20.0);
 
         Self {
             bands_l,
@@ -204,6 +256,8 @@ impl Equalizer {
             params,
             sample_rate: sample_rate_f,
             cached_gains,
+            cached_preamp_db,
+            cached_preamp_linear,
         }
     }
 
@@ -228,12 +282,19 @@ impl Equalizer {
         })
     }
 
-    /// Update filter coefficients if gains have changed.
+    /// Update filter coefficients and pre-amp gain if gains have changed.
     fn update_coefficients_if_needed(&mut self) {
         let num_bands = self.config.num_bands();
         let mut needs_update = false;
 
-        // Check if any gains have changed
+        // Check if pre-amp has changed
+        let current_preamp_db = (self.params.get_effective_preamp_db() * 10.0) as i32;
+        if self.cached_preamp_db != current_preamp_db {
+            self.cached_preamp_db = current_preamp_db;
+            self.cached_preamp_linear = 10.0f32.powf((current_preamp_db as f32 / 10.0) / 20.0);
+        }
+
+        // Check if any band gains have changed
         for band in 0..num_bands {
             let current = (self.params.get_gain_db(band) * 10.0) as i32;
             if self.cached_gains[band] != current {
@@ -257,22 +318,24 @@ impl Equalizer {
 
     /// Process audio samples in-place (interleaved stereo i16).
     ///
-    /// This method updates filter coefficients if gains have changed,
-    /// then processes each sample through the filter cascade.
+    /// This method updates filter coefficients and pre-amp gain if needed,
+    /// then processes each sample through the pre-amp, filter cascade, and transparent peak limiter.
     pub fn process(&mut self, samples: &mut [i16]) {
         // Skip processing if bypassed
         if self.params.is_bypassed() {
             return;
         }
 
-        // Update coefficients if gains changed
+        // Update coefficients and pre-amp if gains changed
         self.update_coefficients_if_needed();
+
+        let preamp = self.cached_preamp_linear;
 
         // Process stereo samples (interleaved: L, R, L, R, ...)
         for chunk in samples.chunks_exact_mut(2) {
-            // Convert to float
-            let mut left = chunk[0] as f32 / 32768.0;
-            let mut right = chunk[1] as f32 / 32768.0;
+            // Convert to float and apply pre-amplifier attenuation
+            let mut left = (chunk[0] as f32 / 32768.0) * preamp;
+            let mut right = (chunk[1] as f32 / 32768.0) * preamp;
 
             // Process through each band
             for band_idx in 0..self.bands_l.len() {
@@ -280,13 +343,13 @@ impl Equalizer {
                 right = self.bands_r[band_idx].run(right);
             }
 
-            // Soft clipping to prevent harsh distortion
-            left = soft_clip(left);
-            right = soft_clip(right);
+            // Transparent soft peak limiter (only active when exceeding 0.95, linear below)
+            left = peak_limit(left);
+            right = peak_limit(right);
 
             // Convert back to i16
-            chunk[0] = (left * 32767.0).round() as i16;
-            chunk[1] = (right * 32767.0).round() as i16;
+            chunk[0] = (left * 32767.0).clamp(-32768.0, 32767.0).round() as i16;
+            chunk[1] = (right * 32767.0).clamp(-32768.0, 32767.0).round() as i16;
         }
     }
 
@@ -314,8 +377,23 @@ impl Equalizer {
 /// Soft clipping function to prevent harsh digital clipping.
 ///
 /// Uses a cubic soft clipper that saturates smoothly.
+/// Transparent soft peak limiting function to prevent harsh digital clipping.
+///
+/// Signal remains 100% linear within [-0.95, 0.95], and smoothly compresses
+/// with tanh only when exceeding 0.95 to guarantee output never exceeds 1.0.
 #[inline]
-fn soft_clip(x: f32) -> f32 {
+pub fn peak_limit(x: f32) -> f32 {
+    if x > 0.95 {
+        0.95 + 0.05 * ((x - 0.95) / 0.05).tanh()
+    } else if x < -0.95 {
+        -0.95 + 0.05 * ((x + 0.95) / 0.05).tanh()
+    } else {
+        x
+    }
+}
+
+#[inline]
+pub fn soft_clip(x: f32) -> f32 {
     if x >= 1.0 {
         2.0 / 3.0
     } else if x <= -1.0 {
@@ -492,6 +570,43 @@ mod tests {
         fn limits_over_unity() {
             assert_eq!(soft_clip(2.0), 2.0 / 3.0);
             assert_eq!(soft_clip(-2.0), -2.0 / 3.0);
+        }
+    }
+
+    mod preamp_and_limiter {
+        use super::*;
+
+        #[test]
+        fn test_auto_preamp_calculates_headroom() {
+            let params = EqParams::new(5);
+            assert_eq!(params.get_effective_preamp_db(), 0.0);
+
+            params.set_gain_db(0, 6.0);
+            params.set_gain_db(2, 3.0);
+            // Effective pre-amp should attenuate by max boost (-6.0 dB)
+            assert!((params.get_effective_preamp_db() - (-6.0)).abs() < 0.1);
+
+            // If manual pre-amp is also set to -2.0 dB, effective should be -8.0 dB
+            params.set_preamp_db(-2.0);
+            assert!((params.get_effective_preamp_db() - (-8.0)).abs() < 0.1);
+
+            // If auto pre-amp is disabled, only manual should apply
+            params.set_auto_preamp(false);
+            assert!((params.get_effective_preamp_db() - (-2.0)).abs() < 0.1);
+        }
+
+        #[test]
+        fn test_peak_limit_is_linear_for_normal_range() {
+            assert_eq!(peak_limit(0.0), 0.0);
+            assert_eq!(peak_limit(0.5), 0.5);
+            assert_eq!(peak_limit(-0.5), -0.5);
+            assert_eq!(peak_limit(0.9), 0.9);
+            assert_eq!(peak_limit(-0.9), -0.9);
+            assert_eq!(peak_limit(0.95), 0.95);
+
+            // Over 0.95: smoothly compresses and never exceeds 1.0
+            let over = peak_limit(2.0);
+            assert!(over < 1.0 && over > 0.95);
         }
     }
 }

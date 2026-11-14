@@ -27,7 +27,14 @@ Windows cannot natively send AirPlay audio, and Apple HomePods mandate HomeKit t
 - **Extreme Resource Efficiency**: UI rendering is completely suspended and working set memory is trimmed to ~10–20 MB RAM when minimized to the tray.
 - **Silent Background Startup**: Supports Windows startup flags (`--startup` / `--minimized` / `-m`) to launch silently to the tray on boot.
 
-### 4. 🎛️ Audio Routing & Split Mode
+### 4. 🎧 AirPods / Beats Smart Handoff & Monitoring
+- **BLE Continuity Protocol Reverse-Engineering**: Real-time tracking of earbud battery levels, charging status ⚡, optical in-ear wear detection, and case lid open/close events.
+- **Bi-directional Smart Handoff**: Putting on earbuds automatically switches to zero-latency local AO mode with dedicated DSP; returning earbuds to the case and closing the lid restores HomePod streaming seamlessly.
+- **Auto-Pause & Resume**: Automatically pauses media playback upon earbud removal and resumes within the 60-second window.
+> [!TIP]
+> **AirPods Device Naming Note**: Battery and wear telemetry are identified directly via Apple hardware BLE broadcast IDs regardless of custom names. However, Windows audio endpoint routing matches against device friendly names. If you renamed your AirPods, ensure the name retains the keyword "`AirPods`" or "`Pods`" so Win2Pod can identify the playback endpoint.
+
+### 5. 🎛️ Audio Routing & Split Mode
 - **System Mix Capture (WASAPI Loopback)**: Capture all PC desktop sounds out of the box.
 - **Audio Source Selection (Split Mode)**: Select a specific audio output device/endpoint as the capture source instead of the entire system mix. For example, route Spotify or Apple Music to your HomePod while games, Discord, or calls stay on your PC headphones.
 - **Quick Volume Mixer Access**: Direct shortcut button to open Windows App Volume Mixer (`ms-settings:apps-volume`).
@@ -86,10 +93,13 @@ rustup default stable-x86_64-pc-windows-gnu
 
 ## 📜 Acknowledgements & License
 
-This project builds upon foundational research and code from [**airplay2-rs**](https://github.com/lmcgartland/airplay2-rs) by Lucas McGartland, extended with:
+This project builds upon foundational research and code from [**airplay2-rs**](https://github.com/lmcgartland/airplay2-rs) by Lucas McGartland and [**AirPodsDesktop**](https://github.com/SpriteOvO/AirPodsDesktop) by SpriteOvO (Apple Continuity BLE Proximity Pairing protocol & in-ear detection logic), extended with:
 - Pure Rust Fluent flyout GUI & system tray management (`crates/homepod-cast-gui`)
+- Native AirPods / Beats BLE in-ear detection, battery tracking, and priority audio routing handoff
 - Windows native WASAPI Loopback capture pipeline and real-time ALAC encoder
 - IEEE 802.1AS / gPTP clock synchronization and multi-room group streaming architecture
+- 10-band equalizer, vinyl/tube analog warmth enhancers, and live spectrum analyzer
+- Real-time 3D Audio Motion Visualizer with impressionist painterly rendering (`wry`, `three.js`, `three-painterly`, `baked-debris`)
 - MSIX packaging, Microsoft Store licensing integration, and 11-language localization
 
-**License**: GPL-2.0, inherited from upstream `airplay2-rs`. See [`LICENSE`](LICENSE).
+**License**: GPL-3.0-or-later, inherited from upstream `airplay2-rs`. See [`LICENSE`](LICENSE).

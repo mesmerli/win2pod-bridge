@@ -271,6 +271,22 @@ impl Language {
         }
     }
 
+    pub fn tooltip_auto_preamp(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🛡 自動前級衰減補償：根據當前 EQ 最高提升頻段自動調整 Headroom，徹底防止音波破音與數位裁切失真。",
+            Self::SimplifiedChinese => "🛡 自动前级衰减补偿：根据当前 EQ 最高提升频段自动调整 Headroom，彻底防止音波破音与数字削波失真。",
+            Self::English => "🛡 Auto Pre-Amp Headroom: Automatically compensates for the highest EQ boost band to prevent clipping distortion.",
+            Self::French => "🛡 Pré-ampli automatique : compense le gain maximal de l'égaliseur pour éviter la distorsion numérique.",
+            Self::German => "🛡 Auto-Vorverstärkung: Gleicht das maximale EQ-Boost-Band automatisch aus, um Clipping-Verzerrungen zu verhindern.",
+            Self::Italian => "🛡 Pre-amp automatico: compensa automaticamente il guadagno massimo dell'equalizzatore per evitare distorsioni.",
+            Self::Japanese => "🛡 自動プリアンプ減衰補正：現在のEQ最大ブースト量に合わせてヘッドルームを自動調整し、音割れやデジタルクリッピング歪みを完全に防止します。",
+            Self::Korean => "🛡 자동 프리앰프 감쇄 보정: 현재 EQ 최대 부스트에 맞춰 헤드룸을 자동 확보하여 음 왜곡 및 디지털 클리핑을 방지합니다.",
+            Self::PortugueseBrazil => "🛡 Pré-amplificador automático: compensa o ganho máximo do equalizador para evitar distorção por corte.",
+            Self::Russian => "🛡 Авто-предусиление: автоматически компенсирует максимальное усиление эквалайзера для предотвращения клиппинга.",
+            Self::Spanish => "🛡 Preamplificador automático: compensa la ganancia máxima del ecualizador para evitar la distorsión por saturación.",
+        }
+    }
+
     pub fn status_idle(&self) -> &'static str {
         match self {
             Self::TraditionalChinese => "待機中 (尚未連線)",
@@ -533,17 +549,161 @@ impl Language {
 
     pub fn available_devices_header(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "可用的音響裝置",
-            Self::SimplifiedChinese => "可用的音响设备",
-            Self::English => "Available Audio Devices",
-            Self::French => "Appareils audio disponibles",
-            Self::German => "Verfügbare Audiogeräte",
-            Self::Italian => "Dispositivi audio disponibili",
-            Self::Japanese => "利用可能なオーディオ機器",
-            Self::Korean => "사용 가능한 오디오 기기",
-            Self::PortugueseBrazil => "Dispositivos de áudio disponíveis",
-            Self::Russian => "Доступные аудиоустройства",
-            Self::Spanish => "Dispositivos de audio disponibles",
+            Self::TraditionalChinese => "可用的 AirPlay 音響裝置",
+            Self::SimplifiedChinese => "可用的 AirPlay 音响设备",
+            Self::English => "Available AirPlay Audio Devices",
+            Self::French => "Appareils audio AirPlay disponibles",
+            Self::German => "Verfügbare AirPlay-Audiogeräte",
+            Self::Italian => "Dispositivi audio AirPlay disponibili",
+            Self::Japanese => "利用可能な AirPlay オーディオ機器",
+            Self::Korean => "사용 가능한 AirPlay 오디오 기기",
+            Self::PortugueseBrazil => "Dispositivos de áudio AirPlay disponíveis",
+            Self::Russian => "Доступные аудиоустройства AirPlay",
+            Self::Spanish => "Dispositivos de audio AirPlay disponibles",
+        }
+    }
+
+    pub fn available_airpods_header(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "可用的 AirPods",
+            Self::SimplifiedChinese => "可用的 AirPods",
+            Self::English => "Available AirPods",
+            Self::French => "AirPods disponibles",
+            Self::German => "Verfügbare AirPods",
+            Self::Italian => "AirPods disponibili",
+            Self::Japanese => "利用可能な AirPods",
+            Self::Korean => "사용 가능한 AirPods",
+            Self::PortugueseBrazil => "AirPods disponíveis",
+            Self::Russian => "Доступные AirPods",
+            Self::Spanish => "AirPods disponibles",
+        }
+    }
+
+    pub fn no_airpods_found(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "未偵測到已配對的 AirPods",
+            Self::SimplifiedChinese => "未检测到已配对的 AirPods",
+            Self::English => "No paired AirPods detected",
+            Self::French => "Aucun AirPods jumelé détecté",
+            Self::German => "Keine gekoppelten AirPods erkannt",
+            Self::Italian => "Nessun AirPods associato rilevato",
+            Self::Japanese => "ペアリングされた AirPods が見つかりません",
+            Self::Korean => "페어링된 AirPods를 찾을 수 없습니다",
+            Self::PortugueseBrazil => "Nenhum AirPods emparelhado detectado",
+            Self::Russian => "Сопряженные AirPods не обнаружены",
+            Self::Spanish => "No se detectaron AirPods emparejados",
+        }
+    }
+
+    pub fn no_airpods_hint(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "首次使用請先完成 Windows 藍牙配對，耳機名稱須保留「AirPods」或「Pods」。",
+            Self::SimplifiedChinese => "首次使用请先完成 Windows 蓝牙配对，耳机名称须保留“AirPods”或“Pods”。",
+            Self::English => "Pair via Windows Bluetooth settings first; device name must retain 'AirPods' or 'Pods'.",
+            Self::French => "Jumelez d'abord via Windows Bluetooth ; le nom doit contenir « AirPods » ou « Pods ».",
+            Self::German => "Zuerst über Windows Bluetooth koppeln; Gerätename muss „AirPods“ oder „Pods“ enthalten.",
+            Self::Italian => "Associa prima tramite Bluetooth di Windows; il nome deve contenere \"AirPods\" o \"Pods\".",
+            Self::Japanese => "初回は Windows の Bluetooth 設定からペアリングしてください。名前に「AirPods」または「Pods」を含める必要があります。",
+            Self::Korean => "처음 사용 시 Windows Bluetooth 설정에서 페어링하세요. 이름에 'AirPods' 또는 'Pods'가 포함되어야 합니다.",
+            Self::PortugueseBrazil => "Emparelhe pelo Bluetooth do Windows primeiro; o nome deve conter 'AirPods' ou 'Pods'.",
+            Self::Russian => "Сначала выполните сопряжение в Windows Bluetooth; имя должно содержать «AirPods» или «Pods».",
+            Self::Spanish => "Empareje primero en Bluetooth de Windows; el nombre debe incluir 'AirPods' o 'Pods'.",
+        }
+    }
+
+    pub fn airpods_in_use_status_tag(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "使用中",
+            Self::SimplifiedChinese => "使用中",
+            Self::English => "In Use",
+            Self::French => "En cours d'utilisation",
+            Self::German => "In Verwendung",
+            Self::Italian => "In uso",
+            Self::Japanese => "使用中",
+            Self::Korean => "사용 중",
+            Self::PortugueseBrazil => "Em uso",
+            Self::Russian => "Используется",
+            Self::Spanish => "En uso",
+        }
+    }
+
+    pub fn airpods_standby_status_tag(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "待命中",
+            Self::SimplifiedChinese => "待命中",
+            Self::English => "Standby",
+            Self::French => "En attente",
+            Self::German => "Bereit",
+            Self::Italian => "In attesa",
+            Self::Japanese => "待機中",
+            Self::Korean => "대기 중",
+            Self::PortugueseBrazil => "Em espera",
+            Self::Russian => "Ожидание",
+            Self::Spanish => "En espera",
+        }
+    }
+
+    pub fn airpods_connected_status_tag(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "已連線",
+            Self::SimplifiedChinese => "已连接",
+            Self::English => "Connected",
+            Self::French => "Connecté",
+            Self::German => "Verbunden",
+            Self::Italian => "Connesso",
+            Self::Japanese => "接続済み",
+            Self::Korean => "연결됨",
+            Self::PortugueseBrazil => "Conectado",
+            Self::Russian => "Подключено",
+            Self::Spanish => "Conectado",
+        }
+    }
+
+    pub fn airpods_disconnected_status_tag(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "未連線",
+            Self::SimplifiedChinese => "未连接",
+            Self::English => "Disconnected",
+            Self::French => "Déconnecté",
+            Self::German => "Getrennt",
+            Self::Italian => "Disconnesso",
+            Self::Japanese => "未接続",
+            Self::Korean => "연결 안 됨",
+            Self::PortugueseBrazil => "Desconectado",
+            Self::Russian => "Отключено",
+            Self::Spanish => "Desconectado",
+        }
+    }
+
+    pub fn airpods_wear_to_connect_hint(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "打開 AirPods 充電盒即會自動連線",
+            Self::SimplifiedChinese => "打开 AirPods 充电盒即会自动连接",
+            Self::English => "Open AirPods charging case to connect automatically",
+            Self::French => "Ouvrez le boîtier de charge des AirPods pour vous connecter automatiquement",
+            Self::German => "AirPods-Ladecase öffnen, um automatisch zu verbinden",
+            Self::Italian => "Apri la custodia di ricarica degli AirPods per connetterti automaticamente",
+            Self::Japanese => "AirPods の充電ケースを開けると自動的に接続されます",
+            Self::Korean => "AirPods 충전 케이스를 열면 자동으로 연결됩니다",
+            Self::PortugueseBrazil => "Abra o estojo de recarga dos AirPods para conectar automaticamente",
+            Self::Russian => "Откройте зарядный футляр AirPods для автоматического подключения",
+            Self::Spanish => "Abre el estuche de carga de los AirPods para conectar automáticamente",
+        }
+    }
+
+    pub fn btn_open_windows_bluetooth_short(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "⚙ 開啟 Windows 藍牙設定",
+            Self::SimplifiedChinese => "⚙ 打开 Windows 蓝牙设置",
+            Self::English => "⚙ Open Windows Bluetooth Settings",
+            Self::French => "⚙ Ouvrir les paramètres Bluetooth",
+            Self::German => "⚙ Windows-Bluetooth-Einstellungen öffnen",
+            Self::Italian => "⚙ Apri impostazioni Bluetooth Windows",
+            Self::Japanese => "⚙ Windows の Bluetooth 設定を開く",
+            Self::Korean => "⚙ Windows Bluetooth 설정 열기",
+            Self::PortugueseBrazil => "⚙ Abrir configurações de Bluetooth",
+            Self::Russian => "⚙ Открыть параметры Bluetooth",
+            Self::Spanish => "⚙ Abrir configuración de Bluetooth",
         }
     }
 
@@ -840,14 +1000,14 @@ impl Language {
             Self::TraditionalChinese => "🔊 取消靜音",
             Self::SimplifiedChinese => "🔊 取消静音",
             Self::English => "🔊 Unmute",
-            Self::French => "🔊 Rétablir le son",
-            Self::German => "🔊 Laut stellen",
-            Self::Italian => "🔊 Riattiva audio",
-            Self::Japanese => "🔊 ミュート解除",
-            Self::Korean => "🔊 음소거 해제",
-            Self::PortugueseBrazil => "🔊 Desativar mudo",
-            Self::Russian => "🔊 Включить звук",
-            Self::Spanish => "🔊 Reactivar sonido",
+            Self::French => "🔊 Rétablir",
+            Self::German => "🔊 Laut",
+            Self::Italian => "🔊 Riattiva",
+            Self::Japanese => "🔊 解除",
+            Self::Korean => "🔊 해제",
+            Self::PortugueseBrazil => "🔊 Som",
+            Self::Russian => "🔊 Звук",
+            Self::Spanish => "🔊 Sonido",
         }
     }
 
@@ -856,14 +1016,14 @@ impl Language {
             Self::TraditionalChinese => "🔇 一鍵靜音",
             Self::SimplifiedChinese => "🔇 一键静音",
             Self::English => "🔇 Mute",
-            Self::French => "🔇 Couper le son",
-            Self::German => "🔇 Stummschalten",
-            Self::Italian => "🔇 Disattiva audio",
+            Self::French => "🔇 Muet",
+            Self::German => "🔇 Stumm",
+            Self::Italian => "🔇 Muto",
             Self::Japanese => "🔇 ミュート",
             Self::Korean => "🔇 음소거",
-            Self::PortugueseBrazil => "🔇 Silenciar",
-            Self::Russian => "🔇 Заглушить",
-            Self::Spanish => "🔇 Silenciar",
+            Self::PortugueseBrazil => "🔇 Mudo",
+            Self::Russian => "🔇 Без звука",
+            Self::Spanish => "🔇 Silencio",
         }
     }
 
@@ -963,6 +1123,38 @@ impl Language {
         }
     }
 
+    pub fn settings_tab_audio(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "音訊與耳機",
+            Self::SimplifiedChinese => "音频与耳机",
+            Self::English => "Audio & Devices",
+            Self::French => "Audio et périphériques",
+            Self::German => "Audio & Geräte",
+            Self::Italian => "Audio e dispositivi",
+            Self::Japanese => "オーディオと機器",
+            Self::Korean => "오디오 및 기기",
+            Self::PortugueseBrazil => "Áudio e dispositivos",
+            Self::Russian => "Аудио и устройства",
+            Self::Spanish => "Audio y dispositivos",
+        }
+    }
+
+    pub fn settings_tab_system(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "系統與串流",
+            Self::SimplifiedChinese => "系统与串流",
+            Self::English => "System & Streaming",
+            Self::French => "Système et diffusion",
+            Self::German => "System & Streaming",
+            Self::Italian => "Sistema e streaming",
+            Self::Japanese => "システムとストリーミング",
+            Self::Korean => "시스템 및 스트리밍",
+            Self::PortugueseBrazil => "Sistema e streaming",
+            Self::Russian => "Система и трансляция",
+            Self::Spanish => "Sistema y transmisión",
+        }
+    }
+
     pub fn audio_source_label(&self) -> &'static str {
         match self {
             Self::TraditionalChinese => "音訊來源 (Audio Source):",
@@ -979,6 +1171,102 @@ impl Language {
         }
     }
 
+    pub fn source_mode_device(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🖥 系統與裝置",
+            Self::SimplifiedChinese => "🖥 系统与设备",
+            Self::English => "🖥 System & Devices",
+            Self::French => "🖥 Système et périphériques",
+            Self::German => "🖥 System & Geräte",
+            Self::Italian => "🖥 Sistema e dispositivi",
+            Self::Japanese => "🖥 システムとデバイス",
+            Self::Korean => "🖥 시스템 및 장치",
+            Self::PortugueseBrazil => "🖥 Sistema e dispositivos",
+            Self::Russian => "🖥 Система и устройства",
+            Self::Spanish => "🖥 Sistema y dispositivos",
+        }
+    }
+
+    pub fn source_mode_app(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🎯 應用程式",
+            Self::SimplifiedChinese => "🎯 应用程序",
+            Self::English => "🎯 Application",
+            Self::French => "🎯 Application",
+            Self::German => "🎯 Anwendung",
+            Self::Italian => "🎯 Applicazione",
+            Self::Japanese => "🎯 アプリケーション",
+            Self::Korean => "🎯 애플리케이션",
+            Self::PortugueseBrazil => "🎯 Aplicativo",
+            Self::Russian => "🎯 Приложение",
+            Self::Spanish => "🎯 Aplicación",
+        }
+    }
+
+    pub fn select_app_placeholder(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "選擇要串流的應用程式...",
+            Self::SimplifiedChinese => "选择要串流的应用程序...",
+            Self::English => "Select an application to cast...",
+            Self::French => "Sélectionner une application à diffuser...",
+            Self::German => "Anwendung zum Streamen auswählen...",
+            Self::Italian => "Seleziona un'applicazione da trasmettere...",
+            Self::Japanese => "キャストするアプリを選択...",
+            Self::Korean => "스트리밍할 애플리케이션 선택...",
+            Self::PortugueseBrazil => "Selecione um aplicativo para transmitir...",
+            Self::Russian => "Выберите приложение для трансляции...",
+            Self::Spanish => "Selecciona una aplicación para transmitir...",
+        }
+    }
+
+    pub fn tooltip_rescan_apps(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "重新整理執行中的應用程式清單",
+            Self::SimplifiedChinese => "刷新正在运行的应用程序列表",
+            Self::English => "Refresh list of running applications",
+            Self::French => "Actualiser la liste des applications",
+            Self::German => "Liste der laufenden Anwendungen aktualisieren",
+            Self::Italian => "Aggiorna l'elenco delle applicazioni",
+            Self::Japanese => "実行中のアプリ一覧を更新",
+            Self::Korean => "실행 중인 애플리케이션 목록 새로고침",
+            Self::PortugueseBrazil => "Atualizar lista de aplicativos",
+            Self::Russian => "Обновить список запущенных приложений",
+            Self::Spanish => "Actualizar lista de aplicaciones",
+        }
+    }
+
+    pub fn no_apps_found(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "未偵測到相容的應用程式",
+            Self::SimplifiedChinese => "未检测到兼容的应用程序",
+            Self::English => "No compatible applications detected",
+            Self::French => "Aucune application compatible détectée",
+            Self::German => "Keine kompatiblen Anwendungen erkannt",
+            Self::Italian => "Nessuna applicazione compatibile rilevata",
+            Self::Japanese => "互換性のあるアプリが見つかりません",
+            Self::Korean => "호환되는 애플리케이션을 찾을 수 없습니다",
+            Self::PortugueseBrazil => "Nenhum aplicativo compatível detectado",
+            Self::Russian => "Совместимые приложения не найдены",
+            Self::Spanish => "No se encontraron aplicaciones compatibles",
+        }
+    }
+
+    pub fn app_mode_hint(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "💡 應用程式模式：直接擷取指定軟體的音訊並串流至 HomePod；建議開啟「連線時自動關閉電腦喇叭」以避免電腦與音響同時發聲產生時序落差與回音。",
+            Self::SimplifiedChinese => "💡 应用程序模式：直接捕获指定软件的音频并串流至 HomePod；建议开启“连接时自动关闭电脑扬声器”以避免电脑与音箱同时发声产生时序差与回音。",
+            Self::English => "💡 App Mode: Streams audio from the chosen app directly to HomePod. Keeping 'Auto-mute computer speakers' enabled prevents echo and timing delays.",
+            Self::French => "💡 Mode Application : Diffuse le son de l'application choisie vers le HomePod. Activer la coupure automatique des haut-parleurs évite l'écho et le décalage.",
+            Self::German => "💡 App-Modus: Streamt Audio der gewählten App direkt auf den HomePod. Das Aktivieren der automatischen Stummschaltung verhindert Echo und Zeitverzögerungen.",
+            Self::Italian => "💡 Modalità App: Trasmette l'audio dell'app scelta direttamente a HomePod. Abilitare il silenziamento automatico evita ritardi e riverberi.",
+            Self::Japanese => "💡 アプリモード: 選択したアプリの音声をHomePodに直接ストリーミングします。「接続時にPCスピーカーを自動ミュート」を有効にすると、PCとスピーカーの同時再生によるズレやエコーを防げます。",
+            Self::Korean => "💡 앱 모드: 선택한 앱의 오디오를 HomePod으로 직접 스트리밍합니다. '연결 시 PC 스피커 자동 음소거'를 활성화하면 동시 재생으로 인한 시간차와 에코를 방지할 수 있습니다.",
+            Self::PortugueseBrazil => "💡 Modo Aplicativo: Transmite o áudio do aplicativo diretamente para o HomePod. Manter o mudo automático ativado evita atrasos e eco.",
+            Self::Russian => "💡 Режим приложений: прямая трансляция звука программы на HomePod. Включение автозаглушения колонок ПК предотвращает эхо и рассинхрон.",
+            Self::Spanish => "💡 Modo de aplicación: Transmite el audio de la app directamente a HomePod. Activar el silenciado automático de los altavoces evita eco y desfases.",
+        }
+    }
+
     pub fn audio_source_default(&self) -> &'static str {
         match self {
             Self::TraditionalChinese => "全系統混音 (預設輸出裝置)",
@@ -992,6 +1280,22 @@ impl Language {
             Self::PortugueseBrazil => "Áudio do sistema (Dispositivo padrão)",
             Self::Russian => "Все системные звуки (По умолчанию)",
             Self::Spanish => "Audio del sistema (Dispositivo predeterminado)",
+        }
+    }
+
+    pub fn default_output_device(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "預設輸出裝置",
+            Self::SimplifiedChinese => "默认输出设备",
+            Self::English => "Default Output Device",
+            Self::French => "Périphérique de sortie par défaut",
+            Self::German => "Standardausgabegerät",
+            Self::Italian => "Dispositivo di uscita predefinito",
+            Self::Japanese => "既定の出力デバイス",
+            Self::Korean => "기본 출력 장치",
+            Self::PortugueseBrazil => "Dispositivo de saída padrão",
+            Self::Russian => "Устройство вывода по умолчанию",
+            Self::Spanish => "Dispositivo de salida predeterminado",
         }
     }
 
@@ -1059,32 +1363,64 @@ impl Language {
         }
     }
 
+    pub fn btn_open_windows_bluetooth(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "⚙ 開啟 Windows 藍牙與裝置 (須先完成 AirPods 藍牙配對)",
+            Self::SimplifiedChinese => "⚙ 打开 Windows 蓝牙和其他设备 (须先完成 AirPods 蓝牙配对)",
+            Self::English => "⚙ Open Windows Bluetooth & Devices (Pair AirPods first)",
+            Self::French => "⚙ Ouvrir les paramètres Bluetooth et appareils (Jumeler d'abord les AirPods)",
+            Self::German => "⚙ Windows Bluetooth- und Geräteeinstellungen öffnen (Zuerst AirPods koppeln)",
+            Self::Italian => "⚙ Apri impostazioni Bluetooth e dispositivi Windows (Completare prima l'associazione AirPods)",
+            Self::Japanese => "⚙ Windows の Bluetooth とデバイスを開く (事前に AirPods のペアリングを完了してください)",
+            Self::Korean => "⚙ Windows Bluetooth 및 장치 설정 열기 (먼저 AirPods 블루투스 페어링 완료 필요)",
+            Self::PortugueseBrazil => "⚙ Abrir Bluetooth e dispositivos do Windows (Emparelhe os AirPods primeiro)",
+            Self::Russian => "⚙ Открыть параметры Bluetooth и других устройств Windows (Сначала выполните сопряжение с AirPods)",
+            Self::Spanish => "⚙ Abrir Bluetooth y dispositivos de Windows (Emparejar primero los AirPods)",
+        }
+    }
+
+    pub fn btn_open_windows_mixer_short(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "音量混音程式",
+            Self::SimplifiedChinese => "音量合成器",
+            Self::English => "Volume Mixer",
+            Self::French => "Mélangeur",
+            Self::German => "Lautstärkemixer",
+            Self::Italian => "Mixer volume",
+            Self::Japanese => "音量ミキサー",
+            Self::Korean => "볼륨 믹서",
+            Self::PortugueseBrazil => "Mixer de volume",
+            Self::Russian => "Микшер громкости",
+            Self::Spanish => "Mezclador",
+        }
+    }
+
     pub fn auto_mute_speakers_checkbox(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "連線時自動關閉電腦喇叭 (避免重音/雙重發聲)",
-            Self::SimplifiedChinese => "连接时自动关闭电脑喇叭 (避免重音/双重发声)",
-            Self::English => "Mute PC speakers during playback (prevents duplicate audio / echo)",
-            Self::French => "Couper les haut-parleurs du PC lors de la lecture (évite l'écho)",
-            Self::German => "PC-Lautsprecher bei Wiedergabe stummschalten (verhindert Echo)",
-            Self::Italian => "Disattiva altoparlanti PC durante la riproduzione (evita eco)",
-            Self::Japanese => "接続時にPCスピーカーを自動ミュート (二重再生・エコー防止)",
-            Self::Korean => "재생 시 PC 스피커 자동 음소거 (이중 소리 / 에코 방지)",
-            Self::PortugueseBrazil => "Silenciar alto-falantes do PC durante reprodução (evita eco)",
-            Self::Russian => "Отключать динамики ПК при воспроизведении (без эха)",
-            Self::Spanish => "Silenciar altavoces del PC al reproducir (evita eco)",
+            Self::TraditionalChinese => "AirPlay/AirPods 連線時自動關閉電腦喇叭 (避免重音/雙重發聲)",
+            Self::SimplifiedChinese => "AirPlay/AirPods 连接时自动关闭电脑喇叭 (避免重音/双重发声)",
+            Self::English => "Mute PC speakers during AirPlay/AirPods playback (prevents duplicate audio / echo)",
+            Self::French => "Couper les haut-parleurs du PC lors de la lecture AirPlay/AirPods (évite l'écho)",
+            Self::German => "PC-Lautsprecher bei AirPlay/AirPods-Wiedergabe stummschalten (verhindert Echo)",
+            Self::Italian => "Disattiva altoparlanti PC durante riproduzione AirPlay/AirPods (evita eco)",
+            Self::Japanese => "AirPlay/AirPods 接続時にPCスピーカーを自動ミュート (二重再生・エコー防止)",
+            Self::Korean => "AirPlay/AirPods 재생 시 PC 스피커 자동 음소거 (이중 소리 / 에코 방지)",
+            Self::PortugueseBrazil => "Silenciar alto-falantes do PC durante reprodução AirPlay/AirPods (evita eco)",
+            Self::Russian => "Отключать динамики ПК при воспроизведении AirPlay/AirPods (без эха)",
+            Self::Spanish => "Silenciar altavoces del PC al reproducir AirPlay/AirPods (evita eco)",
         }
     }
 
     pub fn auto_mute_disabled_label(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "連線時自動關閉電腦喇叭 (分流模式下主喇叭保持開啟)",
-            Self::SimplifiedChinese => "连接时自动关闭电脑喇叭 (分流模式下主喇叭保持开启)",
-            Self::English => "Mute PC speakers during playback (Disabled in split mode)",
+            Self::TraditionalChinese => "AirPlay/AirPods 連線時自動關閉電腦喇叭 (分流模式下主喇叭保持開啟)",
+            Self::SimplifiedChinese => "AirPlay/AirPods 连接时自动关闭电脑喇叭 (分流模式下主喇叭保持开启)",
+            Self::English => "Mute PC speakers during AirPlay/AirPods playback (Disabled in split mode)",
             Self::French => "Couper les haut-parleurs du PC (Désactivé en mode séparé)",
             Self::German => "PC-Lautsprecher stummschalten (Inaktiv im Split-Modus)",
             Self::Italian => "Disattiva altoparlanti PC (Disabilitato in modalità separata)",
-            Self::Japanese => "PCスピーカー自動ミュート (個別ルーティング時は無効)",
-            Self::Korean => "재생 시 PC 스피커 음소거 (개별 라우팅 모드에서는 비활성화)",
+            Self::Japanese => "AirPlay/AirPods 接続時PCスピーカー自動ミュート (個別ルーティング時は無効)",
+            Self::Korean => "AirPlay/AirPods 재생 시 PC 스피커 음소거 (개별 라우팅 모드에서는 비활성화)",
             Self::PortugueseBrazil => "Silenciar alto-falantes do PC (Desativado no modo separado)",
             Self::Russian => "Отключать динамики ПК (Недоступно в режиме разделения)",
             Self::Spanish => "Silenciar altavoces del PC (Desactivado en modo separado)",
@@ -1109,17 +1445,17 @@ impl Language {
 
     pub fn auto_mute_locked_label(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "連線時自動關閉電腦喇叭 🔒 (試用期已結束)",
-            Self::SimplifiedChinese => "连接时自动关闭电脑喇叭 🔒 (试用期已结束)",
-            Self::English => "Auto-mute PC speakers on connect 🔒 (Trial Expired)",
-            Self::French => "Couper les haut-parleurs PC à la connexion 🔒 (Essai expiré)",
-            Self::German => "PC-Lautsprecher bei Verbindung stummschalten 🔒 (Testversion abgelaufen)",
-            Self::Italian => "Disattiva altoparlanti PC alla connessione 🔒 (Prova scaduta)",
-            Self::Japanese => "接続時にPCスピーカーを自動ミュート 🔒 (試用期間終了)",
-            Self::Korean => "연결 시 PC 스피커 자동 음소거 🔒 (체험 기간 만료)",
-            Self::PortugueseBrazil => "Silenciar alto-falantes do PC ao conectar 🔒 (Avaliação expirada)",
-            Self::Russian => "Автозаглушение динамиков ПК при подключении 🔒 (Пробный период истек)",
-            Self::Spanish => "Silenciar altavoces de PC al conectar 🔒 (Prueba expirada)",
+            Self::TraditionalChinese => "AirPlay/AirPods 連線時自動關閉電腦喇叭 🔒 (試用期已結束)",
+            Self::SimplifiedChinese => "AirPlay/AirPods 连接时自动关闭电脑喇叭 🔒 (试用期已结束)",
+            Self::English => "Auto-mute PC speakers on AirPlay/AirPods connect 🔒 (Trial Expired)",
+            Self::French => "Couper les haut-parleurs PC à la connexion AirPlay/AirPods 🔒 (Essai expiré)",
+            Self::German => "PC-Lautsprecher bei AirPlay/AirPods-Verbindung stummschalten 🔒 (Testversion abgelaufen)",
+            Self::Italian => "Disattiva altoparlanti PC alla connessione AirPlay/AirPods 🔒 (Prova scaduta)",
+            Self::Japanese => "AirPlay/AirPods 接続時にPCスピーカーを自動ミュート 🔒 (試用期間終了)",
+            Self::Korean => "AirPlay/AirPods 연결 시 PC 스피커 자동 음소거 🔒 (체험 기간 만료)",
+            Self::PortugueseBrazil => "Silenciar alto-falantes do PC ao conectar AirPlay/AirPods 🔒 (Avaliação expirada)",
+            Self::Russian => "Автозаглушение динамиков ПК при подключении AirPlay/AirPods 🔒 (Пробный период истек)",
+            Self::Spanish => "Silenciar altavoces de PC al conectar AirPlay/AirPods 🔒 (Prueba expirada)",
         }
     }
 
@@ -1157,17 +1493,17 @@ impl Language {
 
     pub fn btn_buy_product(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "🛍️ 前往微軟商店購買產品",
-            Self::SimplifiedChinese => "🛍️ 前往微软商店购买产品",
-            Self::English => "🛍️ Buy Product in Microsoft Store",
-            Self::French => "🛍️ Acheter sur le Microsoft Store",
-            Self::German => "🛍️ Im Microsoft Store kaufen",
-            Self::Italian => "🛍️ Acquista su Microsoft Store",
-            Self::Japanese => "🛍️ Microsoft Storeで製品を購入",
-            Self::Korean => "🛍️ Microsoft Store에서 제품 구매",
-            Self::PortugueseBrazil => "🛍️ Comprar na Microsoft Store",
-            Self::Russian => "🛍️ Купить в Microsoft Store",
-            Self::Spanish => "🛍️ Comprar en Microsoft Store",
+            Self::TraditionalChinese => "🛍 前往微軟商店購買產品",
+            Self::SimplifiedChinese => "🛍 前往微软商店购买产品",
+            Self::English => "🛍 Buy Product in Microsoft Store",
+            Self::French => "🛍 Acheter sur le Microsoft Store",
+            Self::German => "🛍 Im Microsoft Store kaufen",
+            Self::Italian => "🛍 Acquista su Microsoft Store",
+            Self::Japanese => "🛍 Microsoft Storeで製品を購入",
+            Self::Korean => "🛍 Microsoft Store에서 제품 구매",
+            Self::PortugueseBrazil => "🛍 Comprar na Microsoft Store",
+            Self::Russian => "🛍 Купить в Microsoft Store",
+            Self::Spanish => "🛍 Comprar en Microsoft Store",
         }
     }
 
@@ -1427,6 +1763,22 @@ impl Language {
         }
     }
 
+    pub fn hint_sleep_muted(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "⚪ 目前已啟用靜音，已自動釋放睡眠鎖允許電腦休眠。",
+            Self::SimplifiedChinese => "⚪ 目前已启用静音，已自动释放睡眠锁允许电脑休眠。",
+            Self::English => "⚪ Audio is muted; sleep lock released to allow PC sleep.",
+            Self::French => "⚪ Audio en sourdine ; verrou de veille libéré.",
+            Self::German => "⚪ Audio stummgeschaltet; Ruhezustand erlaubt.",
+            Self::Italian => "⚪ Audio disattivato; blocco sospensione rilasciato.",
+            Self::Japanese => "⚪ 消音中のため、スリープ抑止を解除しました。",
+            Self::Korean => "⚪ 음소거 상태: 절전 차단 해제됨.",
+            Self::PortugueseBrazil => "⚪ Áudio silenciado; bloqueio de suspensão liberado.",
+            Self::Russian => "⚪ Звук выключен; блокировка сна снята.",
+            Self::Spanish => "⚪ Audio silenciado; bloqueo de suspensión liberado.",
+        }
+    }
+
     pub fn hint_sleep_streaming_desc(&self) -> &'static str {
         match self {
             Self::TraditionalChinese => "💡 串流播放時抑制睡眠且音樂不中斷；無音樂逾時自動允許休眠。",
@@ -1445,19 +1797,20 @@ impl Language {
 
     pub fn hint_sleep_off(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "⚠️ 電腦閒置達到系統設定時間後將自動休眠並暫停串流。",
-            Self::SimplifiedChinese => "⚠️ 电脑闲置达到系统设定时间后将自动休眠并暂停串流。",
-            Self::English => "⚠️ PC will sleep after idle timeout, pausing audio stream.",
-            Self::French => "⚠️ Le PC se mettra en veille après expiration du délai, suspendant la lecture.",
-            Self::German => "⚠️ PC wechselt nach Inaktivität in den Ruhezustand und pausiert das Streaming.",
-            Self::Italian => "⚠️ Il PC andrà in sospensione per inattività, interrompendo lo streaming.",
-            Self::Japanese => "⚠️ アイドル時間が設定に達するとPCがスリープし、配信が中断されます。",
-            Self::Korean => "⚠️ 유휴 시간 초과 시 PC가 절전 모드로 전환되어 스트리밍이 일시 정지됩니다.",
-            Self::PortugueseBrazil => "⚠️ O PC suspenderá após tempo ocioso, pausando a transmissão.",
-            Self::Russian => "⚠️ ПК перейдет в спящий режим по таймеру, прервав трансляцию.",
-            Self::Spanish => "⚠️ El PC se suspenderá tras el tiempo de inactividad, pausando el streaming.",
+            Self::TraditionalChinese => "⚠ 電腦閒置達到系統設定時間後將自動休眠並暫停串流。",
+            Self::SimplifiedChinese => "⚠ 电脑闲置达到系统设定时间后将自动休眠并暂停串流。",
+            Self::English => "⚠ PC will sleep after idle timeout, pausing audio stream.",
+            Self::French => "⚠ Le PC se mettra en veille après expiration du délai, suspendant la lecture.",
+            Self::German => "⚠ PC wechselt nach Inaktivität in den Ruhezustand und pausiert das Streaming.",
+            Self::Italian => "⚠ Il PC andrà in sospensione per inattività, interrompendo lo streaming.",
+            Self::Japanese => "⚠ アイドル時間が設定に達するとPCがスリープし、配信が中断されます。",
+            Self::Korean => "⚠ 유휴 시간 초과 시 PC가 절전 모드로 전환되어 스트리밍이 일시 정지됩니다.",
+            Self::PortugueseBrazil => "⚠ O PC suspenderá após tempo ocioso, pausando a transmissão.",
+            Self::Russian => "⚠ ПК перейдет в спящий режим по таймеру, прервав трансляцию.",
+            Self::Spanish => "⚠ El PC se suspenderá tras el tiempo de inactividad, pausando el streaming.",
         }
     }
+
 
     pub fn low_latency_checkbox(&self) -> &'static str {
         match self {
@@ -1509,17 +1862,17 @@ impl Language {
 
     pub fn hint_low_latency_off(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "🛡️ 高抗干擾模式；適合純音樂聆聽或 WiFi 距離路由器較遠時使用。",
-            Self::SimplifiedChinese => "🛡️ 高抗干扰模式；适合纯音乐聆听或 WiFi 距离路由器较远时使用。",
-            Self::English => "🛡️ High stability mode; recommended for music listening or distant Wi-Fi.",
-            Self::French => "🛡️ Mode haute stabilité ; idéal pour la musique ou Wi-Fi éloigné.",
-            Self::German => "🛡️ Hohe Stabilität; empfohlen für reinen Musikgenuss oder schwaches Wi-Fi.",
-            Self::Italian => "🛡️ Massima stabilità; consigliato per l'ascolto musicale o Wi-Fi distante.",
-            Self::Japanese => "🛡️ 耐干渉モード：音楽鑑賞やルーターから離れた場所での使用に最適。",
-            Self::Korean => "🛡️ 높은 안정성 모드: 음악 감상 또는 신호가 약한 Wi-Fi 환경에 적합.",
-            Self::PortugueseBrazil => "🛡️ Modo de alta estabilidade; recomendado para música ou Wi-Fi distante.",
-            Self::Russian => "🛡️ Режим повышенной стабильности; подходит для музыки и дальнего Wi-Fi.",
-            Self::Spanish => "🛡️ Modo de alta estabilidad; recomendado para música o Wi-Fi distante.",
+            Self::TraditionalChinese => "🛡 高抗干擾模式；適合純音樂聆聽或 WiFi 距離路由器較遠時使用。",
+            Self::SimplifiedChinese => "🛡 高抗干扰模式；适合纯音乐聆听或 WiFi 距离路由器较远时使用。",
+            Self::English => "🛡 High stability mode; recommended for music listening or distant Wi-Fi.",
+            Self::French => "🛡 Mode haute stabilité ; idéal pour la musique ou Wi-Fi éloigné.",
+            Self::German => "🛡 Hohe Stabilität; empfohlen für reinen Musikgenuss oder schwaches Wi-Fi.",
+            Self::Italian => "🛡 Massima stabilità; consigliato per l'ascolto musicale o Wi-Fi distante.",
+            Self::Japanese => "🛡 耐干渉モード：音楽鑑賞やルーターから離れた場所での使用に最適。",
+            Self::Korean => "🛡 높은 안정성 모드: 음악 감상 또는 신호가 약한 Wi-Fi 환경에 적합.",
+            Self::PortugueseBrazil => "🛡 Modo de alta estabilidade; recomendado para música ou Wi-Fi distante.",
+            Self::Russian => "🛡 Режим повышенной стабильности; подходит для музыки и дальнего Wi-Fi.",
+            Self::Spanish => "🛡 Modo de alta estabilidad; recomendado para música o Wi-Fi distante.",
         }
     }
 
@@ -1541,17 +1894,17 @@ impl Language {
 
     pub fn auto_connect_tooltip(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "開啟：程式啟動時自動搜尋並連線至上次播放的 HomePod 或立體聲組。\n關閉：啟動後維持閒置狀態，等待手動點選音響。",
-            Self::SimplifiedChinese => "开启：程序启动时自动搜索并连接至上次播放的 HomePod 或立体声组。\n关闭：启动后维持闲置状态，等待手动点选音响。",
-            Self::English => "On: Automatically finds and connects to last speaker on startup.\nOff: Starts in idle state.",
-            Self::French => "Activé : Se connecte automatiquement au dernier HomePod au lancement.\nDésactivé : Reste inactif au démarrage.",
-            Self::German => "Ein: Verbindet sich beim Start automatisch mit dem letzten HomePod.\nAus: Startet im Leerlauf.",
-            Self::Italian => "Attivo: Cerca e connette automaticamente l'ultimo HomePod all'avvio.\nDisattivo: Rimane inattivo all'avvio.",
-            Self::Japanese => "ON：起動時に前回のHomePodまたはステレオペアに自動接続。\nOFF：待機状態で起動し手動選択を待ちます。",
-            Self::Korean => "켜짐: 프로그램 시작 시 마지막 HomePod 또는 스테레오 페어에 자동 연결.\n꺼짐: 대기 상태로 시작하여 수동 연결 대기.",
-            Self::PortugueseBrazil => "Ligado: Conecta automaticamente ao último HomePod na inicialização.\nDesligado: Inicia em espera.",
-            Self::Russian => "Вкл: Автоматический поиск и подключение к последнему HomePod при старте.\nВыкл: Запуск в режиме ожидания.",
-            Self::Spanish => "Activado: Se conecta automáticamente al último HomePod al iniciar.\nDesactivado: Inicia en espera.",
+            Self::TraditionalChinese => "開啟：程式啟動時自動還原上次播放音路（HomePod 或 本機/螢幕音響）。\n關閉：啟動後維持閒置狀態，等待手動點選音響。",
+            Self::SimplifiedChinese => "开启：程序启动时自动还原上次播放音路（HomePod 或 本机/屏幕音响）。\n关闭：启动后维持闲置状态，等待手动点选音响。",
+            Self::English => "On: Automatically restores last active audio route on startup (HomePod or local speaker).\nOff: Starts in idle state.",
+            Self::French => "Activé : Restaure automatiquement la dernière sortie audio au démarrage (HomePod ou haut-parleur local).\nDésactivé : Reste inactif au démarrage.",
+            Self::German => "Ein: Stellt beim Start automatisch die letzte Audio-Route wieder her (HomePod oder lokaler Lautsprecher).\nAus: Startet im Leerlauf.",
+            Self::Italian => "Attivo: Ripristina automaticamente l'ultimo percorso audio all'avvio (HomePod o altoparlante locale).\nDisattivo: Rimane inattivo all'avvio.",
+            Self::Japanese => "ON：起動時に前回再生した音路（HomePodまたはローカルスピーカー）を自動復元。\nOFF：待機状態で起動し手動選択を待ちます。",
+            Self::Korean => "켜짐: 프로그램 시작 시 마지막 오디오 경로(HomePod 또는 로컬 스피커) 자동 복원.\n꺼짐: 대기 상태로 시작하여 수동 연결 대기.",
+            Self::PortugueseBrazil => "Ligado: Restaura automaticamente a última rota de áudio na inicialização (HomePod ou alto-falante local).\nDesligado: Inicia em espera.",
+            Self::Russian => "Вкл: Автоматически восстанавливает последний аудиовыход при старте (HomePod или локальный динамик).\nВыкл: Запуск в режиме ожидания.",
+            Self::Spanish => "Activado: Restaura automáticamente la última ruta de audio al iniciar (HomePod o altavoz local).\nDesactivado: Inicia en espera.",
         }
     }
 
@@ -1669,17 +2022,17 @@ impl Language {
 
     pub fn global_hotkey_label(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "⌨️ 全域面板快捷鍵：",
-            Self::SimplifiedChinese => "⌨️ 全局面板热键：",
-            Self::English => "⌨️ Global Panel Hotkey:",
-            Self::French => "⌨️ Raccourci global du panneau :",
-            Self::German => "⌨️ Globaler Panel-Hotkey:",
-            Self::Italian => "⌨️ Scorciatoia globale pannello:",
-            Self::Japanese => "⌨️ パネル表示グローバルショートカット：",
-            Self::Korean => "⌨️ 전역 패널 단축키:",
-            Self::PortugueseBrazil => "⌨️ Atalho global do painel:",
-            Self::Russian => "⌨️ Глобальная горячая клавиша:",
-            Self::Spanish => "⌨️ Atajo global del panel:",
+            Self::TraditionalChinese => "⌨ 全域面板快捷鍵：",
+            Self::SimplifiedChinese => "⌨ 全局面板热键：",
+            Self::English => "⌨ Global Panel Hotkey:",
+            Self::French => "⌨ Raccourci global du panneau :",
+            Self::German => "⌨ Globaler Panel-Hotkey:",
+            Self::Italian => "⌨ Scorciatoia globale pannello:",
+            Self::Japanese => "⌨ パネル表示グローバルショートカット：",
+            Self::Korean => "⌨ 전역 패널 단축키:",
+            Self::PortugueseBrazil => "⌨ Atalho global do painel:",
+            Self::Russian => "⌨ Глобальная горячая клавиша:",
+            Self::Spanish => "⌨ Atajo global del panel:",
         }
     }
 
@@ -1765,33 +2118,33 @@ impl Language {
 
     pub fn tooltip_about(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "軟體資訊與開源宣告",
-            Self::SimplifiedChinese => "软件信息与开源协议",
-            Self::English => "About & Open Source Info",
-            Self::French => "À propos et licences open-source",
-            Self::German => "Über Win2Pod & Open-Source-Info",
-            Self::Italian => "Informazioni e licenze open source",
-            Self::Japanese => "バージョン情報とオープンソース情報",
-            Self::Korean => "소프트웨어 정보 및 오픈 소스 라이선스",
-            Self::PortugueseBrazil => "Sobre e informações de código aberto",
-            Self::Russian => "О программе и открытых компонентах",
-            Self::Spanish => "Acerca de e información de código abierto",
+            Self::TraditionalChinese => "軟體資訊",
+            Self::SimplifiedChinese => "软件信息",
+            Self::English => "Software Information",
+            Self::French => "Informations sur le logiciel",
+            Self::German => "Software-Informationen",
+            Self::Italian => "Informazioni sul software",
+            Self::Japanese => "ソフトウェア情報",
+            Self::Korean => "소프트웨어 정보",
+            Self::PortugueseBrazil => "Informações do software",
+            Self::Russian => "Информация о программе",
+            Self::Spanish => "Información del software",
         }
     }
 
     pub fn btn_about(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "關於軟體與開源套件",
-            Self::SimplifiedChinese => "关于软件与开源套件",
-            Self::English => "About & Open Source",
-            Self::French => "À propos et composants open-source",
-            Self::German => "Über & Open-Source-Pakete",
-            Self::Italian => "Informazioni e pacchetti open source",
-            Self::Japanese => "バージョン情報とオープンソース",
-            Self::Korean => "소프트웨어 정보 및 오픈 소스",
-            Self::PortugueseBrazil => "Sobre e pacotes de código aberto",
-            Self::Russian => "О программе и компонентах",
-            Self::Spanish => "Acerca de y paquetes de código abierto",
+            Self::TraditionalChinese => "軟體資訊",
+            Self::SimplifiedChinese => "软件信息",
+            Self::English => "Software Information",
+            Self::French => "Informations sur le logiciel",
+            Self::German => "Software-Informationen",
+            Self::Italian => "Informazioni sul software",
+            Self::Japanese => "ソフトウェア情報",
+            Self::Korean => "소프트웨어 정보",
+            Self::PortugueseBrazil => "Informações do software",
+            Self::Russian => "Информация о программе",
+            Self::Spanish => "Información del software",
         }
     }
 
@@ -1860,19 +2213,7 @@ impl Language {
     }
 
     pub fn about_author_value(&self) -> &'static str {
-        match self {
-            Self::TraditionalChinese => "mesmerli & 開源社群貢獻者",
-            Self::SimplifiedChinese => "mesmerli & 开源社区贡献者",
-            Self::English => "mesmerli & Open Source Contributors",
-            Self::French => "mesmerli & Contributeurs open-source",
-            Self::German => "mesmerli & Open-Source-Mitwirkende",
-            Self::Italian => "mesmerli & Collaboratori open source",
-            Self::Japanese => "mesmerli & オープンソース コントリビューター",
-            Self::Korean => "mesmerli & 오픈 소스 기여자",
-            Self::PortugueseBrazil => "mesmerli & Contribuidores de código aberto",
-            Self::Russian => "mesmerli & разработчики открытого ПО",
-            Self::Spanish => "mesmerli & Colaboradores de código abierto",
-        }
+        "mesmerli"
     }
 
     pub fn about_license_label(&self) -> &'static str {
@@ -1893,33 +2234,81 @@ impl Language {
 
     pub fn about_copyright_notice(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "版權宣告：版權所有 © 2024-2026 Win2Pod 貢獻者。本軟體為自由軟體，依據 GNU 通用公眾授權條款第二版 (GPL-2.0) 發布。",
-            Self::SimplifiedChinese => "版权宣告：版权所有 © 2024-2026 Win2Pod 贡献者。本软件为自由软件，依据 GNU 通用公共许可证第二版 (GPL-2.0) 发布。",
-            Self::English => "Copyright Notice: Copyright © 2024-2026 Win2Pod Contributors. Free software released under the GNU General Public License v2.0 (GPL-2.0).",
-            Self::French => "Mentions de droits d'auteur : Copyright © 2024-2026 Contributeurs Win2Pod. Logiciel libre publié sous licence GNU General Public License v2.0 (GPL-2.0).",
-            Self::German => "Urheberrechtshinweis: Copyright © 2024-2026 Win2Pod-Mitwirkende. Freie Software, veröffentlicht unter der GNU General Public License v2.0 (GPL-2.0).",
-            Self::Italian => "Avviso di copyright: Copyright © 2024-2026 Collaboratori Win2Pod. Software libero distribuito sotto GNU General Public License v2.0 (GPL-2.0).",
-            Self::Japanese => "著作権表記：Copyright © 2024-2026 Win2Pod 開発者一同。本ソフトウェアは GNU General Public License v2.0 (GPL-2.0) の下で配布されるフリーソフトウェアです。",
-            Self::Korean => "저작권 고지: Copyright © 2024-2026 Win2Pod 기여자. 본 소프트웨어는 GNU General Public License v2.0 (GPL-2.0)에 따라 배포되는 자유 소프트웨어입니다.",
-            Self::PortugueseBrazil => "Aviso de direitos autorais: Copyright © 2024-2026 Contribuidores do Win2Pod. Software livre distribuído sob a GNU General Public License v2.0 (GPL-2.0).",
-            Self::Russian => "Уведомление об авторских правах: Copyright © 2024-2026 Разработчики Win2Pod. Свободное ПО, распространяемое под лицензией GNU General Public License v2.0 (GPL-2.0).",
-            Self::Spanish => "Aviso de copyright: Copyright © 2024-2026 Colaboradores de Win2Pod. Software libre distribuido bajo la GNU General Public License v2.0 (GPL-2.0).",
+            Self::TraditionalChinese => "版權宣告：版權所有 © 2024-2026 mesmerli。本軟體為自由軟體，依據 GNU 通用公眾授權條款第三版或後續版本 (GPL-3.0-or-later) 發布。",
+            Self::SimplifiedChinese => "版权宣告：版权所有 © 2024-2026 mesmerli。本软件为自由软件，依据 GNU 通用公共许可证第三版或后续版本 (GPL-3.0-or-later) 发布。",
+            Self::English => "Copyright Notice: Copyright © 2024-2026 mesmerli. Free software released under the GNU General Public License v3.0 or later (GPL-3.0-or-later).",
+            Self::French => "Mentions de droits d'auteur : Copyright © 2024-2026 mesmerli. Logiciel libre publié sous licence GNU General Public License v3.0 ou ultérieure (GPL-3.0-or-later).",
+            Self::German => "Urheberrechtshinweis: Copyright © 2024-2026 mesmerli. Freie Software, veröffentlicht unter der GNU General Public License v3.0 oder neuer (GPL-3.0-or-later).",
+            Self::Italian => "Avviso di copyright: Copyright © 2024-2026 mesmerli. Software libero distribuito sotto GNU General Public License v3.0 o successiva (GPL-3.0-or-later).",
+            Self::Japanese => "著作権表記：Copyright © 2024-2026 mesmerli。本ソフトウェアは GNU General Public License v3.0 以降 (GPL-3.0-or-later) の下で配布されるフリーソフトウェアです。",
+            Self::Korean => "저작권 고지: Copyright © 2024-2026 mesmerli. 본 소프트웨어는 GNU General Public License v3.0 이상 (GPL-3.0-or-later)에 따라 배포되는 자유 소프트웨어입니다.",
+            Self::PortugueseBrazil => "Aviso de direitos autorais: Copyright © 2024-2026 mesmerli. Software livre distribuído sob a GNU General Public License v3.0 ou posterior (GPL-3.0-or-later).",
+            Self::Russian => "Уведомление об авторских правах: Copyright © 2024-2026 mesmerli. Свободное ПО, распространяемое под лицензией GNU General Public License v3.0 или более поздней (GPL-3.0-or-later).",
+            Self::Spanish => "Aviso de copyright: Copyright © 2024-2026 mesmerli. Software libre distribuido bajo la GNU General Public License v3.0 o posterior (GPL-3.0-or-later).",
+        }
+    }
+
+    pub fn pkg_airplay2_rs_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "AirPlay 2 串流協議核心、RTSP 工作階段與 PTP/NTP 時鐘同步實作",
+            Self::SimplifiedChinese => "AirPlay 2 串流协议核心、RTSP 会话与 PTP/NTP 时钟同步实现",
+            Self::English => "AirPlay 2 streaming protocol engine, RTSP sessions & PTP/NTP clock sync",
+            Self::French => "Moteur de protocole AirPlay 2, sessions RTSP et synchro d'horloge PTP/NTP",
+            Self::German => "AirPlay 2 Streaming-Protokoll-Engine, RTSP-Sitzungen & PTP/NTP Zeitsynchronisation",
+            Self::Italian => "Motore del protocollo AirPlay 2, sessioni RTSP e sincronizzazione orologio PTP/NTP",
+            Self::Japanese => "AirPlay 2 ストリーミングプロトコルエンジン、RTSPセッション、PTP/NTPクロック同期",
+            Self::Korean => "AirPlay 2 스트리밍 프로토콜 엔진, RTSP 세션 및 PTP/NTP 클럭 동기화",
+            Self::PortugueseBrazil => "Motor de protocolo AirPlay 2, sessões RTSP e sincronização de relógio PTP/NTP",
+            Self::Russian => "Движок протокола AirPlay 2, сессии RTSP и синхронизация часов PTP/NTP",
+            Self::Spanish => "Motor de protocolo AirPlay 2, sesiones RTSP y sincronización de reloj PTP/NTP",
+        }
+    }
+
+    pub fn pkg_windows_airplay_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "Windows AirPlay 串流原型與上游移植專案",
+            Self::SimplifiedChinese => "Windows AirPlay 串流原型与上游移植项目",
+            Self::English => "Windows AirPlay streaming prototype & upstream port project",
+            Self::French => "Prototype de streaming Windows AirPlay et projet amont porté",
+            Self::German => "Windows AirPlay Streaming-Prototyp & Upstream-Port-Projekt",
+            Self::Italian => "Prototipo di streaming Windows AirPlay e progetto upstream",
+            Self::Japanese => "Windows AirPlay ストリーミングプロトタイプとアップストリーム移植プロジェクト",
+            Self::Korean => "Windows AirPlay 스트리밍 프로토타입 및 업스트림 포팅 프로젝트",
+            Self::PortugueseBrazil => "Protótipo de streaming Windows AirPlay e projeto de portabilidade upstream",
+            Self::Russian => "Прототип стриминга Windows AirPlay и апстрим-проект",
+            Self::Spanish => "Prototipo de transmisión Windows AirPlay y proyecto portado upstream",
+        }
+    }
+
+    pub fn pkg_airpodsdesktop_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "Apple Continuity BLE 廣播協定逆向工程與 AirPods 入耳/電量狀態偵測參考",
+            Self::SimplifiedChinese => "Apple Continuity BLE 广播协议逆向工程与 AirPods 入耳/电量状态检测参考",
+            Self::English => "Apple Continuity BLE protocol reverse-engineering & AirPods in-ear detection reference",
+            Self::French => "Rétro-ingénierie du protocole Apple Continuity BLE et détection de port AirPods",
+            Self::German => "Reverse-Engineering des Apple Continuity BLE-Protokolls & AirPods Trageerkennung",
+            Self::Italian => "Reverse-engineering del protocollo Apple Continuity BLE e rilevamento auricolari AirPods",
+            Self::Japanese => "Apple Continuity BLE プロトコルの解析および AirPods 装着・バッテリー状態検出リファレンス",
+            Self::Korean => "Apple Continuity BLE 프로토콜 리버스 엔지니어링 및 AirPods 착용/배터리 감지 참조",
+            Self::PortugueseBrazil => "Engenharia reversa do protocolo Apple Continuity BLE e detecção intra-auricular do AirPods",
+            Self::Russian => "Обратная разработка протокола Apple Continuity BLE и обнаружение ношения AirPods",
+            Self::Spanish => "Ingeniería inversa del protocolo Apple Continuity BLE y detección de uso de AirPods",
         }
     }
 
     pub fn about_packages_header(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "內建開源組件",
-            Self::SimplifiedChinese => "内置开源组件",
-            Self::English => "Built-in Open Source Components",
-            Self::French => "Composants open source intégrés",
-            Self::German => "Integrierte Open-Source-Komponenten",
-            Self::Italian => "Componenti open source integrati",
-            Self::Japanese => "内蔵オープンソースコンポーネント",
-            Self::Korean => "내장 오픈 소스 컴포넌트",
-            Self::PortugueseBrazil => "Componentes de código aberto integrados",
-            Self::Russian => "Встроенные компоненты с открытым исходным кодом",
-            Self::Spanish => "Componentes de código abierto integrados",
+            Self::TraditionalChinese => "開源致謝與授權",
+            Self::SimplifiedChinese => "开源致谢与许可",
+            Self::English => "Open Source Credits & Licenses",
+            Self::French => "Remerciements open source et licences",
+            Self::German => "Open-Source-Danksagungen & Lizenzen",
+            Self::Italian => "Riconoscimenti open source e licenze",
+            Self::Japanese => "オープンソース謝辞とライセンス",
+            Self::Korean => "오픈 소스 감사 및 라이선스",
+            Self::PortugueseBrazil => "Créditos e licenças de código aberto",
+            Self::Russian => "Благодарности Open Source и лицензии",
+            Self::Spanish => "Agradecimientos de código abierto y licencias",
         }
     }
 
@@ -2227,6 +2616,166 @@ impl Language {
         }
     }
 
+    pub fn pkg_biquad_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "10 頻段等化器與低架雙二階濾波器 (Biquad IIR Filters)",
+            Self::SimplifiedChinese => "10 频段等化器与低架双二阶滤波器 (Biquad IIR Filters)",
+            Self::English => "Biquad IIR audio filters for 10-band EQ and warmth enhancement",
+            Self::French => "Filtres audio biquad IIR pour l'égaliseur et l'amplification",
+            Self::German => "Biquad-IIR-Audiofilter für Equalizer und Klangveredelung",
+            Self::Italian => "Filtri audio IIR biquad per equalizzatore e calore vinilico",
+            Self::Japanese => "10バンドEQおよび暖かみ補正用 Biquad IIR フィルター",
+            Self::Korean => "10밴드 EQ 및 아날로그 웜스를 위한 Biquad IIR 오디오 필터",
+            Self::PortugueseBrazil => "Filtros de áudio biquad IIR para equalizador e calor analógico",
+            Self::Russian => "Биквадратные IIR-фильтры для эквалайзера и теплоты",
+            Self::Spanish => "Filtros de audio IIR biquad para ecualizador y calidez de vinilo",
+        }
+    }
+
+    pub fn pkg_oximedia_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "高頻諧波修復 (HE) 與專業類比音訊音效引擎",
+            Self::SimplifiedChinese => "高频谐波修复 (HE) 与专业模拟音频音效引擎",
+            Self::English => "Audio DSP effects engine for harmonic excitation and analog warmth",
+            Self::French => "Moteur d'effets DSP pour l'excitation harmonique et la chaleur",
+            Self::German => "Audio-DSP-Effekt-Engine für Harmonic Exciter und Sättigung",
+            Self::Italian => "Motore di effetti DSP per eccitazione armonica e calore analogico",
+            Self::Japanese => "ハーモニック・エキサイターおよびアナログ効果用 DSP エンジン",
+            Self::Korean => "하모닉 익サイ터 및 아날로그 효과를 위한 오디오 DSP 엔진",
+            Self::PortugueseBrazil => "Motor de efeitos DSP de áudio para excitação harmônica e calor",
+            Self::Russian => "DSP-движок аудиоэффектов для гармонического экситера",
+            Self::Spanish => "Motor de efectos de audio DSP para excitación armónica y calidez",
+        }
+    }
+
+    pub fn pkg_realfft_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "16 頻段即時動態音訊頻譜快速傅立葉變換加速庫",
+            Self::SimplifiedChinese => "16 频段实时动态音频频谱快速傅里叶变换加速库",
+            Self::English => "Real-to-complex FFT acceleration for real-time audio spectrum",
+            Self::French => "Accélération FFT réel-complexe pour le spectre audio en temps réel",
+            Self::German => "Echtzeit-FFT-Beschleunigung für den 16-Band-Spektrumanalysator",
+            Self::Italian => "Accelerazione FFT per analizzatore di spettro audio in tempo reale",
+            Self::Japanese => "16バンド・リアルタイム音響スペクトラム解析用 高速FFTライブラリ",
+            Self::Korean => "16밴드 실시간 오디오 스펙트럼 분석을 위한 초고속 FFT 라이브러리",
+            Self::PortugueseBrazil => "Aceleração FFT para analisador de espectro de áudio em tempo real",
+            Self::Russian => "Быстрое преобразование Фурье (FFT) для спектроанализатора",
+            Self::Spanish => "Aceleración FFT para analizador de espectro de audio en tiempo real",
+        }
+    }
+
+    pub fn pkg_windows_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "Windows 全域媒體控制 (GSMTC) 與 Win32 系統 API 綁定",
+            Self::SimplifiedChinese => "Windows 全局媒体控制 (GSMTC) 与 Win32 系统 API 绑定",
+            Self::English => "Windows System Media Transport Controls (GSMTC) & Win32 APIs",
+            Self::French => "Contrôles multimédias Windows (GSMTC) et liaisons API Win32",
+            Self::German => "Windows System Media Transport Controls (GSMTC) & Win32-APIs",
+            Self::Italian => "Controlli multimediali di sistema Windows (GSMTC) e API Win32",
+            Self::Japanese => "Windows グローバルメディアコントロール (GSMTC) および Win32 API",
+            Self::Korean => "Windows 전역 미디어 제어 (GSMTC) 및 Win32 시스템 API",
+            Self::PortugueseBrazil => "Controles de mídia do sistema Windows (GSMTC) e APIs Win32",
+            Self::Russian => "Системные элементы управления мультимедиа Windows (GSMTC) и Win32 API",
+            Self::Spanish => "Controles multimedia del sistema Windows (GSMTC) y APIs Win32",
+        }
+    }
+
+    pub fn pkg_wry_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "跨平台原生 WebView2 渲染與自訂通訊協定整合庫 (Wry)",
+            Self::SimplifiedChinese => "跨平台原生 WebView2 渲染与自定义协议集成库 (Wry)",
+            Self::English => "Cross-platform native WebView2 rendering and custom protocol library",
+            Self::French => "Bibliothèque de rendu WebView2 natif et protocoles personnalisés",
+            Self::German => "Plattformübergreifende native WebView2-Rendering- und Protokollbibliothek",
+            Self::Italian => "Libreria di rendering WebView2 nativa multipiattaforma e protocolli personalizzati",
+            Self::Japanese => "クロスプラットフォームネイティブ WebView2 レンダリングおよびプロトコル統合ライブラリ",
+            Self::Korean => "크로스 플랫폼 네이티브 WebView2 렌더링 및 프로토콜 통합 라이브러리",
+            Self::PortugueseBrazil => "Biblioteca de renderização nativa WebView2 multiplataforma e protocolos personalizados",
+            Self::Russian => "Кроссплатформенная библиотека рендеринга нативного WebView2",
+            Self::Spanish => "Biblioteca de renderizado nativo WebView2 multiplataforma y protocolos personalizados",
+        }
+    }
+
+    pub fn pkg_threejs_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "WebGL 3D 視覺場景渲染、相機控制與頂點著色器函式庫 (Three.js)",
+            Self::SimplifiedChinese => "WebGL 3D 视觉场景渲染、相机控制与顶点着色器库 (Three.js)",
+            Self::English => "WebGL 3D scene rendering, camera controls, and shader library",
+            Self::French => "Rendu de scènes 3D WebGL, contrôles de caméra et bibliothèque de shaders",
+            Self::German => "WebGL 3D-Szenen-Rendering, Kamerasteuerung und Shader-Bibliothek",
+            Self::Italian => "Rendering scene 3D WebGL, controlli telecamera e libreria shader",
+            Self::Japanese => "WebGL 3D シーン描画、カメラ制御およびシェーダーライブラリ (Three.js)",
+            Self::Korean => "WebGL 3D 씬 렌더링, 카메라 제어 및 셰이더 라이브러리 (Three.js)",
+            Self::PortugueseBrazil => "Renderização de cena 3D WebGL, controles de câmera e biblioteca de shaders",
+            Self::Russian => "Рендеринг 3D-сцен WebGL, управление камерой и библиотека шейдеров",
+            Self::Spanish => "Renderizado de escenas 3D WebGL, controles de cámara y biblioteca de shaders",
+        }
+    }
+
+    pub fn pkg_three_painterly_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "Three.js 印象派油畫筆觸渲染與世界座標後製管線 (PainterlyPass)",
+            Self::SimplifiedChinese => "Three.js 印象派油画笔触渲染与世界坐标后处理管线 (PainterlyPass)",
+            Self::English => "Three.js impressionist painterly brush stroke post-processing pipeline (PainterlyPass)",
+            Self::French => "Pipeline de post-traitement pictural Three.js aux touches impressionnistes (PainterlyPass)",
+            Self::German => "Three.js impressionistische Pinselstrich-Post-Processing-Pipeline (PainterlyPass)",
+            Self::Italian => "Pipeline di post-elaborazione a pennellate impressioniste Three.js (PainterlyPass)",
+            Self::Japanese => "Three.js 印象派油彩筆致シェーダーおよびポストプロセスパイプライン (PainterlyPass)",
+            Self::Korean => "Three.js 유화풍 인상파 붓터치 셰이더 및 후처리 파이프라인 (PainterlyPass)",
+            Self::PortugueseBrazil => "Pipeline de pós-processamento de pinceladas impressionistas Three.js (PainterlyPass)",
+            Self::Russian => "Пост-процессинг живописных мазков кисти для Three.js (PainterlyPass)",
+            Self::Spanish => "Canal de posprocesamiento de pinceladas impresionistas Three.js (PainterlyPass)",
+        }
+    }
+
+    pub fn pkg_baked_debris_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "GPU 烘焙加速粒子爆炸碎裂與音訊律動擴散模擬 (BakedDebris)",
+            Self::SimplifiedChinese => "GPU 烘焙加速粒子爆炸碎裂与音频律动扩散模拟 (BakedDebris)",
+            Self::English => "GPU-baked particle collision debris & audio motion scatter simulation (BakedDebris)",
+            Self::French => "Simulation de débris de collision et de diffusion audio accélérée par GPU (BakedDebris)",
+            Self::German => "GPU-beschleunigte Partikelkollisions- & Audiomotions-Streuungssimulation (BakedDebris)",
+            Self::Italian => "Simulazione particellare accelerata su GPU per diffusione audio 3D (BakedDebris)",
+            Self::Japanese => "GPU事前計算による粒子衝突・爆発音響拡散シミュレーション (BakedDebris)",
+            Self::Korean => "GPU 가속 파티클 충돌 폭발 및 오디오 리듬 분산 시뮬레이션 (BakedDebris)",
+            Self::PortugueseBrazil => "Simulação de colisão de detritos de partículas acelerada por GPU (BakedDebris)",
+            Self::Russian => "GPU-симуляция столкновения и разлета частиц под ритм звука (BakedDebris)",
+            Self::Spanish => "Simulación de colisión de partículas acelerada por GPU (BakedDebris)",
+        }
+    }
+
+    pub fn pkg_raw_window_handle_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "Win32 原生視窗控制代碼跨語言互通介面標準 (Raw Window Handle)",
+            Self::SimplifiedChinese => "Win32 原生窗口句柄跨语言互通接口标准 (Raw Window Handle)",
+            Self::English => "Native Win32 window handle interoperability standard",
+            Self::French => "Standard d'interopérabilité des descripteurs de fenêtre natifs Win32",
+            Self::German => "Interoperabilitätsstandard für native Win32-Fenster-Handles",
+            Self::Italian => "Standard di interoperabilità degli handle di finestra nativi Win32",
+            Self::Japanese => "Win32 ネイティブウィンドウハンドル相互運用標準インターフェース",
+            Self::Korean => "Win32 네이티브 윈도우 핸들 상호 운용 표준 인터페이스",
+            Self::PortugueseBrazil => "Padrão de interoperabilidade de identificadores de janela nativos Win32",
+            Self::Russian => "Стандарт взаимодействия с нативными дескрипторами окон Win32",
+            Self::Spanish => "Estándar de interoperabilidad de identificadores de ventana nativos Win32",
+        }
+    }
+
+    pub fn pkg_serde_json_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "高效能 JSON 格式資料流序列化與跨行程訊息傳遞 (Serde JSON)",
+            Self::SimplifiedChinese => "高性能 JSON 格式数据流序列化与跨进程消息传递 (Serde JSON)",
+            Self::English => "High-performance JSON serialization for IPC message passing",
+            Self::French => "Sérialisation JSON haute performance pour transmission de messages IPC",
+            Self::German => "Hochleistungs-JSON-Serialisierung für IPC-Nachrichtenübertragung",
+            Self::Italian => "Serializzazione JSON ad alte prestazioni per passaggio messaggi IPC",
+            Self::Japanese => "プロセス間通信(IPC)メッセージ用 高性能 JSON シリアライザー",
+            Self::Korean => "프로세스 간 통신(IPC)을 위한 고성능 JSON 직렬화 라이브러리",
+            Self::PortugueseBrazil => "Serialização JSON de alto desempenho para passagem de mensagens IPC",
+            Self::Russian => "Высокопроизводительная сериализация JSON для сообщений IPC",
+            Self::Spanish => "Serialización JSON de alto rendimiento para paso de mensajes IPC",
+        }
+    }
+
     // -------------------------------------------------------------
     // Tray & Notification Strings
     // -------------------------------------------------------------
@@ -2311,36 +2860,73 @@ impl Language {
         }
     }
 
-    pub fn tray_connecting_tooltip(&self, name: &str) -> String {
+    pub fn tray_muted_text(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => format!("Win2Pod Bridge - 連線中 ({name})"),
-            Self::SimplifiedChinese => format!("Win2Pod Bridge - 连接中 ({name})"),
-            Self::English => format!("Win2Pod Bridge - Connecting ({name})"),
-            Self::French => format!("Win2Pod Bridge - Connexion ({name})"),
-            Self::German => format!("Win2Pod Bridge - Verbindung läuft ({name})"),
-            Self::Italian => format!("Win2Pod Bridge - Connessione ({name})"),
-            Self::Japanese => format!("Win2Pod Bridge - 接続中 ({name})"),
-            Self::Korean => format!("Win2Pod Bridge - 연결 중 ({name})"),
-            Self::PortugueseBrazil => format!("Win2Pod Bridge - Conectando ({name})"),
-            Self::Russian => format!("Win2Pod Bridge - Подключение ({name})"),
-            Self::Spanish => format!("Win2Pod Bridge - Conectando ({name})"),
+            Self::TraditionalChinese => "靜音",
+            Self::SimplifiedChinese => "静音",
+            Self::English => "Muted",
+            Self::French => "Muet",
+            Self::German => "Stumm",
+            Self::Italian => "Muto",
+            Self::Japanese => "消音",
+            Self::Korean => "음소거",
+            Self::PortugueseBrazil => "Mudo",
+            Self::Russian => "Без звука",
+            Self::Spanish => "Silenciado",
         }
     }
 
-    pub fn tray_streaming_tooltip(&self, name: &str, vol_suffix: &str) -> String {
+    pub fn tray_connecting_tooltip(&self, name: &str) -> String {
         match self {
-            Self::TraditionalChinese => format!("Win2Pod Bridge - 現正串流 ({name}){vol_suffix}"),
-            Self::SimplifiedChinese => format!("Win2Pod Bridge - 正在串流 ({name}){vol_suffix}"),
-            Self::English => format!("Win2Pod Bridge - Streaming ({name}){vol_suffix}"),
-            Self::French => format!("Win2Pod Bridge - Lecture en cours ({name}){vol_suffix}"),
-            Self::German => format!("Win2Pod Bridge - Streaming ({name}){vol_suffix}"),
-            Self::Italian => format!("Win2Pod Bridge - In riproduzione ({name}){vol_suffix}"),
-            Self::Japanese => format!("Win2Pod Bridge - 再生中 ({name}){vol_suffix}"),
-            Self::Korean => format!("Win2Pod Bridge - 스트리밍 중 ({name}){vol_suffix}"),
-            Self::PortugueseBrazil => format!("Win2Pod Bridge - Transmitindo ({name}){vol_suffix}"),
-            Self::Russian => format!("Win2Pod Bridge - Трансляция ({name}){vol_suffix}"),
-            Self::Spanish => format!("Win2Pod Bridge - Reproduciendo ({name}){vol_suffix}"),
+            Self::TraditionalChinese => format!("🔄 連線中：{name}"),
+            Self::SimplifiedChinese => format!("🔄 连接中：{name}"),
+            Self::English => format!("🔄 Connecting: {name}"),
+            Self::French => format!("🔄 Connexion : {name}"),
+            Self::German => format!("🔄 Verbinden: {name}"),
+            Self::Italian => format!("🔄 Connessione: {name}"),
+            Self::Japanese => format!("🔄 接続中：{name}"),
+            Self::Korean => format!("🔄 연결 중: {name}"),
+            Self::PortugueseBrazil => format!("🔄 Conectando: {name}"),
+            Self::Russian => format!("🔄 Подключение: {name}"),
+            Self::Spanish => format!("🔄 Conectando: {name}"),
         }
+    }
+
+    pub fn tray_streaming_tooltip(&self, is_muted: bool, name: &str, vol_pct: i32) -> String {
+        let vol_owned = format!("{vol_pct}%");
+        let (icon, vol_str) = if is_muted {
+            ("🔇", self.tray_muted_text())
+        } else {
+            ("🔊", vol_owned.as_str())
+        };
+        match self {
+            Self::TraditionalChinese => format!("{icon} 串流中：{name} ({vol_str})"),
+            Self::SimplifiedChinese => format!("{icon} 正在串流：{name} ({vol_str})"),
+            Self::English => format!("{icon} Streaming: {name} ({vol_str})"),
+            Self::French => format!("{icon} Lecture : {name} ({vol_str})"),
+            Self::German => format!("{icon} Streaming: {name} ({vol_str})"),
+            Self::Italian => format!("{icon} In riproduzione: {name} ({vol_str})"),
+            Self::Japanese => format!("{icon} 再生中：{name} ({vol_str})"),
+            Self::Korean => format!("{icon} 스트리밍 중: {name} ({vol_str})"),
+            Self::PortugueseBrazil => format!("{icon} Transmitindo: {name} ({vol_str})"),
+            Self::Russian => format!("{icon} Трансляция: {name} ({vol_str})"),
+            Self::Spanish => format!("{icon} Reproduciendo: {name} ({vol_str})"),
+        }
+    }
+
+    pub fn tray_airpods_with_battery(&self, model: &str, battery_info: &str) -> String {
+        match self {
+            Self::TraditionalChinese | Self::SimplifiedChinese | Self::Japanese => {
+                format!("🎧 {model}：{battery_info}")
+            }
+            _ => {
+                format!("🎧 {model}: {battery_info}")
+            }
+        }
+    }
+
+    pub fn tray_airpods_status_only(&self, model: &str, status: &str) -> String {
+        format!("🎧 {model} ({status})")
     }
 
     pub fn tray_error_tooltip(&self, err: &str) -> String {
@@ -2359,6 +2945,517 @@ impl Language {
         }
     }
 
+    pub fn nav_equalizer(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "等化器",
+            Self::SimplifiedChinese => "均衡器",
+            Self::English => "Equalizer",
+            Self::French => "Égaliseur",
+            Self::German => "Equalizer",
+            Self::Italian => "Equalizzatore",
+            Self::Japanese => "イコライザー",
+            Self::Korean => "이퀄라이저",
+            Self::PortugueseBrazil => "Equalizador",
+            Self::Russian => "Эквалайзер",
+            Self::Spanish => "Ecualizador",
+        }
+    }
+
+    pub fn tooltip_equalizer(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "開啟音訊等化器與即時頻譜",
+            Self::SimplifiedChinese => "开启音频均衡器与实时频谱",
+            Self::English => "Open Audio Equalizer & Real-time Spectrum",
+            Self::French => "Ouvrir l'égaliseur et le spectre en temps réel",
+            Self::German => "Audio-Equalizer & Echtzeit-Spektrum öffnen",
+            Self::Italian => "Apri equalizzatore audio e spettro in tempo reale",
+            Self::Japanese => "オーディオイコライザーとリアルタイムスペクトルを開く",
+            Self::Korean => "오디오 이퀄라이저 및 실시간 스펙트럼 열기",
+            Self::PortugueseBrazil => "Abrir equalizador de áudio e espectro em tempo real",
+            Self::Russian => "Открыть эквалайзер и спектр реального времени",
+            Self::Spanish => "Abrir ecualizador de audio y espectro en tiempo real",
+        }
+    }
+
+    pub fn tooltip_player(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "Win2Pod 播放器與等化器",
+            Self::SimplifiedChinese => "Win2Pod 播放器与均衡器",
+            Self::English => "Win2Pod Player & Equalizer",
+            Self::French => "Lecteur & Égaliseur Win2Pod",
+            Self::German => "Win2Pod Player & Equalizer",
+            Self::Italian => "Lettore & Equalizzatore Win2Pod",
+            Self::Japanese => "Win2Pod プレーヤー＆イコライザー",
+            Self::Korean => "Win2Pod 플레이어 및 이퀄라이저",
+            Self::PortugueseBrazil => "Player & Equalizador Win2Pod",
+            Self::Russian => "Win2Pod Плеер и Эквалайзер",
+            Self::Spanish => "Reproductor & Ecualizador Win2Pod",
+        }
+    }
+
+    pub fn tooltip_pin_window(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "保持在最上層",
+            Self::SimplifiedChinese => "保持在最顶层",
+            Self::English => "Keep on Top",
+            Self::French => "Garder au premier plan",
+            Self::German => "Im Vordergrund halten",
+            Self::Italian => "Mantieni in primo piano",
+            Self::Japanese => "常に最前面に表示",
+            Self::Korean => "항상 위에 고정",
+            Self::PortugueseBrazil => "Manter no topo",
+            Self::Russian => "Поверх остальных окон",
+            Self::Spanish => "Mantener en primer plano",
+        }
+    }
+
+    pub fn tooltip_unpin_window(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "取消保持在最上層",
+            Self::SimplifiedChinese => "取消保持在最顶层",
+            Self::English => "Unpin from Top",
+            Self::French => "Ne plus garder au premier plan",
+            Self::German => "Nicht mehr im Vordergrund halten",
+            Self::Italian => "Non mantenere più in primo piano",
+            Self::Japanese => "最前面の固定を解除",
+            Self::Korean => "항상 위 고정 해제",
+            Self::PortugueseBrazil => "Desafixar do topo",
+            Self::Russian => "Открепить от верха",
+            Self::Spanish => "Desanclar del primer plano",
+        }
+    }
+
+    pub fn tooltip_visualizer(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "開啟 3D 油畫音訊視覺化 (F11)",
+            Self::SimplifiedChinese => "开启 3D 油画音频可视化 (F11)",
+            Self::English => "Open 3D Paint Pulse Visualizer (F11)",
+            Self::French => "Ouvrir le visualiseur 3D Paint Pulse (F11)",
+            Self::German => "3D-Paint-Pulse-Visualisierer öffnen (F11)",
+            Self::Italian => "Apri visualizzatore 3D Paint Pulse (F11)",
+            Self::Japanese => "3D 油彩オーディオビジュアライザーを開く (F11)",
+            Self::Korean => "3D 유화 오디오 시각화 열기 (F11)",
+            Self::PortugueseBrazil => "Abrir visualizador de áudio 3D Paint Pulse (F11)",
+            Self::Russian => "Открыть 3D визуализатор Paint Pulse (F11)",
+            Self::Spanish => "Abrir visualizador 3D Paint Pulse (F11)",
+        }
+    }
+
+    pub fn tooltip_visualizer_close(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "關閉 3D 音訊視覺化",
+            Self::SimplifiedChinese => "关闭 3D 音频可视化",
+            Self::English => "Close 3D Visualizer",
+            Self::French => "Fermer le visualiseur 3D",
+            Self::German => "3D-Visualisierer schließen",
+            Self::Italian => "Chiudi visualizzatore 3D",
+            Self::Japanese => "3D ビジュアライザーを閉じる",
+            Self::Korean => "3D 시각화 닫기",
+            Self::PortugueseBrazil => "Fechar visualizador 3D",
+            Self::Russian => "Закрыть 3D визуализатор",
+            Self::Spanish => "Cerrar visualizador 3D",
+        }
+    }
+
+    pub fn player_no_track(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "目前無播放中的媒體",
+            Self::SimplifiedChinese => "当前无播放中的媒体",
+            Self::English => "No Media Playing",
+            Self::French => "Aucun média en cours",
+            Self::German => "Keine Medienwiedergabe",
+            Self::Italian => "Nessun file multimediale in riproduzione",
+            Self::Japanese => "再生中のメディアはありません",
+            Self::Korean => "재생 중인 미디어 없음",
+            Self::PortugueseBrazil => "Nenhuma mídia em reprodução",
+            Self::Russian => "Нет воспроизводимых медиа",
+            Self::Spanish => "Sin reproducción de medios",
+        }
+    }
+
+    pub fn player_unknown_artist(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "未知演出者",
+            Self::SimplifiedChinese => "未知艺术家",
+            Self::English => "Unknown Artist",
+            Self::French => "Artiste inconnu",
+            Self::German => "Unbekannter Künstler",
+            Self::Italian => "Artista sconosciuto",
+            Self::Japanese => "不明なアーティスト",
+            Self::Korean => "알 수 없는 아티스트",
+            Self::PortugueseBrazil => "Artista Desconhecido",
+            Self::Russian => "Неизвестный исполнитель",
+            Self::Spanish => "Artista Desconocido",
+        }
+    }
+
+    pub fn player_prev(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "上一首",
+            Self::SimplifiedChinese => "上一首",
+            Self::English => "Previous Track",
+            Self::French => "Piste précédente",
+            Self::German => "Vorheriger Titel",
+            Self::Italian => "Traccia precedente",
+            Self::Japanese => "前の曲",
+            Self::Korean => "이전 곡",
+            Self::PortugueseBrazil => "Faixa Anterior",
+            Self::Russian => "Предыдущий трек",
+            Self::Spanish => "Pista anterior",
+        }
+    }
+
+    pub fn player_play_pause(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "播放 / 暫停",
+            Self::SimplifiedChinese => "播放 / 暂停",
+            Self::English => "Play / Pause",
+            Self::French => "Lecture / Pause",
+            Self::German => "Wiedergabe / Pause",
+            Self::Italian => "Riproduci / Pausa",
+            Self::Japanese => "再生 / 一時停止",
+            Self::Korean => "재생 / 일시정지",
+            Self::PortugueseBrazil => "Reproduzir / Pausar",
+            Self::Russian => "Воспроизведение / Пауза",
+            Self::Spanish => "Reproducir / Pausa",
+        }
+    }
+
+    pub fn player_stop(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "停止",
+            Self::SimplifiedChinese => "停止",
+            Self::English => "Stop",
+            Self::French => "Arrêter",
+            Self::German => "Stopp",
+            Self::Italian => "Ferma",
+            Self::Japanese => "停止",
+            Self::Korean => "정지",
+            Self::PortugueseBrazil => "Parar",
+            Self::Russian => "Остановить",
+            Self::Spanish => "Detener",
+        }
+    }
+
+    pub fn player_next(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "下一首",
+            Self::SimplifiedChinese => "下一首",
+            Self::English => "Next Track",
+            Self::French => "Piste suivante",
+            Self::German => "Nächster Titel",
+            Self::Italian => "Traccia successiva",
+            Self::Japanese => "次の曲",
+            Self::Korean => "다음 곡",
+            Self::PortugueseBrazil => "Próxima Faixa",
+            Self::Russian => "Следующий трек",
+            Self::Spanish => "Pista siguiente",
+        }
+    }
+
+    pub fn player_click_to_open_app(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "點擊叫出播放來源程式",
+            Self::SimplifiedChinese => "点击唤起播放来源程序",
+            Self::English => "Click to bring up media player",
+            Self::French => "Cliquer pour afficher le lecteur",
+            Self::German => "Klicken, um Player aufzurufen",
+            Self::Italian => "Clicca per aprire il lettore multimediale",
+            Self::Japanese => "クリックして再生元アプリを表示",
+            Self::Korean => "클릭하여 재생 앱 열기",
+            Self::PortugueseBrazil => "Clique para abrir o reprodutor de mídia",
+            Self::Russian => "Нажмите, чтобы открыть медиаплеер",
+            Self::Spanish => "Haga clic para abrir el reproductor",
+        }
+    }
+
+    pub fn balance_center(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "◄ 置中 ►",
+            Self::SimplifiedChinese => "◄ 居中 ►",
+            Self::English => "◄ Center ►",
+            Self::French => "◄ Centre ►",
+            Self::German => "◄ Mitte ►",
+            Self::Italian => "◄ Centro ►",
+            Self::Japanese => "◄ 中央 ►",
+            Self::Korean => "◄ 중앙 ►",
+            Self::PortugueseBrazil => "◄ Centro ►",
+            Self::Russian => "◄ Центр ►",
+            Self::Spanish => "◄ Centro ►",
+        }
+    }
+
+    pub fn balance_left(&self, pct: i32) -> String {
+        match self {
+            Self::TraditionalChinese => format!("◄ 左 {pct}%"),
+            Self::SimplifiedChinese => format!("◄ 左 {pct}%"),
+            Self::English => format!("◄ L {pct}%"),
+            Self::French => format!("◄ G {pct}%"),
+            Self::German => format!("◄ L {pct}%"),
+            Self::Italian => format!("◄ S {pct}%"),
+            Self::Japanese => format!("◄ 左 {pct}%"),
+            Self::Korean => format!("◄ 좌 {pct}%"),
+            Self::PortugueseBrazil => format!("◄ E {pct}%"),
+            Self::Russian => format!("◄ Л {pct}%"),
+            Self::Spanish => format!("◄ I {pct}%"),
+        }
+    }
+
+    pub fn balance_right(&self, pct: i32) -> String {
+        match self {
+            Self::TraditionalChinese => format!("{pct}% 右 ►"),
+            Self::SimplifiedChinese => format!("{pct}% 右 ►"),
+            Self::English => format!("{pct}% R ►"),
+            Self::French => format!("{pct}% D ►"),
+            Self::German => format!("{pct}% R ►"),
+            Self::Italian => format!("{pct}% D ►"),
+            Self::Japanese => format!("{pct}% 右 ►"),
+            Self::Korean => format!("{pct}% 우 ►"),
+            Self::PortugueseBrazil => format!("{pct}% D ►"),
+            Self::Russian => format!("{pct}% П ►"),
+            Self::Spanish => format!("{pct}% D ►"),
+        }
+    }
+
+    pub fn balance_tooltip(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "左右聲道平衡（按兩下還原置中）",
+            Self::SimplifiedChinese => "左右声道平衡（双击还原居中）",
+            Self::English => "Stereo Balance (Double-click to reset to center)",
+            Self::French => "Balance stéréo (Double-cliquer pour réinitialiser au centre)",
+            Self::German => "Stereo-Balance (Doppelklick zum Zurücksetzen auf die Mitte)",
+            Self::Italian => "Bilanciamento stereo (Doppio clic per reimpostare al centro)",
+            Self::Japanese => "ステレオバランス（ダブルクリックで中央に戻す）",
+            Self::Korean => "스테레오 밸런스 (더블 클릭하여 중앙으로 리셋)",
+            Self::PortugueseBrazil => "Balanço estéreo (Clique duplo para centralizar)",
+            Self::Russian => "Стерео баланс (Дважды щелкните для сброса по центру)",
+            Self::Spanish => "Balance estéreo (Haga doble clic para centrar)",
+        }
+    }
+
+    pub fn btn_eq(&self, enabled: bool) -> &'static str {
+        if enabled {
+            match self {
+                Self::TraditionalChinese => "♪ EQ:開",
+                Self::SimplifiedChinese => "♪ EQ:开",
+                Self::English => "♪ EQ:ON",
+                Self::French => "♪ EQ:ON",
+                Self::German => "♪ EQ:EIN",
+                Self::Italian => "♪ EQ:ON",
+                Self::Japanese => "♪ EQ:入",
+                Self::Korean => "♪ EQ:켜짐",
+                Self::PortugueseBrazil => "♪ EQ:LIG",
+                Self::Russian => "♪ EQ:ВКЛ",
+                Self::Spanish => "♪ EQ:ON",
+            }
+        } else {
+            "♪ EQ"
+        }
+    }
+
+    pub fn eq_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🎚 音訊等化器 (Equalizer)",
+            Self::SimplifiedChinese => "🎚 音频均衡器 (Equalizer)",
+            Self::English => "🎚 Audio Equalizer",
+            Self::French => "🎚 Égaliseur audio",
+            Self::German => "🎚 Audio-Equalizer",
+            Self::Italian => "🎚 Equalizzatore audio",
+            Self::Japanese => "🎚 オーディオイコライザー",
+            Self::Korean => "🎚 오디오 이퀄라이저",
+            Self::PortugueseBrazil => "🎚 Equalizador de Áudio",
+            Self::Russian => "🎚 Аудио эквалайзер",
+            Self::Spanish => "🎚 Ecualizador de Audio",
+        }
+    }
+
+    pub fn eq_enable(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "啟用等化器",
+            Self::SimplifiedChinese => "启用均衡器",
+            Self::English => "Enable Equalizer",
+            Self::French => "Activer l'égaliseur",
+            Self::German => "Equalizer aktivieren",
+            Self::Italian => "Abilita equalizzatore",
+            Self::Japanese => "イコライザーを有効化",
+            Self::Korean => "이퀄라이저 활성화",
+            Self::PortugueseBrazil => "Ativar equalizador",
+            Self::Russian => "Включить эквалайзер",
+            Self::Spanish => "Activar ecualizador",
+        }
+    }
+
+    pub fn eq_presets_label(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "音效風格預設：",
+            Self::SimplifiedChinese => "音效风格预设：",
+            Self::English => "Sound Presets:",
+            Self::French => "Préréglages sonores :",
+            Self::German => "Klang-Voreinstellungen:",
+            Self::Italian => "Preimpostazioni audio:",
+            Self::Japanese => "サウンドプリセット：",
+            Self::Korean => "사운드 프리셋:",
+            Self::PortugueseBrazil => "Predefinições de som:",
+            Self::Russian => "Предустановки звука:",
+            Self::Spanish => "Ajustes predefinidos de sonido:",
+        }
+    }
+
+    pub fn eq_reset(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "↺ 歸零重設",
+            Self::SimplifiedChinese => "↺ 归零重置",
+            Self::English => "↺ Reset Flat",
+            Self::French => "↺ Réinitialiser",
+            Self::German => "↺ Zurücksetzen",
+            Self::Italian => "↺ Ripristina",
+            Self::Japanese => "↺ リセット",
+            Self::Korean => "↺ 재설정",
+            Self::PortugueseBrazil => "↺ Redefinir",
+            Self::Russian => "↺ Сброс",
+            Self::Spanish => "↺ Restablecer",
+        }
+    }
+
+    pub fn eq_spectrum_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "即時音訊頻譜響應",
+            Self::SimplifiedChinese => "实时音频频谱响应",
+            Self::English => "Real-Time Spectrum Response",
+            Self::French => "Réponse spectrale en temps réel",
+            Self::German => "Echtzeit-Spektralantwort",
+            Self::Italian => "Risposta spettrale in tempo reale",
+            Self::Japanese => "リアルタイムオーディオスペクトル",
+            Self::Korean => "실시간 오디오 스펙트럼 반응",
+            Self::PortugueseBrazil => "Resposta espectral em tempo real",
+            Self::Russian => "Спектральный отклик в реальном времени",
+            Self::Spanish => "Respuesta de espectro en tiempo real",
+        }
+    }
+
+    pub fn eq_preset_name(&self, preset: crate::controller::EqPreset) -> &'static str {
+        use crate::controller::EqPreset;
+        match preset {
+            EqPreset::Jazz => match self {
+                Self::TraditionalChinese => "爵士",
+                Self::SimplifiedChinese => "爵士",
+                Self::English => "Jazz",
+                Self::French => "Jazz",
+                Self::German => "Jazz",
+                Self::Italian => "Jazz",
+                Self::Japanese => "ジャズ",
+                Self::Korean => "재즈",
+                Self::PortugueseBrazil => "Jazz",
+                Self::Russian => "Джаз",
+                Self::Spanish => "Jazz",
+            },
+            EqPreset::Custom => match self {
+                Self::TraditionalChinese => "自訂",
+                Self::SimplifiedChinese => "自定义",
+                Self::English => "Custom",
+                Self::French => "Personnalisé",
+                Self::German => "Benutzerdefiniert",
+                Self::Italian => "Personalizzato",
+                Self::Japanese => "カスタム",
+                Self::Korean => "사용자 지정",
+                Self::PortugueseBrazil => "Personalizado",
+                Self::Russian => "Пользовательский",
+                Self::Spanish => "Personalizado",
+            },
+            EqPreset::BassBoost => match self {
+                Self::TraditionalChinese => "重低音",
+                Self::SimplifiedChinese => "重低音",
+                Self::English => "Bass Boost",
+                Self::French => "Amplification des basses",
+                Self::German => "Bass-Verstärkung",
+                Self::Italian => "Bassi potenziati",
+                Self::Japanese => "低音ブースト",
+                Self::Korean => "저음 강화",
+                Self::PortugueseBrazil => "Reforço de graves",
+                Self::Russian => "Усиление басов",
+                Self::Spanish => "Refuerzo de graves",
+            },
+            EqPreset::TrebleBoost => match self {
+                Self::TraditionalChinese => "高音增強",
+                Self::SimplifiedChinese => "高音增强",
+                Self::English => "Treble Boost",
+                Self::French => "Amplification des aigus",
+                Self::German => "Höhen-Verstärkung",
+                Self::Italian => "Alti potenziati",
+                Self::Japanese => "高音ブースト",
+                Self::Korean => "고음 강화",
+                Self::PortugueseBrazil => "Reforço de agudos",
+                Self::Russian => "Усиление высоких",
+                Self::Spanish => "Refuerzo de agudos",
+            },
+            EqPreset::Vocal => match self {
+                Self::TraditionalChinese => "人聲清晰",
+                Self::SimplifiedChinese => "人声清晰",
+                Self::English => "Vocal",
+                Self::French => "Voix",
+                Self::German => "Gesang",
+                Self::Italian => "Voce",
+                Self::Japanese => "ボーカル",
+                Self::Korean => "보컬",
+                Self::PortugueseBrazil => "Vocal",
+                Self::Russian => "Вокал",
+                Self::Spanish => "Voz",
+            },
+            EqPreset::Pop => match self {
+                Self::TraditionalChinese => "流行",
+                Self::SimplifiedChinese => "流行",
+                Self::English => "Pop",
+                Self::French => "Pop",
+                Self::German => "Pop",
+                Self::Italian => "Pop",
+                Self::Japanese => "ポップ",
+                Self::Korean => "팝",
+                Self::PortugueseBrazil => "Pop",
+                Self::Russian => "Поп",
+                Self::Spanish => "Pop",
+            },
+            EqPreset::Rock => match self {
+                Self::TraditionalChinese => "搖滾",
+                Self::SimplifiedChinese => "摇滚",
+                Self::English => "Rock",
+                Self::French => "Rock",
+                Self::German => "Rock",
+                Self::Italian => "Rock",
+                Self::Japanese => "ロック",
+                Self::Korean => "록",
+                Self::PortugueseBrazil => "Rock",
+                Self::Russian => "Рок",
+                Self::Spanish => "Rock",
+            },
+            EqPreset::Electronic => match self {
+                Self::TraditionalChinese => "電子樂",
+                Self::SimplifiedChinese => "电子乐",
+                Self::English => "Electronic",
+                Self::French => "Électro",
+                Self::German => "Elektro",
+                Self::Italian => "Elettronica",
+                Self::Japanese => "エレクトロ",
+                Self::Korean => "일렉트로닉",
+                Self::PortugueseBrazil => "Eletrônica",
+                Self::Russian => "Электронная",
+                Self::Spanish => "Electrónica",
+            },
+            EqPreset::Classical => match self {
+                Self::TraditionalChinese => "古典",
+                Self::SimplifiedChinese => "古典",
+                Self::English => "Classical",
+                Self::French => "Classique",
+                Self::German => "Klassik",
+                Self::Italian => "Classica",
+                Self::Japanese => "クラシック",
+                Self::Korean => "클래식",
+                Self::PortugueseBrazil => "Clássica",
+                Self::Russian => "Классика",
+                Self::Spanish => "Clásica",
+            },
+        }
+    }
+
     pub fn tray_notification_title(&self) -> &'static str {
         match self {
             Self::TraditionalChinese => "Win2Pod Bridge - 音響連線變更",
@@ -2374,9 +3471,754 @@ impl Language {
             Self::Spanish => "Win2Pod Bridge - Cambio de estado de audio",
         }
     }
-}
+    pub fn sound_enhancer_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "高頻諧波修復 (HE)",
+            Self::SimplifiedChinese => "高频谐波修复 (HE)",
+            Self::English => "Harmonic Exciter (HE)",
+            Self::French => "Excitateur HE",
+            Self::German => "Harmonic Exciter (HE)",
+            Self::Italian => "Exciter armonico (HE)",
+            Self::Japanese => "高調波エキサイター (HE)",
+            Self::Korean => "하모닉 익사이터 (HE)",
+            Self::PortugueseBrazil => "Exciter harmônico (HE)",
+            Self::Russian => "Возбудитель HE",
+            Self::Spanish => "Exciter armónico (HE)",
+        }
+    }
 
-/// Notice message kind for structured, localizable notifications and banners.
+    pub fn sound_enhancer_mode_name(&self, mode: airplay_audio::SoundEnhancerMode) -> &'static str {
+        use airplay_audio::SoundEnhancerMode;
+        match mode {
+            SoundEnhancerMode::Off => match self {
+                Self::TraditionalChinese => "關閉",
+                Self::SimplifiedChinese => "关闭",
+                Self::English => "Off",
+                Self::French => "Off",
+                Self::German => "Aus",
+                Self::Italian => "Off",
+                Self::Japanese => "オフ",
+                Self::Korean => "끄기",
+                Self::PortugueseBrazil => "Off",
+                Self::Russian => "Выкл",
+                Self::Spanish => "Off",
+            },
+            SoundEnhancerMode::Natural => match self {
+                Self::TraditionalChinese => "自然還原",
+                Self::SimplifiedChinese => "自然还原",
+                Self::English => "Natural",
+                Self::French => "Naturel",
+                Self::German => "Natürlich",
+                Self::Italian => "Naturale",
+                Self::Japanese => "ナチュラル",
+                Self::Korean => "자연스러운",
+                Self::PortugueseBrazil => "Natural",
+                Self::Russian => "Естественный",
+                Self::Spanish => "Natural",
+            },
+            SoundEnhancerMode::Dynamic => match self {
+                Self::TraditionalChinese => "動態增強",
+                Self::SimplifiedChinese => "动态增强",
+                Self::English => "Dynamic",
+                Self::French => "Dynamique",
+                Self::German => "Dynamisch",
+                Self::Italian => "Dinamico",
+                Self::Japanese => "ダイナミック",
+                Self::Korean => "다이내믹",
+                Self::PortugueseBrazil => "Dinâmico",
+                Self::Russian => "Динамичный",
+                Self::Spanish => "Dinámico",
+            },
+            SoundEnhancerMode::Brilliant => match self {
+                Self::TraditionalChinese => "明亮通透",
+                Self::SimplifiedChinese => "明亮通透",
+                Self::English => "Brilliant",
+                Self::French => "Brillant",
+                Self::German => "Brillant",
+                Self::Italian => "Brillante",
+                Self::Japanese => "ブリリアント",
+                Self::Korean => "브릴리언트",
+                Self::PortugueseBrazil => "Brilhante",
+                Self::Russian => "Яркий",
+                Self::Spanish => "Brillante",
+            },
+        }
+    }
+
+    pub fn sound_enhancer_tooltip(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "運用諧波激勵器 (Harmonic Exciter, HE) 與參數等化技術，重建有損壓縮（如 Spotify 160k）所流失的超高頻泛音與空氣感。",
+            Self::SimplifiedChinese => "运用谐波激励器 (Harmonic Exciter, HE) 与参数均衡技术，重建有损压缩（如 Spotify 160k）所流失的超高频泛音与空气感。",
+            Self::English => "Reconstructs high-frequency harmonics and airiness lost in lossy compression (such as Spotify 160kbps) using Harmonic Exciter (HE).",
+            Self::French => "Reconstruit les harmoniques aiguës et l'aération perdues dans la compression avec perte via l'excitateur harmonique (HE).",
+            Self::German => "Stellt hochfrequente Obertöne und Räumlichkeit wieder her, die bei verlustbehafteter Kompression verloren gingen (Harmonic Exciter, HE).",
+            Self::Italian => "Ricostruisce le armoniche ad alta frequenza perse nella compressione con perdita (Harmonic Exciter, HE).",
+            Self::Japanese => "高調波エキサイター (HE) により、不可逆圧縮で失われた超高音域の倍音と空気感を再構築します。",
+            Self::Korean => "하모닉 익사이터(HE)를 통해 손실 압축으로 사라진 초고역 배음과 공기감을 복원합니다.",
+            Self::PortugueseBrazil => "Reconstrói harmônicos de alta frequência perdidos na compressão com perdas (Harmonic Exciter, HE).",
+            Self::Russian => "Восстанавливает высокочастотные гармоники, потерянные при сжатии с потерями (Harmonic Exciter, HE).",
+            Self::Spanish => "Reconstruye los armónicos de alta frecuencia perdidos en la compresión con pérdidas (Harmonic Exciter, HE).",
+        }
+    }
+
+    pub fn sound_enhancer_preset_tooltip(&self, mode: airplay_audio::SoundEnhancerMode) -> &'static str {
+        use airplay_audio::SoundEnhancerMode;
+        match mode {
+            SoundEnhancerMode::Off => match self {
+                Self::TraditionalChinese => "【關閉】完全旁路 (Bypass)，保持純淨原始音訊，適合無損高解析音源 (ALAC / FLAC / Hi-Res)。",
+                Self::SimplifiedChinese => "【关闭】完全旁路 (Bypass)，保持纯净原始音频，适合无损高解析音源 (ALAC / FLAC / Hi-Res)。",
+                Self::English => "[Off] Completely bypassed. Preserves untouched original audio, ideal for lossless Hi-Res sources (ALAC / FLAC).",
+                Self::French => "[Désactivé] Totalement contourné. Conserve l'audio original intact, idéal pour les sources sans perte Hi-Res.",
+                Self::German => "[Aus] Komplett umgangen. Behält das unberührte Original-Audio bei, ideal für verlustfreie Hi-Res-Quellen.",
+                Self::Italian => "[Disattivato] Completamente bypassato. Mantiene l'audio originale intatto, ideale per sorgenti lossless Hi-Res.",
+                Self::Japanese => "【オフ】バイパス。オリジナルの音声をそのまま出力します。ハイレゾ無損音源 (ALAC / FLAC) に最適。",
+                Self::Korean => "【끄기】바이패스. 원본 오디오를 그대로 유지하며 무손실 고해상도 음원 (ALAC / FLAC)에 적합합니다.",
+                Self::PortugueseBrazil => "[Desligado] Totalmente ignorado. Mantém o áudio original intocado, ideal para fontes Hi-Res sem perdas.",
+                Self::Russian => "[Выкл] Полный байпас. Сохраняет исходный звук без изменений, идеально для lossless Hi-Res (ALAC / FLAC).",
+                Self::Spanish => "[Desactivado] Totalmente bypass. Mantiene el audio original intacto, ideal para fuentes Hi-Res sin pérdidas.",
+            },
+            SoundEnhancerMode::Natural => match self {
+                Self::TraditionalChinese => "【自然還原】輕度修復（8kHz+ 高架濾波與柔和諧波）。適合日常流行樂、Podcast、廣播與人聲，細膩自然耐聽。",
+                Self::SimplifiedChinese => "【自然还原】轻度修复（8kHz+ 高架滤波与柔和谐波）。适合日常流行乐、播客 Podcast、广播与人声，细腻自然耐听。",
+                Self::English => "[Natural] Gentle restoration (8kHz+ shelf & soft harmonics). Ideal for pop music, podcasts, radio, and vocals.",
+                Self::French => "[Naturel] Restauration douce (filtrage 8kHz+ et harmoniques subtiles). Idéal pour la pop, les podcasts et les voix.",
+                Self::German => "[Natürlich] Sanfte Wiederherstellung (8kHz+ Shelf & dezente Obertöne). Ideal für Pop, Podcasts und Gesang.",
+                Self::Italian => "[Naturale] Ripristino delicato (filtro a mensola 8kHz+ e armoniche morbide). Ideale per pop, podcast e voci.",
+                Self::Japanese => "【ナチュラル】穏やかな復元（8kHz+ シェルフと繊細な倍音）。ポップス、ポッドキャスト、ラジオ、ボーカルに最適。",
+                Self::Korean => "【자연스러운】부드러운 복원 (8kHz+ 쉘프 및 은은한 배음). 팝 음악, 팟캐스트, 라디오 및 보컬에 적합합니다.",
+                Self::PortugueseBrazil => "[Natural] Restauração suave (filtro shelf 8kHz+ e harmônicos suaves). Ideal para música pop, podcasts e vocais.",
+                Self::Russian => "[Естественный] Мягкое восстановление (полка 8кГц+ и тонкие гармоники). Идеально для поп-музыки, подкастов и вокала.",
+                Self::Spanish => "[Natural] Restauración suave (filtro shelf 8kHz+ y armónicos suaves). Ideal para música pop, podcasts y voces.",
+            },
+            SoundEnhancerMode::Dynamic => match self {
+                Self::TraditionalChinese => "【動態增強】中度修復（7kHz+ 高架濾波與動態飽和）。專為 Spotify Free (160k)、YouTube 等有損串流打造，顯著重現空氣感與穿透力。",
+                Self::SimplifiedChinese => "【动态增强】中度修复（7kHz+ 高架滤波与动态饱和）。专为 Spotify Free (160k)、YouTube 等有损串流打造，显著重现空气感与穿透力。",
+                Self::English => "[Dynamic] Moderate restoration (7kHz+ shelf & dynamic saturation). Tailored for Spotify Free 160k and YouTube, reviving airiness and crispness.",
+                Self::French => "[Dynamique] Restauration modérée (7kHz+ et saturation dynamique). Conçu pour Spotify Free et YouTube, redonnant aération et présence.",
+                Self::German => "[Dynamisch] Moderate Wiederherstellung (7kHz+ Shelf & dynamische Sättigung). Perfekt für Spotify Free (160k) und YouTube.",
+                Self::Italian => "[Dinamico] Ripristino moderato (7kHz+ e saturazione dinamica). Creato per Spotify Free e YouTube, ridona aria e brillantezza.",
+                Self::Japanese => "【ダイナミック】中程度の復元（7kHz+ シェルフと動的飽和）。Spotify Free (160k) や YouTube などの圧縮音源に空気感と透明感を蘇らせます。",
+                Self::Korean => "【다이내믹】중간 강도 복원 (7kHz+ 쉘프 및 동적 배음). Spotify Free(160k), YouTube 등의 손실 스트리밍에 공기감과 선명함을 불어넣습니다.",
+                Self::PortugueseBrazil => "[Dinâmico] Restauração moderada (shelf 7kHz+ e saturação dinâmica). Sob medida para Spotify Free e YouTube, revivendo o brilho.",
+                Self::Russian => "[Динамичный] Умеренное восстановление (полка 7кГц+ и динамические гармоники). Специально для Spotify Free (160k) и YouTube.",
+                Self::Spanish => "[Dinámico] Restauración moderada (shelf 7kHz+ y saturación dinámica). Creado para Spotify Free y YouTube, reviviendo el brillo.",
+            },
+            SoundEnhancerMode::Brilliant => match self {
+                Self::TraditionalChinese => "【明亮通透】深度修復（6kHz+ 高架濾波與豐富高次諧波）。適合古典樂、木吉他、爵士樂與器樂演奏，高頻金屬光澤與空間泛音極其豐富。",
+                Self::SimplifiedChinese => "【明亮通透】深度修复（6kHz+ 高架滤波与丰富高次谐波）。适合古典乐、木吉他、爵士乐与器乐演奏，高频金属光泽与空间泛音极其丰富。",
+                Self::English => "[Brilliant] Deep restoration (6kHz+ shelf & rich upper harmonics). Ideal for classical, acoustic guitar, jazz, and percussion with shimmering highs.",
+                Self::French => "[Brillant] Restauration profonde (6kHz+ et riches harmoniques). Idéal pour le classique, la guitare acoustique, le jazz et les percussions.",
+                Self::German => "[Brillant] Tiefe Wiederherstellung (6kHz+ Shelf & reichhaltige Obertöne). Ideal für Klassik, Akustikgitarre, Jazz und Becken.",
+                Self::Italian => "[Brillante] Ripristino profondo (6kHz+ e ricche armoniche superiori). Ideale per classica, chitarra acustica, jazz e percussioni.",
+                Self::Japanese => "【ブリリアント】高度な復元（6kHz+ シェルフと豊かな高次倍音）。クラシック、アコギ、ジャズ、打楽器のきらびやかな高音域を引き出します。",
+                Self::Korean => "【브릴리언트】심층 복원 (6kHz+ 쉘프 및 풍부한 고차 배음). 클래식, 어쿠스틱 기타, 재즈 및 타악기의 화려한 고역 디테일에 이상적입니다.",
+                Self::PortugueseBrazil => "[Brilhante] Restauração profunda (shelf 6kHz+ e harmônicos ricos). Ideal para clássica, violão acústico, jazz e pratos.",
+                Self::Russian => "[Яркий] Глубокое восстановление (полка 6кГц+ и богатые гармоники). Идеально для классики, акустической гитары, джаза и тарелок.",
+                Self::Spanish => "[Brillante] Restauración profunda (shelf 6kHz+ y ricos armónicos). Ideal para clásica, guitarra acústica, jazz y percusión.",
+            },
+        }
+    }
+
+    pub fn warmth_enhancer_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "溫暖音色增強 (WE)",
+            Self::SimplifiedChinese => "温暖音色增强 (WE)",
+            Self::English => "Warmth Enhancer (WE)",
+            Self::French => "Chaleur analogique (WE)",
+            Self::German => "Analoge Wärme (WE)",
+            Self::Italian => "Calore analogico (WE)",
+            Self::Japanese => "ウォームス・エンハンサー (WE)",
+            Self::Korean => "웜스 인핸서 (WE)",
+            Self::PortugueseBrazil => "Calor analógico (WE)",
+            Self::Russian => "Аналоговое тепло (WE)",
+            Self::Spanish => "Calidez analógica (WE)",
+        }
+    }
+
+    pub fn warmth_enhancer_mode_name(&self, mode: airplay_audio::WarmthEnhancerMode) -> &'static str {
+        use airplay_audio::WarmthEnhancerMode;
+        match mode {
+            WarmthEnhancerMode::Off => match self {
+                Self::TraditionalChinese => "關閉",
+                Self::SimplifiedChinese => "关闭",
+                Self::English => "Off",
+                Self::French => "Off",
+                Self::German => "Aus",
+                Self::Italian => "Off",
+                Self::Japanese => "オフ",
+                Self::Korean => "끄기",
+                Self::PortugueseBrazil => "Off",
+                Self::Russian => "Выкл",
+                Self::Spanish => "Off",
+            },
+            WarmthEnhancerMode::Subtle => match self {
+                Self::TraditionalChinese => "輕度溫暖",
+                Self::SimplifiedChinese => "轻度温暖",
+                Self::English => "Subtle",
+                Self::French => "Léger",
+                Self::German => "Dezent",
+                Self::Italian => "Sottile",
+                Self::Japanese => "サトル",
+                Self::Korean => "미세 온기",
+                Self::PortugueseBrazil => "Sutil",
+                Self::Russian => "Мягкий",
+                Self::Spanish => "Sutil",
+            },
+            WarmthEnhancerMode::Warm => match self {
+                Self::TraditionalChinese => "經典黑膠",
+                Self::SimplifiedChinese => "经典黑胶",
+                Self::English => "Warm",
+                Self::French => "Chaud",
+                Self::German => "Warm",
+                Self::Italian => "Caldo",
+                Self::Japanese => "ウォーム",
+                Self::Korean => "클래식 바이닐",
+                Self::PortugueseBrazil => "Quente",
+                Self::Russian => "Тёплый",
+                Self::Spanish => "Cálido",
+            },
+            WarmthEnhancerMode::Vintage => match self {
+                Self::TraditionalChinese => "復古醇厚",
+                Self::SimplifiedChinese => "复古醇厚",
+                Self::English => "Vintage",
+                Self::French => "Rétro",
+                Self::German => "Vintage",
+                Self::Italian => "Vintage",
+                Self::Japanese => "ビンテージ",
+                Self::Korean => "빈티지",
+                Self::PortugueseBrazil => "Vintage",
+                Self::Russian => "Винтаж",
+                Self::Spanish => "Vintage",
+            },
+        }
+    }
+
+    pub fn warmth_enhancer_tooltip(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "模擬黑膠唱臂轉盤低頻物理共鳴（50~100Hz 低架增益 1.5~2dB）與真空管/磁帶飽和度（Drive 2%~5%），消除數位生硬冷澀感，賦予溫潤醇厚底蘊。",
+            Self::SimplifiedChinese => "模拟黑胶唱臂转盘低频物理共鸣（50~100Hz 低架增益 1.5~2dB）与电子管/磁带饱和度（Drive 2%~5%），消除数码生硬冷涩感，赋予温润醇厚底蕴。",
+            Self::English => "Simulates analog turntable tonearm resonance (50-100Hz low-shelf +1.5-2dB) and tube/tape saturation (2%-5% drive) to eliminate digital harshness and add vintage vinyl warmth.",
+            Self::French => "Simule la résonance d'une platine vinyle (50-100Hz +1.5-2dB) et la saturation à lampes/bande (2%-5%) pour éliminer la froideur numérique.",
+            Self::German => "Simuliert Tonarm-Resonanz (50-100Hz +1,5-2dB) und Röhren-/Bandsättigung (2%-5%), um digitale Kälte zu beseitigen und Vinyl-Wärme zu erzeugen.",
+            Self::Italian => "Simula la risonanza del giradischi (50-100Hz +1.5-2dB) e la saturazione valvolare/nastro (2%-5%) per eliminare la freddezza digitale.",
+            Self::Japanese => "アナログレコードのトーンアーム共振（50〜100Hz ローシェルフ +1.5〜2dB）と真空管/テープ飽和（Drive 2%〜5%）を再現し、デジタルの硬さを和らげます。",
+            Self::Korean => "LP 톤암 공진(50~100Hz 로우 쉘프 +1.5~2dB)과 진공관/테이프 채도(2%~5% 드라이브)를 시뮬레이션하여 디지털의 차가움을 없애고 아날로그 온기를 더합니다.",
+            Self::PortugueseBrazil => "Simula a ressonância de toca-discos (50-100Hz +1.5-2dB) e a saturação valvulada/fita (2%-5%) para suavizar a frieza digital.",
+            Self::Russian => "Имитирует резонанс тонарма винила (50-100 Гц +1.5-2 дБ) и ламповую/ленточную сатурацию (2%-5%), устраняя цифровую сухость.",
+            Self::Spanish => "Simula la resonancia de tocadiscos (50-100Hz +1.5-2dB) y saturación a válvulas/cinta (2%-5%) para eliminar la frialdad digital.",
+        }
+    }
+
+    pub fn warmth_enhancer_preset_tooltip(&self, mode: airplay_audio::WarmthEnhancerMode) -> &'static str {
+        use airplay_audio::WarmthEnhancerMode;
+        match mode {
+            WarmthEnhancerMode::Off => match self {
+                Self::TraditionalChinese => "【關閉】完全旁路 (Bypass)，保持純淨原始音訊，不施加任何低頻染色或類比飽和度。",
+                Self::SimplifiedChinese => "【关闭】完全旁路 (Bypass)，保持纯净原始音频，不施加任何低频染色或模拟饱和度。",
+                Self::English => "[Off] Completely bypassed. Preserves untouched original audio without low-frequency coloring or saturation.",
+                Self::French => "[Désactivé] Totalement contourné. Conserve l'audio original intact sans coloration ni saturation.",
+                Self::German => "[Aus] Komplett umgangen. Behält das unberührte Original-Audio ohne Färbung oder Sättigung bei.",
+                Self::Italian => "[Disattivato] Completamente bypassato. Mantiene l'audio originale intatto senza colorazioni o saturazione.",
+                Self::Japanese => "【オフ】バイパス。低域の着色やアナログ飽和を一切加えず、元の音声をそのまま出力します。",
+                Self::Korean => "【끄기】바이패스. 저역 착색이나 아날로그 채도 없이 원본 오디오를 그대로 유지합니다.",
+                Self::PortugueseBrazil => "[Desligado] Totalmente ignorado. Mantém o áudio original intocado sem coloração ou saturação.",
+                Self::Russian => "[Выкл] Полный байпас. Сохраняет исходный звук без окрашивания и сатурации.",
+                Self::Spanish => "[Desactivado] Totalmente bypass. Mantiene el audio original intacto sin coloración ni saturación.",
+            },
+            WarmthEnhancerMode::Subtle => match self {
+                Self::TraditionalChinese => "【輕度溫暖】微量飽和 (Drive 2.5%) 與 60Hz (+1.5dB) 低架增益。自然化解數位生硬感，適合現代流行樂、流行爵士與人聲。",
+                Self::SimplifiedChinese => "【轻度温暖】微量饱和 (Drive 2.5%) 与 60Hz (+1.5dB) 低架增益。自然化解数码生硬感，适合现代流行乐、流行爵士与人声。",
+                Self::English => "[Subtle] Subtle saturation (2.5% drive) and 60Hz (+1.5dB) low-shelf. Softens digital harshness, ideal for modern pop, jazz, and vocals.",
+                Self::French => "[Léger] Saturation subtile (drive 2,5%) et étagère basse 60Hz (+1,5dB). Adoucit la dureté numérique, parfait pour la pop et le jazz.",
+                Self::German => "[Dezent] Dezente Sättigung (2,5% Drive) und 60Hz (+1,5dB) Low-Shelf. Mildert digitale Schärfe, ideal für Pop, Jazz und Vocals.",
+                Self::Italian => "[Sottile] Saturazione sottile (drive 2,5%) e mensola bassa 60Hz (+1,5dB). Attenua l'asprezza digitale, ideale per pop, jazz e voci.",
+                Self::Japanese => "【サトル】微量の飽和（Drive 2.5%）と 60Hz (+1.5dB) ローシェルフ。デジタルの硬さを自然にほぐし、ポップスやボーカルに最適。",
+                Self::Korean => "【미세 온기】미세 채도 (2.5% 드라이브) 및 60Hz (+1.5dB) 로우 쉘프. 디지털의 날카로움을 부드럽게 완화하여 팝과 보컬에 적합합니다.",
+                Self::PortugueseBrazil => "[Sutil] Saturação sutil (drive 2,5%) e shelf grave 60Hz (+1,5dB). Suaviza a aspereza digital, ideal para pop e vocais.",
+                Self::Russian => "[Мягкий] Тонкая сатурация (драйв 2,5%) и полка 60 Гц (+1,5 дБ). Смягчает цифровую резкость, отлично для поп-музыки и вокала.",
+                Self::Spanish => "[Sutil] Saturación sutil (drive 2,5%) y shelf grave 60Hz (+1,5dB). Suaviza la aspereza digital, ideal para pop y voces.",
+            },
+            WarmthEnhancerMode::Warm => match self {
+                Self::TraditionalChinese => "【經典黑膠】標準飽和 (Drive 3.8%) 與 75Hz (+1.8dB) 低架增益。再現黑膠唱片轉盤共鳴與磁帶溫潤底蘊，聲音寬鬆飽滿，適合搖滾、流行與串流。",
+                Self::SimplifiedChinese => "【经典黑胶】标准饱和 (Drive 3.8%) 与 75Hz (+1.8dB) 低架增益。再现黑胶唱片转盘共鸣与磁带温润底蕴，声音宽松饱满，适合摇滚、流行与串流。",
+                Self::English => "[Warm] Classic vinyl warmth (3.8% drive) and 75Hz (+1.8dB) low-shelf. Emulates turntable resonance and tape warmth, ideal for rock, pop, and streaming.",
+                Self::French => "[Chaleureux] Chaleur vinyle classique (drive 3,8%) et 75Hz (+1,8dB). Émule la résonance du vinyle et la rondeur de la bande magnétique.",
+                Self::German => "[Warm] Klassische Vinyl-Wärme (3,8% Drive) und 75Hz (+1,8dB) Low-Shelf. Emuliert Plattenspieler-Resonanz und Band-Wärme.",
+                Self::Italian => "[Caldo] Calore vinilico classico (drive 3,8%) e mensola 75Hz (+1,8dB). Ricrea la risonanza del vinile e il calore del nastro.",
+                Self::Japanese => "【ウォーム】定番のアナログ感（Drive 3.8%）と 75Hz (+1.8dB) ローシェルフ。ターンテーブルの豊かな低域共鳴とテープの温かみを再現。",
+                Self::Korean => "【클래식 바이닐】표준 아날로그 온기 (3.8% 드라이브) 및 75Hz (+1.8dB) 로우 쉘프. 턴테이블 공진과 테이프의 포근함을 재현합니다.",
+                Self::PortugueseBrazil => "[Quente] Calor clássico do vinil (drive 3,8%) e 75Hz (+1,8dB). Emula a ressonância do prato e o calor da fita analógica.",
+                Self::Russian => "[Тёплый] Классическое виниловое тепло (драйв 3,8%) и полка 75 Гц (+1,8 дБ). Воссоздаёт резонанс вертушки и мягкость плёнки.",
+                Self::Spanish => "[Cálido] Calidez de vinilo clásica (drive 3,8%) y shelf 75Hz (+1,8dB). Emula la resonancia del tocadiscos y la calidez de la cinta.",
+            },
+            WarmthEnhancerMode::Vintage => match self {
+                Self::TraditionalChinese => "【復古醇厚】濃郁真空管飽和 (Drive 5.0%) 與 90Hz (+2.0dB) 低架增益。深沉厚實的低頻物理包圍感與類比泛音，適合老歌經典、黑膠發燒友與爵士大樂隊。",
+                Self::SimplifiedChinese => "【复古醇厚】浓郁电子管饱和 (Drive 5.0%) 与 90Hz (+2.0dB) 低架增益。深沉厚实的低频物理包围感与模拟泛音，适合老歌经典、黑胶发烧友与爵士大乐队。",
+                Self::English => "[Vintage] Rich tube saturation (5.0% drive) and 90Hz (+2.0dB) low-shelf. Deep physical low-end embrace and rich analog warmth, ideal for vintage classics and jazz.",
+                Self::French => "[Rétro] Saturation tube riche (drive 5,0%) et 90Hz (+2,0dB). Des basses profondes et enveloppantes, idéal pour les classiques rétro et le jazz.",
+                Self::German => "[Vintage] Satte Röhrensättigung (5,0% Drive) und 90Hz (+2,0dB) Low-Shelf. Tiefer, fülliger Bass und analoge Obertöne für Klassiker und Jazz.",
+                Self::Italian => "[Vintage] Ricca saturazione valvolare (drive 5,0%) e mensola 90Hz (+2,0dB). Basso profondo e avvolgente con armoniche analogiche per jazz e classici.",
+                Self::Japanese => "【ビンテージ】濃厚な真空管飽和（Drive 5.0%）と 90Hz (+2.0dB) ローシェルフ。重厚で包み込むような低音と豊かなアナログの余韻を創出。",
+                Self::Korean => "【빈티지】진한 진공관 채도 (5.0% 드라이브) 및 90Hz (+2.0dB) 로우 쉘프. 깊고 풍성한 저역 포만감과 풍부한 아날로그 배음으로 재즈와 명곡에 최적입니다.",
+                Self::PortugueseBrazil => "[Vintage] Saturação valvulada encorpada (drive 5,0%) e 90Hz (+2,0dB). Graves profundos e envolventes para clássicos retrô e jazz.",
+                Self::Russian => "[Винтаж] Плотная ламповая сатурация (драйв 5,0%) и полка 90 Гц (+2,0 дБ). Глубокий аналоговый бас и бархатные гармоники для классики и джаза.",
+                Self::Spanish => "[Vintage] Rica saturación a válvulas (drive 5,0%) y shelf 90Hz (+2,0dB). Graves profundos y envolventes con armónicos analógicos para jazz y clásicos.",
+            },
+        }
+    }
+
+    pub fn btn_start_ao(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "啟動本機增強",
+            Self::SimplifiedChinese => "启动本机增强",
+            Self::English => "Start Local Enhancement",
+            Self::French => "Activer le traitement local",
+            Self::German => "Lokale Optimierung starten",
+            Self::Italian => "Avvia elaborazione locale",
+            Self::Japanese => "ローカル強化を開始",
+            Self::Korean => "로컬 오디오 향상 시작",
+            Self::PortugueseBrazil => "Iniciar aprimoramento local",
+            Self::Russian => "Включить локальную обработку",
+            Self::Spanish => "Iniciar mejora local",
+        }
+    }
+
+    pub fn btn_stop_ao(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "停止本機增強",
+            Self::SimplifiedChinese => "停止本机增强",
+            Self::English => "Stop Local Enhancement",
+            Self::French => "Arrêter le traitement local",
+            Self::German => "Lokale Optimierung stoppen",
+            Self::Italian => "Arresta elaborazione locale",
+            Self::Japanese => "ローカル強化を停止",
+            Self::Korean => "로컬 오디오 향상 중지",
+            Self::PortugueseBrazil => "Parar aprimoramento local",
+            Self::Russian => "Остановить локальную обработку",
+            Self::Spanish => "Detener mejora local",
+        }
+    }
+
+    pub fn ao_output_device_label(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "本機輸出裝置",
+            Self::SimplifiedChinese => "本机输出设备",
+            Self::English => "Local Output Device",
+            Self::French => "Périphérique de sortie",
+            Self::German => "Ausgabegerät",
+            Self::Italian => "Dispositivo di uscita",
+            Self::Japanese => "出力先デバイス",
+            Self::Korean => "로컬 출력 장치",
+            Self::PortugueseBrazil => "Dispositivo de saída",
+            Self::Russian => "Устройство вывода",
+            Self::Spanish => "Dispositivo de salida",
+        }
+    }
+
+    pub fn auto_ao_mode_checkbox(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "AirPlay 未連線時自動啟用本機音訊增強",
+            Self::SimplifiedChinese => "AirPlay 未连接时自动启用本机音频增强",
+            Self::English => "Auto-enable local audio enhancement when AirPlay is disconnected",
+            Self::French => "Activer l'amélioration locale automatiquement si AirPlay est inactif",
+            Self::German => "Lokale Audio-Optimierung automatisch aktivieren wenn AirPlay getrennt",
+            Self::Italian => "Attiva ottimizzazione audio locale se AirPlay non è connesso",
+            Self::Japanese => "AirPlay 未接続時にローカル音声強化を自動有効化",
+            Self::Korean => "AirPlay 미연결 시 로컬 오디오 향상 자동 활성화",
+            Self::PortugueseBrazil => "Ativar aprimoramento local automaticamente quando AirPlay estiver ocioso",
+            Self::Russian => "Автоматически включать локальную обработку, когда AirPlay отключен",
+            Self::Spanish => "Activar mejora de audio local automáticamente cuando AirPlay esté desconectado",
+        }
+    }
+
+    pub fn ao_mode_active_badge(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "● 增強運作中",
+            Self::SimplifiedChinese => "● 增强运行中",
+            Self::English => "● Enhancing",
+            Self::French => "● Actif",
+            Self::German => "● Aktiv",
+            Self::Italian => "● Attivo",
+            Self::Japanese => "● 稼働中",
+            Self::Korean => "● 작동 중",
+            Self::PortugueseBrazil => "● Ativo",
+            Self::Russian => "● Активно",
+            Self::Spanish => "● Activo",
+        }
+    }
+
+    pub fn airpods_section_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "AirPods 專用設定",
+            Self::SimplifiedChinese => "AirPods 专用设置",
+            Self::English => "AirPods Settings",
+            Self::French => "Paramètres AirPods",
+            Self::German => "AirPods-Einstellungen",
+            Self::Italian => "Impostazioni AirPods",
+            Self::Japanese => "AirPods 設定",
+            Self::Korean => "AirPods 설정",
+            Self::PortugueseBrazil => "Configurações do AirPods",
+            Self::Russian => "Настройки AirPods",
+            Self::Spanish => "Ajustes de AirPods",
+        }
+    }
+
+    pub fn airpods_auto_routing_checkbox(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "AirPods 自動音路切換（戴上接管音訊，收盒釋放音路）",
+            Self::SimplifiedChinese => "AirPods 自动音路切换（戴上接管音频，收盒释放音路）",
+            Self::English => "AirPods Auto Audio Routing (Route on wear, release on case close)",
+            Self::French => "Routage audio auto AirPods (Activer au port, libérer à la fermeture)",
+            Self::German => "AirPods Auto-Audioweiterleitung (Beim Tragen aktivieren, beim Schließen freigeben)",
+            Self::Italian => "Instradamento audio auto AirPods (Attiva all'uso, rilascia alla chiusura)",
+            Self::Japanese => "AirPods 自動音声切り替え（装着時に引き継ぎ、ケース収納時に解除）",
+            Self::Korean => "AirPods 자동 오디오 전환 (착용 시 연결, 케이스 수납 시 해제)",
+            Self::PortugueseBrazil => "Roteamento de áudio auto AirPods (Conectar ao usar, liberar ao fechar estojo)",
+            Self::Russian => "Авто-маршрутизация AirPods (переключение при надевании, сброс при закрытии)",
+            Self::Spanish => "Enrutamiento de audio auto AirPods (Conectar al usar, liberar al cerrar estuche)",
+        }
+    }
+
+    pub fn airpods_auto_routing_tooltip(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "系統依據 Windows 藍牙播放裝置名稱自動辨識並切換音路。若曾自訂耳機名稱，請確保名稱中包含「AirPods」或「Pods」。",
+            Self::SimplifiedChinese => "系统依据 Windows 蓝牙播放设备名称自动识别并切换音路。若曾自定义耳机名称，请确保名称中包含“AirPods”或“Pods”。",
+            Self::English => "Audio route switching matches Windows Bluetooth playback device names. If you renamed your earbuds, ensure the name contains \"AirPods\" or \"Pods\".",
+            Self::French => "Le routage audio correspond aux noms d'appareils Bluetooth sous Windows. Si vous avez renommé vos écouteurs, assurez-vous que le nom contient « AirPods » ou « Pods ».",
+            Self::German => "Die Audio-Umschaltung erfolgt anhand der Windows-Bluetooth-Gerätenamen. Falls Sie Ihre Ohrhörer umbenannt haben, stellen Sie sicher, dass der Name „AirPods“ oder „Pods“ enthält.",
+            Self::Italian => "Il reindirizzamento audio si basa sui nomi dei dispositivi Bluetooth di Windows. Se hai rinominato gli auricolari, assicurati che il nome contenga \"AirPods\" o \"Pods\".",
+            Self::Japanese => "音声ルーティングは Windows の Bluetooth デバイス名に基づいて一致判定を行います。イヤホンの名前を変更した場合は、名前に「AirPods」または「Pods」が含まれていることを確認してください。",
+            Self::Korean => "오디오 전환은 Windows Bluetooth 재생 장치 이름을 기반으로 일치 항목을 찾습니다. 이어폰 이름을 변경한 경우 이름에 'AirPods' 또는 'Pods'가 포함되어 있는지 확인하세요.",
+            Self::PortugueseBrazil => "A alternância de rota de áudio depende dos nomes dos dispositivos Bluetooth no Windows. Se você renomeou seus fones, certifique-se de que o nome contenha \"AirPods\" ou \"Pods\".",
+            Self::Russian => "Переключение аудиомаршрута сопоставляется с именами Bluetooth-устройств в Windows. Если вы переименовали наушники, убедитесь, что имя содержит «AirPods» или «Pods».",
+            Self::Spanish => "El enrutamiento de audio coincide con los nombres de dispositivos Bluetooth en Windows. Si ha cambiado el nombre de sus auriculares, asegúrese de que contenga \"AirPods\" o \"Pods\".",
+        }
+    }
+
+    pub fn airpods_naming_hint(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "💡 提示：若曾自訂耳機名稱，請保留「AirPods」或「Pods」關鍵字以確保自動切換",
+            Self::SimplifiedChinese => "💡 提示：若曾自定义耳机名称，请保留“AirPods”或“Pods”关键字以确保自动切换",
+            Self::English => "💡 Tip: If you renamed your earbuds, keep \"AirPods\" or \"Pods\" in the name for auto-routing",
+            Self::French => "💡 Astuce : conservez « AirPods » ou « Pods » dans le nom pour le routage auto",
+            Self::German => "💡 Tipp: Behalten Sie „AirPods“ oder „Pods“ im Namen für automatisches Umschalten",
+            Self::Italian => "💡 Suggerimento: mantieni \"AirPods\" o \"Pods\" nel nome per l'instradamento automatico",
+            Self::Japanese => "💡 ヒント：イヤホン名を変更した場合は、名前に「AirPods」または「Pods」を残してください",
+            Self::Korean => "💡 팁: 이어폰 이름을 변경한 경우 자동 전환을 위해 'AirPods' 또는 'Pods'를 유지하세요",
+            Self::PortugueseBrazil => "💡 Dica: mantenha \"AirPods\" ou \"Pods\" no nome para o roteamento automático",
+            Self::Russian => "💡 Совет: сохраните «AirPods» или «Pods» в названии для автопереключения",
+            Self::Spanish => "💡 Consejo: mantenga \"AirPods\" o \"Pods\" en el nombre para el enrutamiento automático",
+        }
+    }
+
+    pub fn airpods_smart_playback_control_checkbox(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "AirPods 智慧播放控制（取下自動暫停，收盒接力播放）",
+            Self::SimplifiedChinese => "AirPods 智慧播放控制（取下自动暂停，收盒接力播放）",
+            Self::English => "AirPods Smart Playback Control (Pause on removal, handoff on case close)",
+            Self::French => "Contrôle intelligent AirPods (Pause au retrait, relais à la fermeture)",
+            Self::German => "AirPods Intelligente Wiedergabe (Pause beim Abnehmen, Weitergabe beim Schließen)",
+            Self::Italian => "Controllo intelligente AirPods (Pausa alla rimozione, passaggio alla chiusura)",
+            Self::Japanese => "AirPods スマート再生制御（取り外し時一時停止・ケース収納時引き継ぎ再生）",
+            Self::Korean => "AirPods 스마트 재생 제어 (착용 해제 시 일시정지, 케이스 수납 시 이어듣기)",
+            Self::PortugueseBrazil => "Controle inteligente dos AirPods (Pausar ao retirar, continuar ao fechar estojo)",
+            Self::Russian => "Умное воспроизведение AirPods (авто-пауза при снятии, передача при закрытии футляра)",
+            Self::Spanish => "Control inteligente AirPods (Pausa al quitar, reanudar al cerrar estuche)",
+        }
+    }
+
+    pub fn airpods_smart_playback_control_tooltip(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "聆聽時取下耳機會自動暫停；若在 30 秒內收回充電盒切換至音響、或 60 秒內重新戴上耳機，都會自動為您繼續播放音樂。",
+            Self::SimplifiedChinese => "聆听时取下耳机会自动暂停；若在 30 秒内收回充电盒切换至音响、或 60 秒内重新戴上耳机，都会自动为您继续播放音乐。",
+            Self::English => "Auto-pauses when removing AirPods. Automatically resumes playback if reinserted within 60s or stored in case within 30s to hand off to speakers.",
+            Self::French => "Met en pause automatique au retrait des AirPods. Reprend la lecture si réinséré sous 60 s ou rangé dans le boîtier sous 30 s pour relayer aux enceintes.",
+            Self::German => "Pausiert automatisch beim Abnehmen der AirPods. Setzt die Wiedergabe fort, wenn sie innerhalb von 60 s wieder eingesetzt oder innerhalb von 30 s im Case verstaut werden.",
+            Self::Italian => "Mette in pausa automatica quando rimuovi gli AirPods. Riprende la riproduzione se reinseriti entro 60 s o riposti nella custodia entro 30 s.",
+            Self::Japanese => "AirPods を外すと自動で一時停止します。60秒以内に再装着するか、30秒以内にケースに収納してスピーカーに切り替わると自動で再生を再開します。",
+            Self::Korean => "AirPods를 빼면 자동으로 일시정지됩니다. 60초 이내에 다시 착용하거나 30초 이내에 케이스에 넣어 스피커로 전환되면 자동으로 재생을 이어갑니다.",
+            Self::PortugueseBrazil => "Pausa automaticamente ao retirar os AirPods. Retoma a reprodução ao recolocar em até 60 s ou guardar no estojo em até 30 s.",
+            Self::Russian => "Автоматически приостанавливает при снятии AirPods. Возобновляет воспроизведение, если надеть их обратно в течение 60 с или убрать в футляр в течение 30 с.",
+            Self::Spanish => "Pausa automáticamente al quitarse los AirPods. Reanuda la reproducción si se vuelven a poner en 60 s o se guardan en el estuche en 30 s.",
+        }
+    }
+
+    pub fn window_snapping_checkbox(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🧲 視窗磁吸貼齊",
+            Self::SimplifiedChinese => "🧲 窗口磁吸贴齐",
+            Self::English => "🧲 Window Snapping",
+            Self::French => "🧲 Magnétisme des fenêtres",
+            Self::German => "🧲 Fenster-Andocken",
+            Self::Italian => "🧲 Finestre magnetiche",
+            Self::Japanese => "🧲 ウィンドウ吸着",
+            Self::Korean => "🧲 창 자석 맞춤",
+            Self::PortugueseBrazil => "🧲 Janelas Magnéticas",
+            Self::Russian => "🧲 Магнитные окна",
+            Self::Spanish => "🧲 Ventanas Magnéticas",
+        }
+    }
+
+    pub fn window_snapping_tooltip(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "拖曳視窗靠近螢幕工作區邊緣或 3D 視覺化視窗時自動無縫貼齊 (貼齊距離: 12px)",
+            Self::SimplifiedChinese => "拖拽窗口靠近屏幕工作区边缘或 3D 可视化窗口时自动无缝贴齐 (贴齐距离: 12px)",
+            Self::English => "Automatically snap to screen edges and 3D Visualizer when dragging nearby (Snap distance: 12px)",
+            Self::French => "Aimante automatiquement les fenêtres aux bords de l'écran et au visualiseur 3D (Distance: 12px)",
+            Self::German => "Dockt Fenster beim Ziehen automatisch an Bildschirmrändern und am 3D-Visualisierer an (Abstand: 12px)",
+            Self::Italian => "Aggancia automaticamente le finestre ai bordi dello schermo e al visualizzatore 3D (Distanza: 12px)",
+            Self::Japanese => "画面の端や 3D ビジュアライザーの近くにドラッグした際にピタッと吸着 (吸着距離: 12px)",
+            Self::Korean => "화면 가장자리나 3D 시각화 창 근처로 드래그 시 자석처럼 자동 맞춤 (맞춤 거리: 12px)",
+            Self::PortugueseBrazil => "Encaixa automaticamente nas bordas da tela e no visualizador 3D (Distância: 12px)",
+            Self::Russian => "Автоматически примагничивает окна к краям экрана и окну 3D-визуализатора (Дистанция: 12px)",
+            Self::Spanish => "Alinea automáticamente con los bordes de la pantalla y la ventana del visualizador 3D (Distancia: 12px)",
+        }
+    }
+
+    pub fn hint_window_snapping_on(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🧲 已啟用磁吸與連動：拖曳主視窗時帶動吸附的視窗同步移動。",
+            Self::SimplifiedChinese => "🧲 已启用磁吸与联动：拖拽主窗口时带动吸附的窗口同步移动。",
+            Self::English => "🧲 Snapping & linked movement active: dragging the main window moves attached windows together.",
+            Self::French => "🧲 Magnétisme et déplacement lié activés : le déplacement de la fenêtre principale entraîne les fenêtres liées.",
+            Self::German => "🧲 Magnetisches Andocken aktiv: Bewegen des Hauptfensters bewegt angedockte Fenster mit.",
+            Self::Italian => "🧲 Movimento collegato attivo: trascinare la finestra principale sposta anche le finestre agganciate.",
+            Self::Japanese => "🧲 吸着・連動移動が有効：メインウィンドウを動かすと吸着したウィンドウも連動します。",
+            Self::Korean => "🧲 자석 맞춤 및 연동 이동 활성화: 메인 창 이동 시 결합된 창이 함께 이동합니다.",
+            Self::PortugueseBrazil => "🧲 Encaixe e movimento vinculado ativado: mover a janela principal move as janelas fixadas.",
+            Self::Russian => "🧲 Сцепка активна: перетаскивание главного окна перемещает прикрепленные окна.",
+            Self::Spanish => "🧲 Alineación y movimiento vinculado activos: mover la ventana principal mueve las ventanas acopladas.",
+        }
+    }
+
+    pub fn hint_window_snapping_off(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "視窗可自由擺放，不進行邊界磁吸或連動移動。",
+            Self::SimplifiedChinese => "窗口可自由摆放，不进行边界磁吸或联动移动。",
+            Self::English => "Windows move freely without magnetic snapping or linked movement.",
+            Self::French => "Les fenêtres se déplacent librement sans magnétisme ni mouvement lié.",
+            Self::German => "Fenster bewegen sich frei ohne magnetisches Andocken oder Verknüpfung.",
+            Self::Italian => "Le finestre si muovono liberamente senza aggancio magnetico o collegamenti.",
+            Self::Japanese => "ウィンドウは磁石吸着や連動なしで自由に配置できます。",
+            Self::Korean => "창이 자석 맞춤이나 연동 없이 자유롭게 이동합니다.",
+            Self::PortugueseBrazil => "As janelas se movem livremente sem encaixe magnético ou movimento vinculado.",
+            Self::Russian => "Окна перемещаются свободно без примагничивания и сцепки.",
+            Self::Spanish => "Las ventanas se mueven libremente sin alineación magnética ni movimiento vinculado.",
+        }
+    }
+
+    pub fn airpods_both_in_ear_badge(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🎧 雙耳配戴中",
+            Self::SimplifiedChinese => "🎧 双耳佩戴中",
+            Self::English => "🎧 Both In-Ear",
+            Self::French => "🎧 Deux dans l'oreille",
+            Self::German => "🎧 Beide im Ohr",
+            Self::Italian => "🎧 Entrambi nell'orecchio",
+            Self::Japanese => "🎧 両耳装着中",
+            Self::Korean => "🎧 양쪽 착용 중",
+            Self::PortugueseBrazil => "🎧 Ambos no ouvido",
+            Self::Russian => "🎧 Оба в ушах",
+            Self::Spanish => "🎧 Ambos en el oído",
+        }
+    }
+
+    pub fn airpods_left_only_in_ear_badge(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🎧 左耳配戴中",
+            Self::SimplifiedChinese => "🎧 左耳佩戴中",
+            Self::English => "🎧 Left In-Ear",
+            Self::French => "🎧 Gauche dans l'oreille",
+            Self::German => "🎧 Links im Ohr",
+            Self::Italian => "🎧 Sinistro nell'orecchio",
+            Self::Japanese => "🎧 左耳装着中",
+            Self::Korean => "🎧 왼쪽 착용 중",
+            Self::PortugueseBrazil => "🎧 Esquerdo no ouvido",
+            Self::Russian => "🎧 Левый в ухе",
+            Self::Spanish => "🎧 Izquierdo en el oído",
+        }
+    }
+
+    pub fn airpods_right_only_in_ear_badge(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🎧 右耳配戴中",
+            Self::SimplifiedChinese => "🎧 右耳佩戴中",
+            Self::English => "🎧 Right In-Ear",
+            Self::French => "🎧 Droit dans l'oreille",
+            Self::German => "🎧 Rechts im Ohr",
+            Self::Italian => "🎧 Destro nell'orecchio",
+            Self::Japanese => "🎧 右耳装着中",
+            Self::Korean => "🎧 오른쪽 착용 중",
+            Self::PortugueseBrazil => "🎧 Direito no ouvido",
+            Self::Russian => "🎧 Правый в ухе",
+            Self::Spanish => "🎧 Derecho en el oído",
+        }
+    }
+
+    pub fn airpods_in_ear_badge(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🎧 配戴中",
+            Self::SimplifiedChinese => "🎧 佩戴中",
+            Self::English => "🎧 In-Ear",
+            Self::French => "🎧 Dans l'oreille",
+            Self::German => "🎧 Im Ohr",
+            Self::Italian => "🎧 Nell'orecchio",
+            Self::Japanese => "🎧 装着中",
+            Self::Korean => "🎧 착용 중",
+            Self::PortugueseBrazil => "🎧 No ouvido",
+            Self::Russian => "🎧 В ухе",
+            Self::Spanish => "🎧 En el oído",
+        }
+    }
+
+    pub fn airpods_out_of_ear_badge(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🎧 未配戴",
+            Self::SimplifiedChinese => "🎧 未佩戴",
+            Self::English => "🎧 Out of Ear",
+            Self::French => "🎧 Retirés",
+            Self::German => "🎧 Nicht im Ohr",
+            Self::Italian => "🎧 Non indossato",
+            Self::Japanese => "🎧 未装着",
+            Self::Korean => "🎧 미착용",
+            Self::PortugueseBrazil => "🎧 Fora do ouvido",
+            Self::Russian => "🎧 Не в ухе",
+            Self::Spanish => "🎧 Fuera del oído",
+        }
+    }
+
+    pub fn airpods_battery_live_tooltip(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "AirPods 連線中（即時電量資料）",
+            Self::SimplifiedChinese => "AirPods 连接中（实时电量数据）",
+            Self::English => "AirPods connected (live battery data)",
+            Self::French => "AirPods connectés (données de batterie en direct)",
+            Self::German => "AirPods verbunden (aktuelle Akkudaten)",
+            Self::Italian => "AirPods connessi (dati batteria in tempo reale)",
+            Self::Japanese => "AirPods 接続中（リアルタイムバッテリー情報）",
+            Self::Korean => "AirPods 연결됨 (실시간 배터리 정보)",
+            Self::PortugueseBrazil => "AirPods conectados (dados de bateria em tempo real)",
+            Self::Russian => "AirPods подключены (актуальный заряд)",
+            Self::Spanish => "AirPods conectados (datos de batería en tiempo real)",
+        }
+    }
+
+    pub fn airpods_battery_stale_tooltip(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "AirPods 已斷線（可能為離線前最後記錄的電量）",
+            Self::SimplifiedChinese => "AirPods 已断开（可能为离线前最后记录的电量）",
+            Self::English => "AirPods disconnected (cached last-known battery)",
+            Self::French => "AirPods déconnectés (dernier niveau de batterie mémorisé)",
+            Self::German => "AirPods getrennt (zwischengespeicherter Akkustand)",
+            Self::Italian => "AirPods disconnessi (ultimo livello di batteria registrato)",
+            Self::Japanese => "AirPods 切断済み（前回接続時のキャッシュ情報）",
+            Self::Korean => "AirPods 연결 끊김 (이전 연결 시 캐시된 정보)",
+            Self::PortugueseBrazil => "AirPods desconectados (último nível de bateria registrado)",
+            Self::Russian => "AirPods отключены (сохраненный уровень заряда)",
+            Self::Spanish => "AirPods desconectados (último nivel de batería registrado)",
+        }
+    }
+
+    pub fn airpods_connected_status(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "連線中",
+            Self::SimplifiedChinese => "连接中",
+            Self::English => "Connected",
+            Self::French => "Connecté",
+            Self::German => "Verbunden",
+            Self::Italian => "Connesso",
+            Self::Japanese => "接続中",
+            Self::Korean => "연결됨",
+            Self::PortugueseBrazil => "Conectado",
+            Self::Russian => "Подключено",
+            Self::Spanish => "Conectado",
+        }
+    }
+
+    pub fn airpods_disconnected_status(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "已斷線",
+            Self::SimplifiedChinese => "已断开",
+            Self::English => "Disconnected",
+            Self::French => "Déconnecté",
+            Self::German => "Getrennt",
+            Self::Italian => "Disconnesso",
+            Self::Japanese => "切断",
+            Self::Korean => "연결 끊김",
+            Self::PortugueseBrazil => "Desconectado",
+            Self::Russian => "Отключено",
+            Self::Spanish => "Desconectado",
+        }
+    }
+
+    pub fn status_ao_active(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "本機音訊增強中",
+            Self::SimplifiedChinese => "本机音频增强中",
+            Self::English => "Local Audio Enhanced",
+            Self::French => "Traitement audio local actif",
+            Self::German => "Lokale Audio-Optimierung aktiv",
+            Self::Italian => "Elaborazione audio locale attiva",
+            Self::Japanese => "ローカル音声強化中",
+            Self::Korean => "로컬 오디오 향상 중",
+            Self::PortugueseBrazil => "Aprimoramento de áudio local ativo",
+            Self::Russian => "Локальная обработка активна",
+            Self::Spanish => "Mejora de audio local activa",
+        }
+    }
+
+    pub fn ao_mode_desc_app(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "💡 應用程式音訊增強中：增強的音訊輸出至選定輸出裝置。若選定輸出裝置與系統音效裝置為同一設備，建議將系統音效路由至不同裝置以避免原音重疊。",
+            Self::SimplifiedChinese => "💡 应用程序音频增强中：增强的音频输出至选定输出设备。若选定输出设备与系统音频设备为同一设备，建议将系统音频路由至不同设备以避免原音叠加。",
+            Self::English => "💡 Application Audio Enhancement: Enhanced audio is output to the selected device. If the selected output is the same as the system audio device, routing system audio to a different device is recommended to prevent audio overlapping.",
+            Self::French => "💡 Amélioration audio de l'application : Le flux audio amélioré est envoyé vers le périphérique sélectionné. Si la sortie sélectionnée et le périphérique audio système sont identiques, il est recommandé de router l'audio système vers un autre périphérique pour éviter la superposition sonore.",
+            Self::German => "💡 App-Audio-Optimierung: Der optimierte Ton wird an das ausgewählte Ausgabegerät gesendet. Wenn das gewählte Ausgabegerät mit dem System-Audiogerät identisch ist, wird empfohlen, den Systemton auf ein anderes Gerät umzuleiten, um Tonüberlagerungen zu vermeiden.",
+            Self::Italian => "💡 Ottimizzazione audio applicazione: L'audio elaborato è inviato al dispositivo di uscita selezionato. Se il dispositivo selezionato coincide con quello di sistema, si consiglia di instradare l'audio di sistema su un dispositivo diverso per evitare sovrapposizioni sonore.",
+            Self::Japanese => "💡 アプリ音声強化中：強化された音声を指定の出力デバイスへ送信します。選択した出力デバイスがシステム既定デバイスと同一の場合、原音の重複を防ぐためにシステム音声を別のデバイスへルーティングすることをおすすめします。",
+            Self::Korean => "💡 애플리케이션 오디오 향상 중: 향상된 오디오가 선택한 출력 장치로 전달됩니다. 선택한 출력 장치가 시스템 오디오 장치와 동일한 경우, 소리 겹침을 방지하기 위해 시스템 오디오를 다른 장치로 라우팅하는 것을 권장합니다.",
+            Self::PortugueseBrazil => "💡 Aprimoramento de áudio do app: O áudio aprimorado é enviado ao dispositivo de saída selecionado. Se a saída selecionada for o mesmo dispositivo de áudio do sistema, recomenda-se rotear o áudio do sistema para um dispositivo diferente para evitar sobreposição.",
+            Self::Russian => "💡 Улучшение звука приложения: Обработанный звук выводится на выбранное устройство. Если выбранное устройство совпадает с системным аудиоустройством, рекомендуется перенаправить системный звук на другое устройство для устранения наложения.",
+            Self::Spanish => "💡 Mejora de audio de la aplicación: El audio procesado se envía al dispositivo de salida seleccionado. Si la salida seleccionada es el mismo dispositivo que el de audio del sistema, se recomienda enrutar el audio del sistema a un dispositivo distinto para evitar la superposición.",
+        }
+    }
+
+    pub fn ao_mode_desc_system(&self) -> &'static str {
+        self.ao_mode_desc_system_same()
+    }
+
+    pub fn ao_mode_desc_system_same(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "💡 全系統頻譜視覺化中：目前「音訊來源」與「本機輸出裝置」為同一設備，已自動抑制本地聲音輸出以避免迴授嘯叫；DSP 與 EQ 正即時驅動 Paint Pulse 視覺頻譜。建議將本機輸出切換至其他耳機或喇叭以聆聽 10 段 EQ 增強音質。",
+            Self::SimplifiedChinese => "💡 全系统频谱可视化中：当前「音频来源」与「本机输出设备」为同一设备，已自动抑制本地声音输出以避免回授啸叫；DSP 与 EQ 实时驱动 Paint Pulse 视觉频谱。建议将本机输出切换至其他耳机或音箱以聆听 10 段 EQ 增强音质。",
+            Self::English => "💡 System Audio Spectrum Visualizer: Audio source and local output share the same physical device. Local audio output is automatically suppressed to prevent feedback loops; DSP & EQ are actively driving Paint Pulse. Select a different local output (e.g. headphones) to hear 10-band EQ enhancement.",
+            Self::French => "💡 Visualisation du spectre système : La source et la sortie locale partagent le même périphérique. La sortie audio locale est automatiquement coupée pour éviter l'effet Larsen ; le DSP anime Paint Pulse. Sélectionnez une autre sortie locale (ex. un casque) pour écouter l'égaliseur.",
+            Self::German => "💡 System-Audiospektrum-Visualisierung: Audioquelle und lokaler Ausgang nutzen dasselbe Gerät. Die lokale Tonausgabe wird automatisch unterdrückt, um Rückkopplungen zu verhindern. Wählen Sie ein anderes lokales Ausgabegerät (z. B. Kopfhörer), um die 10-Band-EQ-Optimierung zu hören.",
+            Self::Italian => "💡 Visualizzatore di spettro audio di sistema: Sorgente e uscita locale condividono lo stesso dispositivo. L'uscita locale è soppressa per prevenire feedback; DSP anima Paint Pulse. Seleziona un'altra uscita locale (es. cuffie) per ascoltare l'equalizzatore a 10 bande.",
+            Self::Japanese => "💡 システム音声スペクトラム可視化中：音源とローカル出力先が同一デバイスです。ハウリング防止のためローカル音声出力は自動抑制され、DSPとEQはPaint Pulseビジュアライザーを駆動します。10バンドEQの音質強化を聴くには別の出力先（ヘッドホン等）を選択してください。",
+            Self::Korean => "💡 시스템 오디오 스펙트럼 시각화 중: 오디오 소스와 로컬 출력이 동일한 장치입니다. 피드백(하울링) 방지를 위해 로컬 오디오 출력이 자동 차단되며 DSP와 EQ는 Paint Pulse 시각화를 구동합니다. 10밴드 EQ 향상 음질을 청취하려면 다른 출력 장치(헤드폰 등)를 선택하세요.",
+            Self::PortugueseBrazil => "💡 Visualizador de espectro do sistema: A fonte de áudio e a saída local compartilham o mesmo dispositivo. A saída local é suprimida para evitar microfonia/feedback; DSP anima o Paint Pulse. Selecione outra saída local (ex.: fones) para ouvir o equalizador.",
+            Self::Russian => "💡 Визуализация спектра системного звука: Источник и локальный выход используют одно устройство. Локальный вывод звука автоматически заблокирован для предотвращения обратной связи; DSP управляет Paint Pulse. Выберите другое локальное устройство (например, наушники), чтобы слушать 10-полосный EQ.",
+            Self::Spanish => "💡 Visualizador de espectro del sistema: La fuente de audio y la salida local comparten el mismo dispositivo. La salida local se suprime para evitar acoples/retroalimentación; el DSP anima Paint Pulse. Selecciona otra salida local (ej. auriculares) para escuchar el ecualizador.",
+        }
+    }
+
+    pub fn ao_mode_desc_system_diff(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "💡 全系統音訊增強中：已將經 DSP 增強的全系統音訊即時輸出至選定裝置（如耳機）。若系統音效裝置同時發出聲音，建議系統音效靜音以獲得純淨增強體驗。",
+            Self::SimplifiedChinese => "💡 全系统音频增强中：已将经 DSP 增强的全系统音频实时输出至选定设备（如耳机）。若系统音频设备同时发声，建议系统音频静音以获得纯净增强体验。",
+            Self::English => "💡 System Audio Enhancement: Enhanced system audio is actively output to your selected device (e.g. headphones). If the system audio device also emits sound, muting system audio is recommended for a pure enhanced experience.",
+            Self::French => "💡 Amélioration audio du système : Le flux audio système amélioré est envoyé en temps réel vers le périphérique sélectionné (ex. casque). Si le périphérique audio système émet aussi du son, couper l'audio système est recommandé pour une expérience optimale.",
+            Self::German => "💡 System-Audio-Optimierung: Der optimierte Systemton wird in Echtzeit an das ausgewählte Gerät (z. B. Kopfhörer) ausgegeben. Falls das System-Audiogerät ebenfalls Ton wiedergibt, empfiehlt sich das Stummschalten des Systemtons für ein optimales Klangerlebnis.",
+            Self::Italian => "💡 Ottimizzazione audio di sistema: L'audio di sistema elaborato viene inviato in tempo reale al dispositivo selezionato (es. cuffie). Se anche il dispositivo audio di sistema riproduce il suono, si consiglia di disattivare l'audio di sistema per un ascolto ottimale.",
+            Self::Japanese => "💡 システム音声強化中：DSP強化後の全システム音声を指定デバイス（ヘッドホン等）へリアルタイム出力しています。システム音声デバイスからも音が出る場合は、システム音声をミュートにすると純粋な強化音声をお楽しみいただけます。",
+            Self::Korean => "💡 시스템 오디오 향상 중: DSP로 향상된 전체 시스템 오디오가 선택한 장치(헤드폰 등)로 실시간 출력됩니다. 시스템 오디오 장치에서도 소리가 나는 경우, 시스템 오디오를 음소거하면 더욱 순수한 향상 음질을 감상할 수 있습니다.",
+            Self::PortugueseBrazil => "💡 Aprimoramento de áudio do sistema: O áudio aprimorado do sistema é enviado em tempo real ao dispositivo selecionado (ex.: fones). Se o dispositivo de áudio do sistema também emitir som, recomenda-se silenciar o áudio do sistema para uma melhor experiência.",
+            Self::Russian => "💡 Улучшение звука системы: Обработанный системный звук выводится в реальном времени на выбранное устройство (например, наушники). Если системное аудиоустройство также воспроизводит звук, рекомендуется отключить звук системы.",
+            Self::Spanish => "💡 Mejora de audio del sistema: El audio mejorado del sistema se envía en tiempo real al dispositivo seleccionado (ej. auriculares). Si el dispositivo de audio del sistema también emite sonido, se recomienda silenciar el audio del sistema para una experiencia óptima.",
+        }
+    }
+}
 #[derive(Debug, Clone, PartialEq)]
 pub enum NoticeKind {
     ConnectionLostReconnecting(String),
@@ -2387,6 +4229,8 @@ pub enum NoticeKind {
     ResumeRestored(String),
     ResumePreempted(String),
     ResumeFailed(String),
+    AirPodsOccupied,
+    AirPodsOccupiedFallbackHomePod,
 }
 
 impl NoticeKind {
@@ -2496,6 +4340,53 @@ impl NoticeKind {
                 Language::Russian => format!("Не удалось переподключиться к \"{name}\" после сна, звук отключен."),
                 Language::Spanish => format!("No se pudo reconectar a \"{name}\" tras reactivar, silenciado."),
             },
+            Self::AirPodsOccupied => match lang {
+                Language::TraditionalChinese => "等待 AirPods 藍牙音訊通道就緒中...（若正被 iPhone 等其他裝置使用，請至 Windows 藍牙設定點擊連線）".to_string(),
+                Language::SimplifiedChinese => "等待 AirPods 蓝牙音频通道就绪中...（若正被 iPhone 等其他设备使用，请至 Windows 蓝牙设置点击连接）".to_string(),
+                Language::English => "Waiting for AirPods Bluetooth audio channel... (If in use by another device like iPhone, connect via Windows Bluetooth Settings)".to_string(),
+                Language::French => "En attente du canal audio Bluetooth des AirPods... (S'ils sont utilisés par un autre appareil comme un iPhone, connectez via les paramètres Bluetooth Windows)".to_string(),
+                Language::German => "Warte auf AirPods-Bluetooth-Audiokanal... (Falls von einem anderen Gerät wie dem iPhone verwendet, in den Windows-Bluetooth-Einstellungen verbinden)".to_string(),
+                Language::Italian => "In attesa del canale audio Bluetooth degli AirPods... (Se in uso da un altro dispositivo come iPhone, connettere nelle impostazioni Bluetooth di Windows)".to_string(),
+                Language::Japanese => "AirPods の Bluetooth 音声チャンネルの準備を待機中...（iPhone 等の別機器で使用中の場合は、Windows の Bluetooth 設定から接続してください）".to_string(),
+                Language::Korean => "AirPods Bluetooth 오디오 채널 준비 대기 중... (iPhone 등 다른 기기에서 사용 중인 경우 Windows Bluetooth 설정에서 연결하세요)".to_string(),
+                Language::PortugueseBrazil => "Aguardando canal de áudio Bluetooth dos AirPods... (Se em uso por outro dispositivo como iPhone, conecte nas configurações de Bluetooth do Windows)".to_string(),
+                Language::Russian => "Ожидание готовности аудиоканала Bluetooth AirPods... (Если используется другим устройством, например iPhone, подключитесь в настройках Bluetooth Windows)".to_string(),
+                Language::Spanish => "Esperando el canal de audio Bluetooth de los AirPods... (Si se usa en otro dispositivo como un iPhone, conéctelo en la configuración de Bluetooth de Windows)".to_string(),
+            },
+            Self::AirPodsOccupiedFallbackHomePod => match lang {
+                Language::TraditionalChinese => "AirPods 尚未就緒或被其他裝置佔用，正在連線 HomePod。如欲於電腦使用，請至 Windows 藍牙設定點擊連線。".to_string(),
+                Language::SimplifiedChinese => "AirPods 尚未就绪或被其他设备占用，正在连接 HomePod。如欲在电脑使用，请至 Windows 蓝牙设置点击连接。".to_string(),
+                Language::English => "AirPods not ready or in use by another device; connecting to HomePod. To use on PC, connect via Windows Bluetooth Settings.".to_string(),
+                Language::French => "AirPods non prêts ou utilisés par un autre appareil ; connexion au HomePod. Pour utiliser sur PC, connectez via les paramètres Bluetooth Windows.".to_string(),
+                Language::German => "AirPods noch nicht bereit oder anderweitig verwendet; verbinde mit HomePod. Zum Verbinden Windows-Bluetooth-Einstellungen öffnen.".to_string(),
+                Language::Italian => "AirPods non pronti o in uso su altro dispositivo; connessione a HomePod. Per usarli su PC, connetterli nelle impostazioni Bluetooth di Windows.".to_string(),
+                Language::Japanese => "AirPods の準備が未完了か他の機器で使用中のため、HomePod に接続中。PCで使用する場合は Windows の Bluetooth 設定から接続してください。".to_string(),
+                Language::Korean => "AirPods가 준비되지 않았거나 다른 기기에서 사용 중이므로 HomePod에 연결합니다. PC에서 사용하려면 Windows Bluetooth 설정에서 연결하세요.".to_string(),
+                Language::PortugueseBrazil => "AirPods não prontos ou em uso por outro dispositivo; conectando ao HomePod. Para usá-los no PC, conecte nas configurações de Bluetooth do Windows.".to_string(),
+                Language::Russian => "AirPods не готовы или заняты другим устройством; подключение к HomePod. Для использования на ПК подключите их в настройках Bluetooth Windows.".to_string(),
+                Language::Spanish => "AirPods no listos o en uso por otro dispositivo; conectando a HomePod. Para usarlos en PC, conéctelos en la configuración de Bluetooth de Windows.".to_string(),
+            },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tray_tooltips_plan_a() {
+        let lang = Language::TraditionalChinese;
+        let s = lang.tray_streaming_tooltip(false, "書房", 9);
+        assert_eq!(s, "🔊 串流中：書房 (9%)");
+
+        let s_muted = lang.tray_streaming_tooltip(true, "書房", 0);
+        assert_eq!(s_muted, "🔇 串流中：書房 (靜音)");
+
+        let ap = lang.tray_airpods_with_battery("AirPods 3", "L 100%");
+        assert_eq!(ap, "🎧 AirPods 3：L 100%");
+
+        let ap_status = lang.tray_airpods_status_only("AirPods 3", lang.airpods_connected_status_tag());
+        assert_eq!(ap_status, "🎧 AirPods 3 (已連線)");
     }
 }

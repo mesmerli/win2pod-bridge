@@ -3,13 +3,7 @@
 // Hide console window in Windows subsystem
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-pub mod autostart;
-mod controller;
-mod gui;
-pub mod i18n;
-pub mod license;
-mod single_instance;
-mod tray;
+use homepod_cast_gui::{controller, gui, single_instance, tray};
 
 use std::sync::{Arc, RwLock};
 use eframe::egui;
@@ -34,8 +28,8 @@ fn main() -> anyhow::Result<()> {
         }
         #[cfg(not(debug_assertions))]
         {
-            // Release mode: only record critical errors to prevent infinite log growth
-            tracing::Level::ERROR
+            // In release mode, log INFO level for diagnostics (debug.log rotates at 1MB)
+            tracing::Level::INFO
         }
     };
 
@@ -102,8 +96,17 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Register atexit handler so original speaker mute is restored on any exit
+    // Capture initial default playback device before any audio routing or shields take effect
+    crate::controller::capture_initial_default_device();
+
+    // Register atexit handler so original speaker mute and default device are restored on any exit
     crate::controller::register_exit_handler();
+
+
+    // Register Post-DSP tap for real-time spectrum and output peak monitoring
+    airplay_audio::set_post_dsp_hook(Some(Arc::new(|samples| {
+        homepod_cast_gui::spectrum::process_post_dsp_pcm(samples);
+    })));
 
     // Async channel for GUI & Tray -> Controller commands
     let (cmd_tx, cmd_rx) = async_channel::unbounded::<GuiCmd>();
@@ -121,13 +124,20 @@ fn main() -> anyhow::Result<()> {
 
     // Load custom window and taskbar icon
     let icon_data = load_window_icon();
+    let initial_always_on_top = crate::controller::load_always_on_top();
+    let initial_level = if initial_always_on_top {
+        egui::WindowLevel::AlwaysOnTop
+    } else {
+        egui::WindowLevel::Normal
+    };
     let mut viewport_builder = egui::ViewportBuilder::default()
         .with_title("Win2Pod Bridge")
-        .with_inner_size([420.0, 440.0])
+        .with_inner_size([460.0, 680.0])
         .with_min_inner_size([360.0, 320.0])
         .with_resizable(true)
         .with_close_button(true)
-        .with_visible(!start_minimized);
+        .with_visible(!start_minimized)
+        .with_window_level(initial_level);
 
     if let Some(icon) = icon_data {
         viewport_builder = viewport_builder.with_icon(std::sync::Arc::new(icon));
@@ -159,8 +169,10 @@ fn main() -> anyhow::Result<()> {
     tracing::info!("eframe::run_native finished with result: {:?}", res.as_ref().map(|_| ()));
     res.map_err(|e| anyhow::anyhow!("eframe error: {e:?}"))?;
 
-    crate::controller::restore_original_speaker_mute();
-    let _ = cmd_tx.send_blocking(GuiCmd::Quit);
+    let _ = cmd_tx.try_send(GuiCmd::Quit);
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    homepod_cast_gui::controller::restore_original_speaker_state();
+    homepod_cast_gui::controller::restore_initial_default_device();
     Ok(())
 }
 

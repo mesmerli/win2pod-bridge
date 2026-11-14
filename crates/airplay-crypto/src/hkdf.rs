@@ -46,6 +46,10 @@ pub mod constants {
     pub const CONTROL_WRITE_KEY_INFO: &[u8] = b"Control-Write-Encryption-Key";
     pub const CONTROL_READ_KEY_INFO: &[u8] = b"Control-Read-Encryption-Key";
 
+    pub const EVENTS_SALT: &[u8] = b"Events-Salt";
+    pub const EVENTS_WRITE_KEY_INFO: &[u8] = b"Events-Write-Encryption-Key";
+    pub const EVENTS_READ_KEY_INFO: &[u8] = b"Events-Read-Encryption-Key";
+
     // Placeholder constants for FairPlay-derived stream keys.
     // TODO: Replace with real FairPlay key derivation parameters.
     pub const FAIRPLAY_EKEY_INFO: &[u8] = b"AirPlay-FairPlay-EKEY";
@@ -93,6 +97,26 @@ pub fn derive_control_read_key(shared_secret: &[u8]) -> Result<[u8; 32], CryptoE
         shared_secret,
         constants::CONTROL_SALT,
         constants::CONTROL_READ_KEY_INFO,
+    )
+}
+
+/// Derive events channel write key for sender.
+/// Note: Sender write key uses Events-Read-Encryption-Key because the receiver reads with it.
+pub fn derive_events_write_key(shared_secret: &[u8]) -> Result<[u8; 32], CryptoError> {
+    derive_key_32(
+        shared_secret,
+        constants::EVENTS_SALT,
+        constants::EVENTS_READ_KEY_INFO,
+    )
+}
+
+/// Derive events channel read key for sender.
+/// Note: Sender read key uses Events-Write-Encryption-Key because the receiver writes with it.
+pub fn derive_events_read_key(shared_secret: &[u8]) -> Result<[u8; 32], CryptoError> {
+    derive_key_32(
+        shared_secret,
+        constants::EVENTS_SALT,
+        constants::EVENTS_WRITE_KEY_INFO,
     )
 }
 

@@ -9,14 +9,14 @@
   <Identity
     Name="mesmerli.Win2PodBridge"
     Publisher="CN=B50F36C9-7E5E-4652-A715-0185D35ADE64"
-    Version="0.1.0.0"
+    Version="0.1.16.0"
     ProcessorArchitecture="x64" />
 
   <Properties>
     <DisplayName>Win2Pod Bridge</DisplayName>
     <PublisherDisplayName>mesmerli</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
-    <Description>Pure Rust AirPlay 2 audio streaming bridge for Windows. Streams system audio to HomePod and AirPlay speakers.</Description>
+    <Description>Pure Rust AirPlay 2 audio streaming bridge for Windows. Streams system and application audio to HomePod and AirPlay speakers.</Description>
   </Properties>
 
   <Dependencies>
@@ -26,6 +26,15 @@
   <Resources>
     <Resource Language="en-US" />
     <Resource Language="zh-TW" />
+    <Resource Language="zh-CN" />
+    <Resource Language="fr-FR" />
+    <Resource Language="de-DE" />
+    <Resource Language="it-IT" />
+    <Resource Language="ja-JP" />
+    <Resource Language="ko-KR" />
+    <Resource Language="pt-BR" />
+    <Resource Language="ru-RU" />
+    <Resource Language="es-ES" />
   </Resources>
 
   <Applications>

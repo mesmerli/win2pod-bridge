@@ -78,6 +78,11 @@ function Draw-PodIcon {
         $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
         $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
 
+        if ($statusDot -eq "muted") {
+            # Faint / muted wave arcs
+            $pen.Color = [System.Drawing.Color]::FromArgb(110, 255, 255, 255)
+        }
+
         $arcR1 = [int]($innerR * 0.55)
         if ($arcR1 -gt 2) {
             $g.DrawArc($pen, $cx - $arcR1, $cy - $arcR1, $arcR1 * 2, $arcR1 * 2, -45, 90)
@@ -87,6 +92,15 @@ function Draw-PodIcon {
             $g.DrawArc($pen, $cx - $arcR2, $cy - $arcR2, $arcR2 * 2, $arcR2 * 2, -50, 100)
         }
         $pen.Dispose()
+
+        # If muted, draw a distinct strike-through slash across the sound waves
+        if ($statusDot -eq "muted") {
+            $slashWavePen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(255, 240, 120, 40), [float]($penWidth * 1.3))
+            $slashWavePen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+            $slashWavePen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+            $g.DrawLine($slashWavePen, [float]($cx + $arcR1 * 0.4), [float]($cy - $arcR2 * 0.65), [float]($cx + $arcR2 * 0.95), [float]($cy + $arcR2 * 0.65))
+            $slashWavePen.Dispose()
+        }
     }
 
     # Status indicator dot for tray icons (e.g., green dot when streaming)
@@ -104,11 +118,21 @@ function Draw-PodIcon {
             "green" { [System.Drawing.Color]::FromArgb(255, 50, 205, 50) }
             "amber" { [System.Drawing.Color]::FromArgb(255, 240, 160, 40) }
             "red"   { [System.Drawing.Color]::FromArgb(255, 240, 60, 60) }
+            "muted" { [System.Drawing.Color]::FromArgb(255, 240, 140, 40) }
             default { [System.Drawing.Color]::FromArgb(255, 140, 140, 140) }
         }
         $dotBrush = [System.Drawing.SolidBrush]::new($dotColor)
         $g.FillEllipse($dotBrush, $dotCx - $dotR, $dotCy - $dotR, $dotR * 2, $dotR * 2)
         $dotBrush.Dispose()
+
+        if ($statusDot -eq "muted") {
+            $slashPen = [System.Drawing.Pen]::new([System.Drawing.Color]::White, [float]([Math]::Max(1.4, $dotR * 0.36)))
+            $slashPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+            $slashPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+            $offset = $dotR * 0.55
+            $g.DrawLine($slashPen, [float]($dotCx - $offset), [float]($dotCy - $offset), [float]($dotCx + $offset), [float]($dotCy + $offset))
+            $slashPen.Dispose()
+        }
     }
 
     if ($showText) {
@@ -195,7 +219,8 @@ $trayVariants = @(
     @{ Name = "tray_idle.png"; Dot = $null },
     @{ Name = "tray_streaming.png"; Dot = "green" },
     @{ Name = "tray_connecting.png"; Dot = "amber" },
-    @{ Name = "tray_error.png"; Dot = "red" }
+    @{ Name = "tray_error.png"; Dot = "red" },
+    @{ Name = "tray_muted.png"; Dot = "muted" }
 )
 
 foreach ($t in $trayVariants) {

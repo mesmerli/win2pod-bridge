@@ -89,9 +89,54 @@ pub fn notify_tray_state() {
 }
 
 pub static MAIN_HWND: AtomicIsize = AtomicIsize::new(0);
+pub static IS_TRAY_HIDDEN: AtomicBool = AtomicBool::new(false);
+pub static IS_ALWAYS_ON_TOP: AtomicBool = AtomicBool::new(false);
+pub static LAST_POS_X: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(i32::MIN);
+pub static LAST_POS_Y: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(i32::MIN);
+
+pub fn is_window_hidden_to_tray() -> bool {
+    IS_TRAY_HIDDEN.load(Ordering::SeqCst)
+}
+
+#[inline]
+pub fn is_any_window_visible() -> bool {
+    !is_window_hidden_to_tray() || crate::visualizer::is_visualizer_open()
+}
+
+static START_INSTANT: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+static LAST_SHOWN_MS: AtomicU64 = AtomicU64::new(0);
+
+pub fn record_shown_time() {
+    let start = START_INSTANT.get_or_init(std::time::Instant::now);
+    let ms = start.elapsed().as_millis() as u64;
+    LAST_SHOWN_MS.store(ms, Ordering::SeqCst);
+}
+
+pub fn was_just_shown(threshold_ms: u64) -> bool {
+    let start = START_INSTANT.get_or_init(std::time::Instant::now);
+    let now_ms = start.elapsed().as_millis() as u64;
+    let last = LAST_SHOWN_MS.load(Ordering::SeqCst);
+    now_ms.saturating_sub(last) < threshold_ms
+}
 
 pub fn set_main_hwnd(hwnd: isize) {
     MAIN_HWND.store(hwnd, Ordering::SeqCst);
+}
+
+pub fn set_main_window_pinned(pinned: bool) {
+    IS_ALWAYS_ON_TOP.store(pinned, Ordering::SeqCst);
+    crate::controller::save_always_on_top(pinned);
+    let hwnd = get_main_hwnd();
+    if !hwnd.is_null() {
+        unsafe {
+            use windows_sys::Win32::UI::WindowsAndMessaging::{
+                SetWindowPos, HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE,
+            };
+            let target = if pinned { HWND_TOPMOST } else { HWND_NOTOPMOST };
+            SetWindowPos(hwnd, target, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+        }
+    }
+    crate::gui::request_ui_repaint();
 }
 
 pub fn get_main_hwnd() -> HWND {
@@ -104,6 +149,148 @@ pub fn get_main_hwnd() -> HWND {
     unsafe {
         let title: Vec<u16> = "Win2Pod Bridge\0".encode_utf16().collect();
         FindWindowW(std::ptr::null(), title.as_ptr())
+    }
+}
+
+/// Hide window into system tray by moving off-screen and setting WS_EX_TOOLWINDOW.
+/// We intentionally do NOT use ShowWindow(SW_HIDE) because Windows DWM stops sending
+/// VSync and WM_PAINT to SW_HIDE windows, causing eframe/winit's event loop to enter
+/// an unconstrained busy-poll loop consuming 100% of a CPU core (~5% total).
+/// Moving off-screen keeps DWM VSync active while removing the window from the screen,
+/// taskbar, and Alt+Tab switcher with 0.0% CPU usage.
+pub fn hide_window_to_tray(hwnd: HWND, _ctx: &egui::Context) {
+    if hwnd.is_null() {
+        return;
+    }
+    unsafe {
+        use windows_sys::Win32::Foundation::RECT;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GetWindowLongW, GetWindowRect, SetWindowLongW, SetWindowPos,
+            GWL_EXSTYLE, HWND_NOTOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+            WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+        };
+
+        let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+        GetWindowRect(hwnd, &mut rect);
+        let monitor = windows_sys::Win32::Graphics::Gdi::MonitorFromWindow(
+            hwnd,
+            windows_sys::Win32::Graphics::Gdi::MONITOR_DEFAULTTONEAREST,
+        );
+        let mut mi: windows_sys::Win32::Graphics::Gdi::MONITORINFO = std::mem::zeroed();
+        mi.cbSize = std::mem::size_of::<windows_sys::Win32::Graphics::Gdi::MONITORINFO>() as u32;
+        if windows_sys::Win32::Graphics::Gdi::GetMonitorInfoW(monitor, &mut mi) != 0 {
+            let work = mi.rcWork;
+            if rect.right >= work.left + 60
+                && rect.left <= work.right - 60
+                && rect.bottom >= work.top + 60
+                && rect.top <= work.bottom - 60
+            {
+                LAST_POS_X.store(rect.left, Ordering::SeqCst);
+                LAST_POS_Y.store(rect.top, Ordering::SeqCst);
+            }
+        }
+
+        IS_TRAY_HIDDEN.store(true, Ordering::SeqCst);
+
+        // Add WS_EX_TOOLWINDOW so it disappears from Taskbar and Alt+Tab
+        let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
+        let new_ex = (ex | WS_EX_TOOLWINDOW as i32) & !(WS_EX_APPWINDOW as i32);
+        SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
+
+        // Move far off-screen
+        SetWindowPos(
+            hwnd,
+            HWND_NOTOPMOST,
+            -32000,
+            -32000,
+            0,
+            0,
+            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        );
+
+        if crate::visualizer::is_visualizer_fullscreen() {
+            let vis_hwnd = crate::visualizer::get_visualizer_hwnd();
+            if !vis_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0 {
+                windows_sys::Win32::UI::WindowsAndMessaging::SetWindowPos(
+                    vis_hwnd,
+                    windows_sys::Win32::UI::WindowsAndMessaging::HWND_TOPMOST,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                );
+            }
+        }
+
+        let is_bonded = crate::snapping::SNAPPING_ENABLED.load(Ordering::Relaxed)
+            && crate::snapping::get_dock_bond().is_bonded;
+
+        if is_bonded {
+            // When magnetically docked to main window, caption buttons are unified under main window.
+            // Closing main window (via X button) acts as a group close: close visualizer too!
+            crate::visualizer::close_visualizer();
+        } else {
+            // When visualizer is detached/independent, seamlessly return focus to visualizer
+            // if it is open so user can continue interacting with it.
+            let vis_hwnd = crate::visualizer::get_visualizer_hwnd();
+            if !vis_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0 {
+                windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow(vis_hwnd);
+                crate::visualizer::focus_visualizer();
+            }
+        }
+    }
+    trim_working_set();
+}
+
+/// Restore window from system tray back onto visible desktop screen
+pub fn show_window_from_tray(hwnd: HWND, ctx: &egui::Context) {
+    if hwnd.is_null() {
+        return;
+    }
+    record_shown_time();
+    unsafe {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GetWindowLongW, SetWindowLongW, SetWindowPos,
+            GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST,
+            SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+            WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+        };
+
+        IS_TRAY_HIDDEN.store(false, Ordering::SeqCst);
+
+        // Restore normal ex_style (removes WS_EX_TOOLWINDOW)
+        let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
+        let new_ex = (ex & !(WS_EX_TOOLWINDOW as i32)) | (WS_EX_APPWINDOW as i32);
+        SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
+
+        let mut x = LAST_POS_X.load(Ordering::SeqCst);
+        let mut y = LAST_POS_Y.load(Ordering::SeqCst);
+        let work = crate::snapping::get_monitor_work_area(hwnd);
+        if x < work.left || x + 60 > work.right || y < work.top || y + 60 > work.bottom {
+            x = work.left + (work.right - work.left - 460).max(0) / 2;
+            y = work.top + (work.bottom - work.top - 680).max(0) / 2;
+            LAST_POS_X.store(x, Ordering::SeqCst);
+            LAST_POS_Y.store(y, Ordering::SeqCst);
+        }
+
+        SetWindowPos(
+            hwnd,
+            HWND_TOPMOST,
+            x,
+            y,
+            0,
+            0,
+            SWP_NOSIZE | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
+        );
+        if !IS_ALWAYS_ON_TOP.load(Ordering::SeqCst) && !crate::visualizer::is_visualizer_fullscreen() {
+            SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+        }
+
+        force_foreground(hwnd);
+        ensure_window_on_screen(hwnd);
+        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        ctx.request_repaint();
     }
 }
 
@@ -120,6 +307,66 @@ pub fn trim_working_set() {
 #[link(name = "user32")]
 extern "system" {
     fn AttachThreadInput(idattach: u32, idattachto: u32, fattach: i32) -> i32;
+}
+
+/// Ensures that the specified window is within the visible boundaries of its monitor work area.
+/// If it is off-screen (e.g. less than 60px visible), it is moved back onto the screen.
+pub unsafe fn ensure_window_on_screen(hwnd: HWND) -> bool {
+    if hwnd.is_null() || is_window_hidden_to_tray() {
+        return false;
+    }
+
+    use windows_sys::Win32::Foundation::RECT;
+    use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowRect, SetWindowPos, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER};
+
+    let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+    if GetWindowRect(hwnd, &mut rect) == 0 {
+        return false;
+    }
+
+    let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    let mut mi: MONITORINFO = std::mem::zeroed();
+    mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+    if GetMonitorInfoW(monitor, &mut mi) == 0 {
+        return false;
+    }
+
+    let work = mi.rcWork;
+    let w = rect.right - rect.left;
+    let h = rect.bottom - rect.top;
+
+    let is_off = rect.right < work.left + 60
+        || rect.left > work.right - 60
+        || rect.bottom < work.top + 60
+        || rect.top > work.bottom - 60;
+
+    if is_off {
+        let win_w = if w <= 0 { 460 } else { w };
+        let win_h = if h <= 0 { 680 } else { h };
+        let mut new_x = LAST_POS_X.load(Ordering::SeqCst);
+        let mut new_y = LAST_POS_Y.load(Ordering::SeqCst);
+
+        if new_x < work.left || new_x + 60 > work.right || new_y < work.top || new_y + 60 > work.bottom {
+            new_x = work.left + ((work.right - work.left - win_w).max(0)) / 2;
+            new_y = work.top + ((work.bottom - work.top - win_h).max(0)) / 2;
+        }
+
+        LAST_POS_X.store(new_x, Ordering::SeqCst);
+        LAST_POS_Y.store(new_y, Ordering::SeqCst);
+
+        SetWindowPos(
+            hwnd,
+            std::ptr::null_mut(),
+            new_x,
+            new_y,
+            0,
+            0,
+            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+        );
+        return true;
+    }
+    false
 }
 
 pub unsafe fn force_foreground(hwnd: HWND) {
@@ -149,94 +396,209 @@ pub unsafe fn force_foreground(hwnd: HWND) {
 
     // Force Z-order placement to topmost and back so Windows DWM brings it above other windows
     SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-    SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    if !IS_ALWAYS_ON_TOP.load(Ordering::SeqCst) && !crate::visualizer::is_visualizer_fullscreen() {
+        SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    }
     SetForegroundWindow(hwnd);
-}
-
-static START_INSTANT: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-static LAST_SHOWN_MS: AtomicU64 = AtomicU64::new(0);
-
-pub fn mark_just_shown() {
-    let start = START_INSTANT.get_or_init(std::time::Instant::now);
-    let ms = start.elapsed().as_millis() as u64;
-    LAST_SHOWN_MS.store(ms, Ordering::SeqCst);
-}
-
-pub fn was_just_shown(threshold_ms: u64) -> bool {
-    let start = START_INSTANT.get_or_init(std::time::Instant::now);
-    let now_ms = start.elapsed().as_millis() as u64;
-    let last = LAST_SHOWN_MS.load(Ordering::SeqCst);
-    now_ms.saturating_sub(last) < threshold_ms
 }
 
 pub fn toggle_main_window(ctx: &egui::Context) {
     let hwnd = get_main_hwnd();
     if !hwnd.is_null() {
-        unsafe {
+        let is_hidden = is_window_hidden_to_tray();
+        let (is_foreground, is_minimized, is_offscreen) = unsafe {
+            use windows_sys::Win32::Foundation::RECT;
+            use windows_sys::Win32::System::Threading::GetCurrentProcessId;
             use windows_sys::Win32::UI::WindowsAndMessaging::{
-                GetAncestor, GetForegroundWindow, GetWindowThreadProcessId, IsIconic,
-                IsWindowVisible, ShowWindow, GA_ROOT, SW_HIDE,
+                GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId, IsIconic,
             };
 
-            let is_visible = IsWindowVisible(hwnd) != 0;
-            let is_iconic = IsIconic(hwnd) != 0;
-
             let fg = GetForegroundWindow();
-            let mut fg_pid = 0;
-            let _ = GetWindowThreadProcessId(fg, &mut fg_pid);
-            let current_pid = windows_sys::Win32::System::Threading::GetCurrentProcessId();
-            let is_our_process = fg_pid == current_pid;
+            let mut fg_pid = 0u32;
+            GetWindowThreadProcessId(fg, &mut fg_pid);
+            let cur_pid = GetCurrentProcessId();
+            let is_fg = fg == hwnd || (fg_pid != 0 && fg_pid == cur_pid);
+            let is_min = IsIconic(hwnd) != 0;
 
-            let root_hwnd = GetAncestor(hwnd, GA_ROOT);
-            let fg_root = if !fg.is_null() { GetAncestor(fg, GA_ROOT) } else { fg };
-            let is_foreground = is_our_process
-                || fg == hwnd
-                || fg == root_hwnd
-                || (!fg.is_null() && (fg_root == hwnd || fg_root == root_hwnd));
-
-            tracing::info!(
-                "toggle_main_window: hwnd={:?}, is_visible={}, is_iconic={}, fg={:?}, is_foreground={}",
-                hwnd, is_visible, is_iconic, fg, is_foreground
+            let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+            GetWindowRect(hwnd, &mut rect);
+            let monitor = windows_sys::Win32::Graphics::Gdi::MonitorFromWindow(
+                hwnd,
+                windows_sys::Win32::Graphics::Gdi::MONITOR_DEFAULTTONEAREST,
             );
-
-            if is_visible && !is_iconic && is_foreground {
-                tracing::info!("toggle_main_window: Hiding main window to tray");
-                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
-                ShowWindow(hwnd, SW_HIDE);
-                trim_working_set();
+            let mut mi: windows_sys::Win32::Graphics::Gdi::MONITORINFO = std::mem::zeroed();
+            mi.cbSize = std::mem::size_of::<windows_sys::Win32::Graphics::Gdi::MONITORINFO>() as u32;
+            let is_off = if windows_sys::Win32::Graphics::Gdi::GetMonitorInfoW(monitor, &mut mi) != 0 {
+                let work = mi.rcWork;
+                rect.right < work.left + 60
+                    || rect.left > work.right - 60
+                    || rect.bottom < work.top + 60
+                    || rect.top > work.bottom - 60
             } else {
-                tracing::info!("toggle_main_window: Showing and bringing main window to foreground");
-                mark_just_shown();
+                rect.left <= -10000 || rect.top <= -10000
+            };
+
+            (is_fg, is_min, is_off)
+        };
+
+        if is_hidden || is_offscreen {
+            tracing::info!("toggle_main_window: Window hidden in tray -> showing and focusing");
+            show_window_from_tray(hwnd, ctx);
+        } else if !is_foreground || is_minimized {
+            tracing::info!(
+                "toggle_main_window: Window not in foreground (is_fg={}, min={}) -> bringing to top",
+                is_foreground,
+                is_minimized
+            );
+            unsafe {
                 force_foreground(hwnd);
-                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-                ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
-                ctx.request_repaint();
+                ensure_window_on_screen(hwnd);
             }
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            ctx.request_repaint();
+        } else {
+            tracing::info!("toggle_main_window: Window is already foreground -> hiding to tray");
+            hide_window_to_tray(hwnd, ctx);
         }
-    } else {
-        tracing::info!("toggle_main_window: hwnd is null, sending Visible(true) to viewport");
-        mark_just_shown();
-        ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
-        ctx.request_repaint();
     }
 }
 
 pub fn show_and_focus_main_window(ctx: &egui::Context) {
     let hwnd = get_main_hwnd();
     if !hwnd.is_null() {
+        show_window_from_tray(hwnd, ctx);
+    }
+}
+
+pub fn bring_main_to_front() {
+    let hwnd = get_main_hwnd();
+    if !hwnd.is_null() {
+        let vis_hwnd = crate::visualizer::get_visualizer_hwnd();
+        let was_hidden = is_window_hidden_to_tray();
+        tracing::info!("bring_main_to_front called: hwnd={:?}, vis_hwnd={:?}, was_hidden={}", hwnd, vis_hwnd, was_hidden);
+
         unsafe {
-            force_foreground(hwnd);
+            use windows_sys::Win32::UI::WindowsAndMessaging::{
+                FindWindowW, GetWindowLongW, IsIconic, SetWindowLongW,
+                SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_BOTTOM,
+                HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
+                SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE, SW_SHOWNOACTIVATE,
+                WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+            };
+
+            record_shown_time();
+
+            if was_hidden {
+                IS_TRAY_HIDDEN.store(false, Ordering::SeqCst);
+                let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
+                let new_ex = (ex & !(WS_EX_TOOLWINDOW as i32)) | (WS_EX_APPWINDOW as i32);
+                SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
+
+                let anchor = if !vis_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0 {
+                    vis_hwnd
+                } else {
+                    hwnd
+                };
+                let work = crate::snapping::get_monitor_work_area(anchor);
+                let mut x = LAST_POS_X.load(Ordering::SeqCst);
+                let mut y = LAST_POS_Y.load(Ordering::SeqCst);
+                if x < work.left || x + 60 > work.right || y < work.top || y + 60 > work.bottom {
+                    x = work.left + (work.right - work.left - 460).max(0) / 2;
+                    y = work.top + (work.bottom - work.top - 680).max(0) / 2;
+                    LAST_POS_X.store(x, Ordering::SeqCst);
+                    LAST_POS_Y.store(y, Ordering::SeqCst);
+                }
+                SetWindowPos(
+                    hwnd,
+                    HWND_TOPMOST,
+                    x,
+                    y,
+                    0,
+                    0,
+                    SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                );
+                if IsIconic(hwnd) != 0 {
+                    ShowWindow(hwnd, SW_RESTORE);
+                } else {
+                    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                }
+            } else {
+                if IsIconic(hwnd) != 0 {
+                    ShowWindow(hwnd, SW_RESTORE);
+                } else {
+                    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                }
+            }
+            ensure_window_on_screen(hwnd);
+
+            // If visualizer is open, demote visualizer to HWND_NOTOPMOST so main window (HWND_TOPMOST)
+            // is guaranteed by Windows DWM to stay above it, even when visualizer has keyboard focus!
+            if !vis_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0 {
+                use windows_sys::Win32::UI::WindowsAndMessaging::HWND_NOTOPMOST;
+                SetWindowPos(vis_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+
+            // Always bring main window topmost above the visualizer window without stealing focus
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+            // If visualizer is open and in fullscreen, ensure Windows taskbar stays below it
+            if crate::visualizer::is_visualizer_fullscreen() {
+                let taskbar_class: Vec<u16> = "Shell_TrayWnd\0".encode_utf16().collect();
+                let taskbar = FindWindowW(taskbar_class.as_ptr(), std::ptr::null());
+                if !taskbar.is_null() {
+                    SetWindowPos(taskbar, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                }
+                let sec_taskbar_class: Vec<u16> = "Shell_SecondaryTrayWnd\0".encode_utf16().collect();
+                let sec_taskbar = FindWindowW(sec_taskbar_class.as_ptr(), std::ptr::null());
+                if !sec_taskbar.is_null() {
+                    SetWindowPos(sec_taskbar, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                }
+            }
+
+            // Keep focus on the visualizer window so keyboard shortcuts remain completely fluent
+            if !vis_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0 {
+                windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow(vis_hwnd);
+            } else {
+                force_foreground(hwnd);
+            }
+
+            if crate::snapping::SNAPPING_ENABLED.load(Ordering::Relaxed) {
+                let bond = crate::snapping::get_dock_bond();
+                if bond.is_bonded
+                    && !vis_hwnd.is_null()
+                    && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0
+                    && !crate::visualizer::is_visualizer_fullscreen()
+                {
+                    use windows_sys::Win32::Foundation::RECT;
+                    use windows_sys::Win32::UI::WindowsAndMessaging::{
+                        GetWindowRect, IsIconic, SetWindowPos, ShowWindow, SWP_NOACTIVATE,
+                        SWP_NOSIZE, SW_SHOWNOACTIVATE,
+                    };
+                    let mut main_rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+                    GetWindowRect(hwnd, &mut main_rect);
+                    let mut vis_rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+                    GetWindowRect(vis_hwnd, &mut vis_rect);
+                    if IsIconic(vis_hwnd) != 0 {
+                        ShowWindow(vis_hwnd, SW_SHOWNOACTIVATE);
+                    }
+                    let (new_vis_x, new_vis_y) = crate::snapping::calc_bonded_visualizer_pos(&bond, &vis_rect, &main_rect);
+                    SetWindowPos(
+                        vis_hwnd,
+                        hwnd,
+                        new_vis_x,
+                        new_vis_y,
+                        0,
+                        0,
+                        SWP_NOSIZE | SWP_NOACTIVATE,
+                    );
+                }
+            }
+        }
+        if let Some(ctx) = crate::gui::get_egui_ctx() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            ctx.request_repaint();
         }
     }
-    mark_just_shown();
-    ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
-    ctx.request_repaint();
 }
 
 pub struct TrayManager {
@@ -254,6 +616,7 @@ pub struct TrayManager {
     last_volume: Option<f32>,
     last_notice: Option<NoticeKind>,
     last_language: Option<Language>,
+    last_airpods_sig: Option<(bool, bool, Option<u8>, Option<u8>, Option<u8>, bool, bool, bool, bool, bool)>,
 }
 
 impl TrayManager {
@@ -275,14 +638,26 @@ impl TrayManager {
         let quit_id = quit_item.id().clone();
         menu.append(&quit_item)?;
 
-        let icon = load_tray_icon(&DeviceStatus::Idle);
+        let icon = load_tray_icon(&DeviceStatus::Idle, false);
+        tracing::info!("[Tray] Initializing system tray icon with tooltip 'Win2Pod Bridge'...");
 
-        let tray = TrayIconBuilder::new()
+        let tray = match TrayIconBuilder::new()
             .with_menu(Box::new(menu.clone()))
             .with_menu_on_left_click(false)
             .with_tooltip("Win2Pod Bridge")
             .with_icon(icon)
-            .build()?;
+            .build()
+        {
+            Ok(t) => {
+                let rect = t.rect();
+                tracing::info!("[Tray] TrayIconBuilder::build() returned Ok(tray) - id={:?}, rect={:?}", t.id(), rect);
+                t
+            }
+            Err(e) => {
+                tracing::error!("[Tray] TrayIconBuilder::build() FAILED: {e:#}");
+                return Err(e.into());
+            }
+        };
 
         Ok(Self {
             tray,
@@ -299,6 +674,7 @@ impl TrayManager {
             last_volume: None,
             last_notice: None,
             last_language: Some(lang),
+            last_airpods_sig: None,
         })
     }
 
@@ -327,6 +703,8 @@ impl TrayManager {
         }
     }
 
+
+
     pub fn update_status(&mut self, state: &ControllerState) {
         let lang_changed = self.last_language != Some(state.language);
         let status_changed = self.last_status.as_ref() != Some(&state.status);
@@ -334,9 +712,23 @@ impl TrayManager {
         let name_changed = self.last_name.as_ref() != state.connected_name.as_ref();
         let notice_changed = self.last_notice.as_ref() != state.notice_message.as_ref().map(|(msg, _)| msg);
         let volume_changed = self.last_volume.map(|v| (v - state.volume).abs() > 0.005).unwrap_or(true);
+        let is_airpods_connected = state.is_airpods_connected();
+        let current_airpods_sig = (
+            state.airpods_detected,
+            is_airpods_connected,
+            state.airpods_battery_left,
+            state.airpods_battery_right,
+            state.airpods_battery_case,
+            state.airpods_charging_left,
+            state.airpods_charging_right,
+            state.airpods_charging_case,
+            state.airpods_left_in_ear,
+            state.airpods_right_in_ear,
+        );
+        let airpods_changed = self.last_airpods_sig.as_ref() != Some(&current_airpods_sig);
 
         // Avoid re-creating GDI icons and updating menus if status hasn't changed
-        if !status_changed && !muted_changed && !name_changed && !notice_changed && !volume_changed && !lang_changed {
+        if !status_changed && !muted_changed && !name_changed && !notice_changed && !volume_changed && !lang_changed && !airpods_changed {
             return;
         }
 
@@ -363,41 +755,114 @@ impl TrayManager {
             }
         }
 
-        if status_changed || name_changed || volume_changed || muted_changed || lang_changed {
+        if status_changed || name_changed || volume_changed || muted_changed || lang_changed || airpods_changed {
             self.last_status = Some(state.status.clone());
             self.last_name = state.connected_name.clone();
             self.last_volume = Some(state.volume);
             self.last_muted = Some(state.is_muted);
+            self.last_airpods_sig = Some(current_airpods_sig);
 
             let vol_pct = (state.volume * 100.0).round() as i32;
-            let vol_suffix = if state.is_muted {
-                state.language.slider_muted_suffix().to_string()
+
+            let airpods_summary = if is_airpods_connected && state.airpods_detected {
+                let is_in_use = match &state.status {
+                    DeviceStatus::AoMode(ref dev_name) => {
+                        crate::controller::is_airpods_playback_device(dev_name)
+                            || crate::controller::is_airpods_playback_device(&state.ao_output_device)
+                    }
+                    _ => false,
+                };
+                let status_tag = if is_in_use {
+                    state.language.airpods_in_use_status_tag()
+                } else {
+                    state.language.airpods_connected_status_tag()
+                };
+
+                let mut bat = Vec::new();
+                if let Some(l) = state.airpods_battery_left {
+                    let chg = if state.airpods_charging_left { "⚡" } else { "" };
+                    let wear = if state.airpods_left_in_ear { "● " } else { "" };
+                    bat.push(format!("{wear}L {l}%{chg}"));
+                }
+                if let Some(r) = state.airpods_battery_right {
+                    let chg = if state.airpods_charging_right { "⚡" } else { "" };
+                    let wear = if state.airpods_right_in_ear { "● " } else { "" };
+                    bat.push(format!("{wear}R {r}%{chg}"));
+                }
+                if let Some(c) = state.airpods_battery_case {
+                    let chg = if state.airpods_charging_case { "⚡" } else { "" };
+                    bat.push(format!("🔋{c}%{chg}"));
+                }
+                let model_name = state.airpods_model.as_deref().unwrap_or("AirPods");
+                if bat.is_empty() {
+                    Some(state.language.tray_airpods_status_only(model_name, status_tag))
+                } else {
+                    Some(state.language.tray_airpods_with_battery(model_name, &bat.join("  ")))
+                }
             } else {
-                format!(" [{vol_pct}%]")
+                None
             };
 
-            let mut tooltip = match &state.status {
-                DeviceStatus::Idle => state.language.tray_idle_tooltip().to_string(),
-                DeviceStatus::Connecting => {
-                    let name = state.connected_name.as_deref().unwrap_or("");
-                    state.language.tray_connecting_tooltip(name)
-                }
+            let tooltip = match &state.status {
                 DeviceStatus::Streaming => {
                     let name = state.connected_name.as_deref().unwrap_or("");
-                    state.language.tray_streaming_tooltip(name, &vol_suffix)
+                    let base = state.language.tray_streaming_tooltip(state.is_muted, name, vol_pct);
+                    if let Some(ref ap) = airpods_summary {
+                        format!("{base}\r\n{ap}")
+                    } else {
+                        base
+                    }
                 }
-                DeviceStatus::Error(e) => state.language.tray_error_tooltip(e),
+                DeviceStatus::Connecting => {
+                    let name = state.connected_name.as_deref().unwrap_or("");
+                    let base = state.language.tray_connecting_tooltip(name);
+                    if let Some(ref ap) = airpods_summary {
+                        format!("{base}\r\n{ap}")
+                    } else {
+                        base
+                    }
+                }
+                DeviceStatus::AoMode(_) => {
+                    let base = format!("Win2Pod - {}", state.language.status_ao_active());
+                    if let Some(ref ap) = airpods_summary {
+                        format!("{base}\r\n{ap}")
+                    } else {
+                        base
+                    }
+                }
+                DeviceStatus::Idle => {
+                    let mut idle_txt = state.language.tray_idle_tooltip().to_string();
+                    if let Some((ref notice, time)) = state.notice_message {
+                        if time.elapsed().as_secs() < 60 {
+                            idle_txt = format!("Win2Pod Bridge - {}（{}）", state.language.status_idle(), notice.render(state.language));
+                        }
+                    }
+                    if let Some(ref ap) = airpods_summary {
+                        format!("{idle_txt}\r\n{ap}")
+                    } else {
+                        idle_txt
+                    }
+                }
+                DeviceStatus::Error(e) => {
+                    let base = state.language.tray_error_tooltip(e);
+                    if let Some(ref ap) = airpods_summary {
+                        format!("{base}\r\n{ap}")
+                    } else {
+                        base
+                    }
+                }
             };
 
-            if let Some((ref notice, time)) = state.notice_message {
-                if time.elapsed().as_secs() < 60 && state.status == DeviceStatus::Idle {
-                    tooltip = format!("Win2Pod Bridge - {}（{}）", state.language.status_idle(), notice.render(state.language));
-                }
+            let icon = load_tray_icon(&state.status, state.is_muted);
+            if let Err(e) = self.tray.set_icon(Some(icon)) {
+                tracing::warn!("[Tray] set_icon returned error: {e:#}");
+            } else {
+                let rect = self.tray.rect();
+                tracing::info!("[Tray] set_icon updated successfully (status={:?}, muted={}, rect={:?})", state.status, state.is_muted, rect);
             }
-
-            let icon = load_tray_icon(&state.status);
-            let _ = self.tray.set_icon(Some(icon));
-            let _ = self.tray.set_tooltip(Some(tooltip));
+            if let Err(e) = self.tray.set_tooltip(Some(&tooltip)) {
+                tracing::warn!("[Tray] set_tooltip returned error: {e:#}");
+            }
         }
     }
 }
@@ -406,25 +871,45 @@ const TRAY_IDLE_BYTES: &[u8] = include_bytes!("../assets/tray_idle.png");
 const TRAY_STREAMING_BYTES: &[u8] = include_bytes!("../assets/tray_streaming.png");
 const TRAY_CONNECTING_BYTES: &[u8] = include_bytes!("../assets/tray_connecting.png");
 const TRAY_ERROR_BYTES: &[u8] = include_bytes!("../assets/tray_error.png");
+const TRAY_MUTED_BYTES: &[u8] = include_bytes!("../assets/tray_muted.png");
 
-/// Load specialized Win2Pod brand tray icon based on device connection status
-pub fn load_tray_icon(status: &DeviceStatus) -> Icon {
-    let bytes = match status {
-        DeviceStatus::Idle => TRAY_IDLE_BYTES,
-        DeviceStatus::Connecting => TRAY_CONNECTING_BYTES,
-        DeviceStatus::Streaming => TRAY_STREAMING_BYTES,
-        DeviceStatus::Error(_) => TRAY_ERROR_BYTES,
+/// Load specialized Win2Pod brand tray icon based on device connection status and mute state
+pub fn load_tray_icon(status: &DeviceStatus, is_muted: bool) -> Icon {
+    let (name, bytes) = match status {
+        DeviceStatus::Streaming if is_muted => ("tray_muted.png", TRAY_MUTED_BYTES),
+        DeviceStatus::Streaming => ("tray_streaming.png", TRAY_STREAMING_BYTES),
+        DeviceStatus::AoMode(_) if is_muted => ("tray_muted.png", TRAY_MUTED_BYTES),
+        DeviceStatus::AoMode(_) => ("tray_streaming.png", TRAY_STREAMING_BYTES),
+        DeviceStatus::Connecting => ("tray_connecting.png", TRAY_CONNECTING_BYTES),
+        DeviceStatus::Idle => ("tray_idle.png", TRAY_IDLE_BYTES),
+        DeviceStatus::Error(_) => ("tray_error.png", TRAY_ERROR_BYTES),
     };
 
-    if let Ok(img) = image::load_from_memory(bytes) {
-        let rgba = img.into_rgba8();
-        let (w, h) = rgba.dimensions();
-        if let Ok(icon) = Icon::from_rgba(rgba.into_raw(), w, h) {
-            return icon;
+    match image::load_from_memory(bytes) {
+        Ok(img) => {
+            let rgba = img.into_rgba8();
+            let (w, h) = rgba.dimensions();
+            match Icon::from_rgba(rgba.into_raw(), w, h) {
+                Ok(icon) => {
+                    tracing::info!("[Tray] Loaded PNG icon '{name}' ({w}x{h}) successfully");
+                    return icon;
+                }
+                Err(e) => {
+                    tracing::warn!("[Tray] Icon::from_rgba failed for '{name}': {e:#}");
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!("[Tray] image::load_from_memory failed for '{name}': {e:#}");
         }
     }
 
-    create_color_icon(140, 140, 140)
+    tracing::warn!("[Tray] Falling back to create_color_icon for status={:?}", status);
+    if *status == DeviceStatus::Streaming && is_muted {
+        create_color_icon(240, 140, 40)
+    } else {
+        create_color_icon(140, 140, 140)
+    }
 }
 
 /// Create a circular tray icon of specified color (RGBA 32x32)
@@ -483,9 +968,11 @@ pub fn spawn_tray_thread(
             // Direct callback for right-click context menu clicks
             tray_icon::menu::MenuEvent::set_event_handler(Some(move |event: tray_icon::menu::MenuEvent| {
                 if event.id == quit_id {
-                    crate::controller::restore_original_speaker_mute();
-                    let _ = cmd_tx_menu.send_blocking(GuiCmd::Quit);
-                    std::process::exit(0);
+                    let _ = cmd_tx_menu.try_send(GuiCmd::Quit);
+                    std::thread::spawn(|| {
+                        std::thread::sleep(std::time::Duration::from_millis(2500));
+                        std::process::exit(0);
+                    });
                 } else if event.id == show_id {
                     show_and_focus_main_window(&egui_ctx_menu);
                 } else if event.id == mute_id {

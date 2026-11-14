@@ -27,7 +27,14 @@ Windows 系統原生無法直接發送 AirPlay 訊號，且 Apple HomePod 採用
 - **極致記憶體優化**：縮小至系統匣時自動休眠 UI 繪製並釋放 GPU/OpenGL 快取，背景記憶體佔用極低（約 10～20 MB）。
 - **開機自動於背景啟動**：支援開機自啟動與靜默啟動參數（`--startup` / `--minimized`），開機時安靜駐留在系統匣。
 
-### 4. 🎛️ 音訊分流模式 (Split Mode)
+### 4. 🎧 AirPods / Beats 智慧接力與即時監控
+- **BLE 逆向即時解析**：透過 WinRT BLE Advertisement 監聽 Apple Continuity 廣播，即時掌握左右耳與充電盒電量、充電狀態 ⚡、入耳與開關蓋狀態。
+- **雙向智慧輪流接力 (Smart Handoff)**：戴上耳機自動優先切換至 AirPods 本地 AO 模式（零延遲與專屬 DSP）；入盒關蓋時精確自動還原回 HomePod 串流。
+- **佩戴暫停與續播**：取下耳機自動暫停播放，60 秒內戴回自動恢復播放。
+> [!TIP]
+> **AirPods 命名須知**：硬體電量與佩戴偵測直接由 BLE 廣播晶片代碼辨識，不依賴名稱；但 Windows 音路自動切換需比對 Windows 音訊端點名稱。若曾自訂耳機名稱，請確保名稱中包含「`AirPods`」或「`Pods`」關鍵字，系統才能成功媒合並自動轉移音路。
+
+### 5. 🎛️ 音訊分流模式 (Split Mode)
 - **全系統混音擷取 (WASAPI Loopback)**：一鍵捕捉 Windows 電腦的所有發聲應用程式。
 - **音訊來源端點自選**：可指定特定播放裝置進行側錄。例如：將 Spotify / Apple Music 獨立串流至 HomePod，而遊戲語音、Discord 或會議則保留在 PC 耳機播放。
 - **一鍵開啟音量混音器**：內建捷徑按鈕直接開啟 Windows 原生應用程式音量混音設定。
@@ -86,10 +93,13 @@ rustup default stable-x86_64-pc-windows-gnu
 
 ## 📜 授權與鳴謝 (Acknowledgements & License)
 
-本專案基於 Lucas McGartland 的 [**airplay2-rs**](https://github.com/lmcgartland/airplay2-rs) 核心研究進行深度重構與擴充，新增了：
+本專案基於 Lucas McGartland 的 [**airplay2-rs**](https://github.com/lmcgartland/airplay2-rs) 核心研究與 SpriteOvO 的 [**AirPodsDesktop**](https://github.com/SpriteOvO/AirPodsDesktop)（Apple Continuity BLE 鄰近配對協定與入耳偵測逆向邏輯）進行深度重構與擴充，新增了：
 - 純 Rust Fluent 浮動 GUI 與系統匣管理（`crates/homepod-cast-gui`）
+- 原生 AirPods / Beats BLE 入耳偵測、電量監視與優先音路轉移交接架構
 - Windows 原生 WASAPI Loopback 擷取管線與即時 ALAC 編碼器
 - IEEE 802.1AS / gPTP 時鐘同步與多房間群組串流架構
+- 10 頻段等化器、膠黑膠/膽機溫暖度 DSP 音效與即時頻譜分析儀
+- 即時 3D 音訊動態律動視覺化視窗與印象派油畫筆觸渲染（`wry`, `three.js`, `three-painterly`, `baked-debris`）
 - MSIX 打包支援、微軟商店（Microsoft Store）授權模組與 11 國語系
 
-**開源授權**：依循上游專案採用 GPL-2.0 授權條款，詳見 [`LICENSE`](LICENSE)。
+**開源授權**：依循上游專案採用 GPL-3.0-or-later 授權條款，詳見 [`LICENSE`](LICENSE)。

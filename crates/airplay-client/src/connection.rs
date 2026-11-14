@@ -10,13 +10,13 @@ use std::path::PathBuf;
 use std::fs;
 // Timing imports reserved for future use
 // use airplay_timing::{TimingProtocol, NtpTimingClient, PtpClient};
-use airplay_audio::{AudioStreamer, AudioDecoder, LiveAudioDecoder, RtpSender, RtpReceiver, EqConfig, EqParams};
+use airplay_audio::{AudioStreamer, AudioDecoder, LiveAudioDecoder, RtpSender, RtpReceiver, EqConfig, EqParams, SoundEnhancerParams, WarmthEnhancerParams};
 use airplay_audio::cipher::{PacketCipher, ChaChaPacketCipher};
 use std::sync::Arc;
 use airplay_crypto::chacha::ControlCipher;
 use airplay_crypto::chacha::AudioCipher;
-use airplay_crypto::keys::SharedSecret;
-use crate::PlaybackState;
+use airplay_crypto::keys::SessionKeys;
+use crate::{PlaybackState, RemoteControlCmd};
 use std::net::{IpAddr, SocketAddr, UdpSocket};
 use tracing::{debug, info, warn};
 use airplay_timing::{NtpTimingServer, ClockOffset, PtpMaster, PTP_EVENT_PORT, run_ptp_slave, run_bmca_yield_flow, run_ptp_group_master_flow};
@@ -76,7 +76,34 @@ impl PersistentIdentity {
     /// Find identity file for a target device.
     fn identity_file_for(target_device_id: &str) -> PathBuf {
         let suffix = target_device_id.replace(":", "").to_lowercase();
-        PathBuf::from(format!(".airplay_sender_identity_{}.json", suffix))
+        let filename = format!(".airplay_sender_identity_{}.json", suffix);
+
+        // Check AppData directory first
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            let app_dir = PathBuf::from(appdata).join("win2pod");
+            if app_dir.exists() {
+                let p = app_dir.join(&filename);
+                if p.exists() {
+                    return p;
+                }
+            }
+        }
+
+        // Check current directory
+        let local_p = PathBuf::from(&filename);
+        if local_p.exists() {
+            return local_p;
+        }
+
+        // Default save path: AppData directory if available, else local
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            let app_dir = PathBuf::from(appdata).join("win2pod");
+            if app_dir.exists() {
+                return app_dir.join(&filename);
+            }
+        }
+
+        local_p
     }
 
     /// Load identity for a target device if it exists.
@@ -161,29 +188,16 @@ impl PersistentIdentity {
 }
 
 /// Select the best address from a device's address list.
-/// Prefers IPv4, then global IPv6, avoiding link-local addresses.
+/// Prioritizes addresses matching the local physical interface's subnet,
+/// filtering out virtual, TUN/TAP, CGNAT, and link-local addresses.
 fn select_best_address(addresses: &[IpAddr]) -> Option<&IpAddr> {
-    // First try: IPv4 address
-    if let Some(addr) = addresses.iter().find(|a| a.is_ipv4()) {
-        debug!("Selected IPv4 address: {}", addr);
-        return Some(addr);
-    }
-
-    // Second try: Global IPv6 (not link-local, not loopback)
-    if let Some(addr) = addresses.iter().find(|a| {
-        match a {
-            IpAddr::V6(v6) => {
-                // Avoid link-local (fe80::) and loopback
-                !v6.is_loopback() && !is_link_local_v6(v6)
-            }
-            _ => false,
+    if let Some(best) = airplay_core::net::select_best_receiver_address(addresses) {
+        if let Some(addr) = addresses.iter().find(|&&a| a == best) {
+            debug!("Selected best address (physical subnet matched): {}", addr);
+            return Some(addr);
         }
-    }) {
-        debug!("Selected global IPv6 address: {}", addr);
-        return Some(addr);
     }
 
-    // Last resort: any address
     let addr = addresses.first();
     if let Some(a) = addr {
         debug!("Selected fallback address: {}", a);
@@ -191,11 +205,6 @@ fn select_best_address(addresses: &[IpAddr]) -> Option<&IpAddr> {
     addr
 }
 
-/// Check if an IPv6 address is link-local (fe80::/10)
-fn is_link_local_v6(addr: &std::net::Ipv6Addr) -> bool {
-    let segments = addr.segments();
-    (segments[0] & 0xffc0) == 0xfe80
-}
 
 /// Parameters needed to send audio to a specific device in a group.
 ///
@@ -238,6 +247,12 @@ pub struct Connection {
     volume_events_tx: Option<tokio::sync::mpsc::UnboundedSender<f32>>,
     /// Channel for volume updates received from the device's events stream
     volume_events_rx: Option<tokio::sync::mpsc::UnboundedReceiver<f32>>,
+    /// Channel sender for remote playback control commands
+    remote_control_tx: Option<tokio::sync::mpsc::UnboundedSender<RemoteControlCmd>>,
+    /// Channel for remote playback control commands received from the device's events stream
+    remote_control_rx: Option<tokio::sync::mpsc::UnboundedReceiver<RemoteControlCmd>>,
+    /// Events channel cipher for HAP decryption/encryption
+    events_cipher: Option<ControlCipher>,
     /// Remote PTP master clock identity (from BMCA yield flow)
     ptp_master_clock_id: Option<[u8; 8]>,
     /// Render delay in ms added to NTP timestamps for extra retransmit headroom.
@@ -246,6 +261,10 @@ pub struct Connection {
     eq_config: Option<EqConfig>,
     /// Shared equalizer parameters for real-time control.
     eq_params: Option<Arc<EqParams>>,
+    /// Shared sound enhancer parameters for real-time Harmonic Exciter (HE) restoration.
+    sound_enhancer_params: Option<Arc<SoundEnhancerParams>>,
+    /// Shared warmth enhancer parameters for real-time Warmth Enhancer (WE) enhancement.
+    warmth_enhancer_params: Option<Arc<WarmthEnhancerParams>>,
     /// Stream statistics (shared with control channel threads).
     stream_stats: Arc<crate::stats::StreamStats>,
     /// Consecutive timeouts on feedback requests
@@ -273,6 +292,10 @@ impl Connection {
         info!("Connecting to {} at {}", device.name, addr);
 
         let mut rtsp = RtspConnection::new(addr);
+        if let Some(local_ip) = airplay_core::net::select_physical_local_ip_for_target(ip_addr) {
+            info!("Binding RTSP connection to physical interface IP {} for receiver {}", local_ip, ip_addr);
+            rtsp.set_local_bind_ip(local_ip);
+        }
         rtsp.connect().await?;
 
         // 2. Create session
@@ -347,9 +370,16 @@ impl Connection {
         // Don't override with shared secret - that's only for RTSP encryption.
         tracing::debug!("Using random shk for audio encryption (sent in SETUP phase 2)");
 
+        let events_cipher = pairing.shared_secret().and_then(|ss| {
+            SessionKeys::derive_events_keys(ss).ok().map(|k| {
+                ControlCipher::new(*k.write_key.as_bytes(), *k.read_key.as_bytes())
+            })
+        });
+
         session.set_paired()?;
 
         let (volume_events_tx, volume_events_rx) = tokio::sync::mpsc::unbounded_channel::<f32>();
+        let (remote_control_tx, remote_control_rx) = tokio::sync::mpsc::unbounded_channel::<RemoteControlCmd>();
 
         Ok(Self {
             device,
@@ -371,9 +401,14 @@ impl Connection {
             events_task: None,
             volume_events_tx: Some(volume_events_tx),
             volume_events_rx: Some(volume_events_rx),
+            remote_control_tx: Some(remote_control_tx),
+            remote_control_rx: Some(remote_control_rx),
+            events_cipher,
             render_delay_ms: 0,
             eq_config: None,
             eq_params: None,
+            sound_enhancer_params: None,
+            warmth_enhancer_params: None,
             stream_stats: crate::stats::StreamStats::new(),
             feedback_timeout_count: 0,
         })
@@ -424,7 +459,7 @@ impl Connection {
         let controller = persistent_id.to_controller().ok_or_else(|| {
             RtspError::SetupFailed("Invalid persisted identity".into())
         })?;
-        let identity = controller.keypair().clone();
+        let _identity = controller.keypair().clone();
 
         // 1. TCP connect
         let ip_addr = select_best_address(&device.addresses)
@@ -433,6 +468,10 @@ impl Connection {
         info!("Connecting to {} at {} (pair-verify)", device.name, addr);
 
         let mut rtsp = RtspConnection::new(addr);
+        if let Some(local_ip) = airplay_core::net::select_physical_local_ip_for_target(ip_addr) {
+            info!("Binding RTSP connection to physical interface IP {} for receiver {}", local_ip, ip_addr);
+            rtsp.set_local_bind_ip(local_ip);
+        }
         rtsp.connect().await?;
 
         // 2. Create session
@@ -519,9 +558,16 @@ impl Connection {
             }
         }
 
+        let events_cipher = pair_verify.shared_secret().and_then(|ss| {
+            SessionKeys::derive_events_keys(&airplay_crypto::keys::SharedSecret::new(ss.to_vec())).ok().map(|k| {
+                ControlCipher::new(*k.write_key.as_bytes(), *k.read_key.as_bytes())
+            })
+        });
+
         session.set_paired()?;
 
         let (volume_events_tx, volume_events_rx) = tokio::sync::mpsc::unbounded_channel::<f32>();
+        let (remote_control_tx, remote_control_rx) = tokio::sync::mpsc::unbounded_channel::<RemoteControlCmd>();
 
         Ok(Self {
             device,
@@ -543,9 +589,14 @@ impl Connection {
             events_task: None,
             volume_events_tx: Some(volume_events_tx),
             volume_events_rx: Some(volume_events_rx),
+            remote_control_tx: Some(remote_control_tx),
+            remote_control_rx: Some(remote_control_rx),
+            events_cipher,
             render_delay_ms: 0,
             eq_config: None,
             eq_params: None,
+            sound_enhancer_params: None,
+            warmth_enhancer_params: None,
             stream_stats: crate::stats::StreamStats::new(),
             feedback_timeout_count: 0,
         })
@@ -582,6 +633,10 @@ impl Connection {
         info!("Connecting to {} at {} (HomeKit Normal pairing)", device.name, addr);
 
         let mut rtsp = RtspConnection::new(addr);
+        if let Some(local_ip) = airplay_core::net::select_physical_local_ip_for_target(ip_addr) {
+            info!("Binding RTSP connection to physical interface IP {} for receiver {}", local_ip, ip_addr);
+            rtsp.set_local_bind_ip(local_ip);
+        }
         rtsp.connect().await?;
 
         // 2. Create session
@@ -728,9 +783,16 @@ impl Connection {
             }
         }
 
+        let events_cipher = pair_verify.shared_secret().and_then(|ss| {
+            SessionKeys::derive_events_keys(&airplay_crypto::keys::SharedSecret::new(ss.to_vec())).ok().map(|k| {
+                ControlCipher::new(*k.write_key.as_bytes(), *k.read_key.as_bytes())
+            })
+        });
+
         session.set_paired()?;
 
         let (volume_events_tx, volume_events_rx) = tokio::sync::mpsc::unbounded_channel::<f32>();
+        let (remote_control_tx, remote_control_rx) = tokio::sync::mpsc::unbounded_channel::<RemoteControlCmd>();
 
         Ok(Self {
             device,
@@ -752,9 +814,14 @@ impl Connection {
             events_task: None,
             volume_events_tx: Some(volume_events_tx),
             volume_events_rx: Some(volume_events_rx),
+            remote_control_tx: Some(remote_control_tx),
+            remote_control_rx: Some(remote_control_rx),
+            events_cipher,
             render_delay_ms: 0,
             eq_config: None,
             eq_params: None,
+            sound_enhancer_params: None,
+            warmth_enhancer_params: None,
             stream_stats: crate::stats::StreamStats::new(),
             feedback_timeout_count: 0,
         })
@@ -802,6 +869,11 @@ impl Connection {
         // SETUP Phase 1 (timing/event channels)
         let local_addresses = self.rtsp.local_addr()
             .map(|sa| vec![sa.ip().to_string()])
+            .or_else(|| {
+                select_best_address(&self.device.addresses)
+                    .and_then(|target_ip| airplay_core::net::select_physical_local_ip_for_target(target_ip))
+                    .map(|ip| vec![ip.to_string()])
+            })
             .unwrap_or_default();
         let setup1_body = self.session.build_setup_phase1(local_timing_port, Some(local_addresses))?;
         tracing::debug!(
@@ -1125,6 +1197,16 @@ impl Connection {
             streamer.set_eq_params(config, params).await;
         }
 
+        // Set up sound enhancer if configured
+        if let Some(ref params) = self.sound_enhancer_params {
+            streamer.set_sound_enhancer_params(params.clone()).await;
+        }
+
+        // Set up warmth enhancer if configured
+        if let Some(ref params) = self.warmth_enhancer_params {
+            streamer.set_warmth_enhancer_params(params.clone()).await;
+        }
+
         // FLUSH before streaming — tells receiver to clear buffers and expect audio
         // starting at the given seq/rtptime.
         let flush_req = RtspRequest::flush_with_info(
@@ -1147,6 +1229,21 @@ impl Connection {
         tracing::info!("Sending SET_PARAMETER volume");
         if let Err(e) = self.set_volume(self.volume).await {
             tracing::warn!("Failed to set volume: {}", e);
+        }
+
+        // Send initial track info so HomePod enables track skipping gestures (double/triple tap)
+        if let Err(e) = self.send_track_info("Win2Pod Stream", "Windows PC", "Win2Pod").await {
+            tracing::warn!("Failed to send initial track info: {}", e);
+        }
+
+        // Send initial progress timeline (4 min duration) so HomePod treats this as a defined track
+        if let Err(e) = self.send_progress(0.0, 240.0).await {
+            tracing::warn!("Failed to send initial progress: {}", e);
+        }
+
+        // Send supported playback commands declaration to HomePod NowPlayingCap
+        if let Err(e) = self.send_supported_commands().await {
+            tracing::warn!("Failed to send supported commands: {}", e);
         }
 
         // Spawn control channel on a dedicated blocking thread for low-latency
@@ -1291,6 +1388,16 @@ impl Connection {
             streamer.set_eq_params(config, params).await;
         }
 
+        // Set up sound enhancer if configured
+        if let Some(ref params) = self.sound_enhancer_params {
+            streamer.set_sound_enhancer_params(params.clone()).await;
+        }
+
+        // Set up warmth enhancer if configured
+        if let Some(ref params) = self.warmth_enhancer_params {
+            streamer.set_warmth_enhancer_params(params.clone()).await;
+        }
+
         // FLUSH before streaming
         let flush_req = RtspRequest::flush_with_info(
             self.session.request_uri(),
@@ -1312,6 +1419,21 @@ impl Connection {
         tracing::info!("Sending SET_PARAMETER volume");
         if let Err(e) = self.set_volume(self.volume).await {
             tracing::warn!("Failed to set volume: {}", e);
+        }
+
+        // Send initial track info so HomePod enables track skipping gestures
+        if let Err(e) = self.send_track_info("Win2Pod Stream", "Windows PC", "Win2Pod").await {
+            tracing::warn!("Failed to send initial track info: {}", e);
+        }
+
+        // Send initial progress timeline so HomePod treats this as a defined track
+        if let Err(e) = self.send_progress(0.0, 240.0).await {
+            tracing::warn!("Failed to send initial progress: {}", e);
+        }
+
+        // Send supported playback commands declaration to HomePod NowPlayingCap
+        if let Err(e) = self.send_supported_commands().await {
+            tracing::warn!("Failed to send supported commands: {}", e);
         }
 
         // Spawn control channel for retransmit handling
@@ -1490,6 +1612,26 @@ impl Connection {
         self.eq_config.clone()
     }
 
+    /// Set up sound enhancer with shared parameters.
+    pub fn set_sound_enhancer_params(&mut self, params: Arc<SoundEnhancerParams>) {
+        self.sound_enhancer_params = Some(params);
+    }
+
+    /// Get a clone of the sound enhancer params Arc if set.
+    pub fn sound_enhancer_params(&self) -> Option<Arc<SoundEnhancerParams>> {
+        self.sound_enhancer_params.clone()
+    }
+
+    /// Set up warmth enhancer with shared parameters.
+    pub fn set_warmth_enhancer_params(&mut self, params: Arc<WarmthEnhancerParams>) {
+        self.warmth_enhancer_params = Some(params);
+    }
+
+    /// Get a clone of the warmth enhancer params Arc if set.
+    pub fn warmth_enhancer_params(&self) -> Option<Arc<WarmthEnhancerParams>> {
+        self.warmth_enhancer_params.clone()
+    }
+
     /// Set volume.
     pub async fn set_volume(&mut self, volume: f32) -> Result<()> {
         let clamped = volume.clamp(0.0, 1.0);
@@ -1501,6 +1643,107 @@ impl Connection {
         self.rtsp.send(volume_req).await?;
 
         Ok(())
+    }
+
+    /// Send track metadata (title, artist, album) via RTSP SET_PARAMETER with DMAP.
+    ///
+    /// HomePod touch panel requires active track metadata to enable skipping gestures
+    /// (double-tap for Next, triple-tap for Previous). Without track info, HomePod treats
+    /// the session as an unskippable live stream and emits a double-beep refusal tone.
+    pub async fn send_track_info(&mut self, title: &str, artist: &str, album: &str) -> Result<()> {
+        let rtp_ts = self.streamer.as_ref().map(|s| s.position() as u32).unwrap_or(0);
+        let body = crate::metadata::encode_dmap_metadata(title, artist, album);
+        let req = RtspRequest::set_parameter_dmap(self.session.request_uri(), rtp_ts, body);
+
+        match tokio::time::timeout(std::time::Duration::from_millis(1500), self.rtsp.send(req)).await {
+            Ok(Ok(resp)) => {
+                tracing::info!(
+                    "Track info sent to HomePod (status={}): title={:?}, artist={:?}, album={:?}",
+                    resp.status_code, title, artist, album
+                );
+                Ok(())
+            }
+            Ok(Err(e)) => {
+                tracing::warn!("Failed to send track info to HomePod: {e}");
+                Err(e.into())
+            }
+            Err(_) => {
+                tracing::warn!("Timed out waiting for track info response from HomePod");
+                Err(CoreError::Rtsp(RtspError::InvalidResponse("Track info request timed out".to_string())))
+            }
+        }
+    }
+
+    /// Send playback progress via RTSP SET_PARAMETER (text/parameters).
+    ///
+    /// Formats `progress: <start>/<current>/<end>\r\n` using 44.1 kHz RTP timestamps.
+    /// Informs the HomePod of the song's start and end boundaries, so the device
+    /// does not treat the stream as an unbounded live feed.
+    pub async fn send_progress(&mut self, position_secs: f64, duration_secs: f64) -> Result<()> {
+        let rtp_ts = self.streamer.as_ref().map(|s| s.position() as u32).unwrap_or(0);
+        let pos_frames = (position_secs.max(0.0) * 44100.0) as u32;
+        let effective_duration = if duration_secs <= 0.0 { 240.0 } else { duration_secs };
+        let dur_frames = (effective_duration * 44100.0) as u32;
+        let start_rtp = rtp_ts.wrapping_sub(pos_frames);
+        let end_rtp = start_rtp.wrapping_add(dur_frames);
+
+        let body = format!("progress: {}/{}/{}\r\n", start_rtp, rtp_ts, end_rtp).into_bytes();
+        let req = RtspRequest::set_parameter_text(self.session.request_uri(), body);
+
+        match tokio::time::timeout(std::time::Duration::from_millis(1500), self.rtsp.send(req)).await {
+            Ok(Ok(resp)) => {
+                tracing::info!(
+                    "Progress sent to HomePod (status={}): pos={:.1}s, dur={:.1}s (rtp={}/{}/{})",
+                    resp.status_code, position_secs, effective_duration, start_rtp, rtp_ts, end_rtp
+                );
+                Ok(())
+            }
+            Ok(Err(e)) => {
+                tracing::warn!("Failed to send progress to HomePod: {e}");
+                Err(e.into())
+            }
+            Err(_) => {
+                tracing::warn!("Timed out waiting for progress response from HomePod");
+                Err(CoreError::Rtsp(RtspError::InvalidResponse("Progress request timed out".to_string())))
+            }
+        }
+    }
+
+    /// Sends `updateMRSupportedCommands` to the HomePod receiver via RTSP POST /command.
+    ///
+    /// Declares support for Play (0), Pause (1), TogglePlayPause (2), Stop (3),
+    /// NextTrack (4), and PreviousTrack (5) to the receiver's `NowPlayingCap` service.
+    /// This enables remote controls (such as iPhone Home app and physical double/triple tap).
+    pub async fn send_supported_commands(&mut self) -> Result<()> {
+        let plist_bytes = match crate::metadata::build_supported_commands_plist() {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::warn!("Failed to serialize supported commands plist: {e}");
+                return Ok(());
+            }
+        };
+
+        let req = RtspRequest::post_command_bplist(plist_bytes);
+
+        match tokio::time::timeout(std::time::Duration::from_millis(1500), self.rtsp.send(req)).await {
+            Ok(Ok(resp)) => {
+                tracing::info!(
+                    "updateMRSupportedCommands sent to HomePod (status={})",
+                    resp.status_code
+                );
+                Ok(())
+            }
+            Ok(Err(e)) => {
+                tracing::warn!("Failed to send updateMRSupportedCommands to HomePod: {e}");
+                Err(e.into())
+            }
+            Err(_) => {
+                tracing::warn!("Timed out waiting for updateMRSupportedCommands response from HomePod");
+                Err(CoreError::Rtsp(RtspError::InvalidResponse(
+                    "updateMRSupportedCommands request timed out".to_string(),
+                )))
+            }
+        }
     }
 
     /// Send feedback/keepalive to the receiver.
@@ -1754,6 +1997,11 @@ impl Connection {
         // SETUP Phase 1 (timing/event channels)
         let local_addresses = self.rtsp.local_addr()
             .map(|sa| vec![sa.ip().to_string()])
+            .or_else(|| {
+                select_best_address(&self.device.addresses)
+                    .and_then(|target_ip| airplay_core::net::select_physical_local_ip_for_target(target_ip))
+                    .map(|ip| vec![ip.to_string()])
+            })
             .unwrap_or_default();
         let setup1_body = self.session.build_setup_phase1(local_timing_port, Some(local_addresses))?;
         tracing::debug!(
@@ -2001,7 +2249,7 @@ impl Connection {
 
     /// Internal helper to launch the reverse events stream listener.
     fn start_events_listener(&mut self, stream: TcpStream) {
-        let tx = if let Some(ref tx) = self.volume_events_tx {
+        let volume_tx = if let Some(ref tx) = self.volume_events_tx {
             tx.clone()
         } else {
             let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<f32>();
@@ -2009,7 +2257,16 @@ impl Connection {
             self.volume_events_tx = Some(tx.clone());
             tx
         };
-        let task = tokio::spawn(run_events_listener(stream, tx));
+        let remote_tx = if let Some(ref tx) = self.remote_control_tx {
+            tx.clone()
+        } else {
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<RemoteControlCmd>();
+            self.remote_control_rx = Some(rx);
+            self.remote_control_tx = Some(tx.clone());
+            tx
+        };
+        let cipher = self.events_cipher.take();
+        let task = tokio::spawn(run_events_listener(stream, volume_tx, remote_tx, cipher));
         self.events_task = Some(task);
     }
 
@@ -2017,11 +2274,18 @@ impl Connection {
     pub fn take_volume_events_rx(&mut self) -> Option<tokio::sync::mpsc::UnboundedReceiver<f32>> {
         self.volume_events_rx.take()
     }
+
+    /// Take the remote playback control events receiver channel if available.
+    pub fn take_remote_control_rx(&mut self) -> Option<tokio::sync::mpsc::UnboundedReceiver<RemoteControlCmd>> {
+        self.remote_control_rx.take()
+    }
 }
 
 /// Helper to convert AirPlay volume in decibels or linear fraction to 0.0..=1.0 scale.
 pub fn db_or_linear_to_volume(val: f32) -> f32 {
-    if val <= -140.0 {
+    if val <= -140.0 || val <= -29.5 {
+        // AirPlay minimum attenuation limit is -30.0 dB (and -144.0 dB for mute).
+        // Any value at or below -29.5 dB represents complete silence (0.0 volume).
         0.0
     } else if val <= 0.0 {
         10.0_f32.powf(val / 20.0).clamp(0.0, 1.0)
@@ -2078,6 +2342,87 @@ pub fn find_volume_in_plist(val: &plist::Value) -> Option<f32> {
     None
 }
 
+/// Helper to extract playback command from a dictionary.
+fn extract_cmd_from_dict(dict: &plist::Dictionary) -> Option<RemoteControlCmd> {
+    // 1. Check modernMediaRemoteCommand or command ID
+    let modern_cmd = dict.get("modernMediaRemoteCommand")
+        .or_else(|| dict.get("command"))
+        .or_else(|| dict.get("commandID"));
+
+    if let Some(val) = modern_cmd {
+        let code = if let Some(i) = val.as_unsigned_integer() {
+            Some(i as u32)
+        } else if let Some(i) = val.as_signed_integer() {
+            Some(i as u32)
+        } else if let Some(s) = val.as_string() {
+            s.trim().parse::<u32>().ok()
+        } else {
+            None
+        };
+
+        if let Some(code) = code {
+            let mapped = match code {
+                0 => Some(RemoteControlCmd::Play),
+                1 | 3 => Some(RemoteControlCmd::Pause),
+                2 => Some(RemoteControlCmd::TogglePlayPause),
+                4 | 17 => Some(RemoteControlCmd::NextTrack),
+                5 | 18 => Some(RemoteControlCmd::PreviousTrack),
+                _ => None,
+            };
+            if mapped.is_some() {
+                return mapped;
+            }
+        }
+    }
+
+    // 2. Fallback to DACP 4-letter or string code in "value" or "command"
+    let val_str = dict.get("value")
+        .or_else(|| dict.get("command"))
+        .and_then(|v| v.as_string());
+
+    if let Some(val_str) = val_str {
+        let trimmed = val_str.trim().to_ascii_lowercase();
+        match trimmed.as_str() {
+            "play" => return Some(RemoteControlCmd::Play),
+            "paus" => return Some(RemoteControlCmd::Pause),
+            "playpause" | "pply" => return Some(RemoteControlCmd::TogglePlayPause),
+            "stop" => return Some(RemoteControlCmd::Stop),
+            "nitm" | "skfw" | "next" | "nexttrack" | "forward" => return Some(RemoteControlCmd::NextTrack),
+            "pitm" | "skbw" | "prev" | "previoustrack" | "rewind" => return Some(RemoteControlCmd::PreviousTrack),
+            _ => {}
+        }
+    }
+
+    None
+}
+
+/// Recursively search a plist Value for remote control playback commands.
+pub fn find_remote_control_in_plist(val: &plist::Value) -> Option<RemoteControlCmd> {
+    let dict = val.as_dictionary()?;
+
+    // Check type: "sendMediaRemoteCommand" or "mediaRemoteCommand"
+    let event_type = dict.get("type").and_then(|v| v.as_string());
+    if let Some(t) = event_type {
+        if t != "sendMediaRemoteCommand" && t != "mediaRemoteCommand" {
+            return None;
+        }
+    }
+
+    // Try top-level dictionary
+    if let Some(cmd) = extract_cmd_from_dict(dict) {
+        return Some(cmd);
+    }
+
+    // Try nested "params" dictionary if present
+    if let Some(params) = dict.get("params").and_then(|p| p.as_dictionary()) {
+        if let Some(cmd) = extract_cmd_from_dict(params) {
+            return Some(cmd);
+        }
+    }
+
+    None
+}
+
 /// Parse volume from an AirPlay event body (plist or text).
 pub fn parse_volume_from_event(content_type: Option<&str>, body: &[u8]) -> Option<f32> {
     // 1. Try plist first if header suggests plist or body has plist magic
@@ -2117,16 +2462,74 @@ pub fn parse_volume_from_event(content_type: Option<&str>, body: &[u8]) -> Optio
     None
 }
 
-/// Background task that reads incoming events (like volume changes) on the reverse events stream.
+/// Parse remote playback control command from an AirPlay event body.
+pub fn parse_remote_control_from_event(
+    content_type: Option<&str>,
+    body: &[u8],
+) -> Option<RemoteControlCmd> {
+    // 1. Try plist first if header suggests plist or body has plist magic
+    if content_type.map_or(false, |ct| ct.contains("plist"))
+        || body.starts_with(b"bplist00")
+        || body.starts_with(b"<?xml")
+    {
+        if let Ok(plist_val) = plist::Value::from_reader(std::io::Cursor::new(body)) {
+            if let Some(cmd) = find_remote_control_in_plist(&plist_val) {
+                return Some(cmd);
+            }
+        }
+    }
+
+    // 2. Fallback: try plist parsing even if header didn't specify
+    if let Ok(plist_val) = plist::Value::from_reader(std::io::Cursor::new(body)) {
+        if let Some(cmd) = find_remote_control_in_plist(&plist_val) {
+            return Some(cmd);
+        }
+    }
+
+    None
+}
+
+/// Background task that reads incoming events (like volume and playback controls) on the reverse events stream.
 async fn run_events_listener(
     stream: TcpStream,
     volume_tx: tokio::sync::mpsc::UnboundedSender<f32>,
+    remote_tx: tokio::sync::mpsc::UnboundedSender<RemoteControlCmd>,
+    mut cipher: Option<ControlCipher>,
 ) {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     let (mut read_half, mut write_half) = stream.into_split();
     let mut buf = [0u8; 4096];
-    let mut buffer = Vec::new();
+    let mut raw_buffer = Vec::new();
+    let mut plaintext_buffer = Vec::new();
+    let mut is_plaintext_mode = cipher.is_none();
+
+    // Send updateMRSupportedCommands notification over events channel
+    if let Ok(plist_bytes) = crate::metadata::build_supported_commands_plist() {
+        let req_text = format!(
+            "POST /command HTTP/1.1\r\nContent-Type: application/x-apple-binary-plist\r\nContent-Length: {}\r\n\r\n",
+            plist_bytes.len()
+        );
+        let mut msg = req_text.into_bytes();
+        msg.extend_from_slice(&plist_bytes);
+
+        let out_bytes = if let Some(ref mut c) = cipher {
+            match c.encrypt(&msg) {
+                Ok(enc) => enc,
+                Err(e) => {
+                    tracing::warn!("Failed to encrypt updateMRSupportedCommands on events channel: {e}");
+                    msg
+                }
+            }
+        } else {
+            msg
+        };
+        if let Err(e) = write_half.write_all(&out_bytes).await {
+            tracing::warn!("Failed to write updateMRSupportedCommands to events channel: {e}");
+        } else {
+            tracing::info!("Sent updateMRSupportedCommands over events channel");
+        }
+    }
 
     loop {
         let n = match read_half.read(&mut buf).await {
@@ -2141,17 +2544,54 @@ async fn run_events_listener(
             }
         };
 
-        buffer.extend_from_slice(&buf[..n]);
+        if is_plaintext_mode {
+            plaintext_buffer.extend_from_slice(&buf[..n]);
+        } else {
+            raw_buffer.extend_from_slice(&buf[..n]);
 
-        // Process any complete messages in buffer
-        while !buffer.is_empty() {
-            if let Some(header_end) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
-                let header_bytes = &buffer[..header_end];
+            // If the buffer clearly starts with ASCII RTSP/HTTP methods, receiver sent unencrypted data
+            if plaintext_buffer.is_empty()
+                && (raw_buffer.starts_with(b"POST ")
+                    || raw_buffer.starts_with(b"RTSP/")
+                    || raw_buffer.starts_with(b"GET "))
+            {
+                is_plaintext_mode = true;
+                cipher = None;
+                plaintext_buffer.extend_from_slice(&raw_buffer);
+                raw_buffer.clear();
+            } else {
+                // Decrypt HAP framing: [u16_le len] [len ciphertext] [16 tag]
+                while raw_buffer.len() >= 2 {
+                    let block_len = u16::from_le_bytes([raw_buffer[0], raw_buffer[1]]) as usize;
+                    let total_frame_len = 2 + block_len + 16;
+                    if raw_buffer.len() < total_frame_len {
+                        break;
+                    }
+                    let frame: Vec<u8> = raw_buffer.drain(..total_frame_len).collect();
+                    if let Some(ref mut c) = cipher {
+                        match c.decrypt_block(&frame[2..], block_len as u16) {
+                            Ok(plain) => {
+                                tracing::debug!("Events channel decrypted {} bytes", plain.len());
+                                plaintext_buffer.extend_from_slice(&plain);
+                            }
+                            Err(e) => {
+                                tracing::warn!("Events channel HAP decryption error (block_len={}): {}", block_len, e);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process any complete RTSP/HTTP messages in plaintext_buffer
+        while !plaintext_buffer.is_empty() {
+            if let Some(header_end) = plaintext_buffer.windows(4).position(|w| w == b"\r\n\r\n") {
+                let header_bytes = &plaintext_buffer[..header_end];
                 let header_text = String::from_utf8_lossy(header_bytes);
 
                 let mut content_length = 0usize;
                 let mut content_type = None;
-                let mut cseq = None;
 
                 for line in header_text.lines() {
                     let trimmed = line.trim();
@@ -2162,58 +2602,88 @@ async fn run_events_listener(
                             content_length = v.parse::<usize>().unwrap_or(0);
                         } else if k == "content-type" {
                             content_type = Some(v.to_string());
-                        } else if k == "cseq" {
-                            cseq = Some(v.to_string());
                         }
                     }
                 }
 
                 let total_len = header_end + 4 + content_length;
-                if buffer.len() < total_len {
+                if plaintext_buffer.len() < total_len {
                     // Need more bytes to complete the body
                     break;
                 }
 
-                let body = &buffer[header_end + 4..total_len];
+                let body = &plaintext_buffer[header_end + 4..total_len];
                 tracing::debug!(
                     "Events connection incoming request: {} (content_len={})",
                     header_text.lines().next().unwrap_or(""),
                     content_length
                 );
 
+                if let Ok(plist_val) = plist::Value::from_reader(std::io::Cursor::new(body)) {
+                    tracing::info!("HomePod event plist: {:?}", plist_val);
+                }
+
                 if let Some(vol) = parse_volume_from_event(content_type.as_deref(), body) {
                     tracing::info!("Received volume from HomePod reverse event: {:.3}", vol);
                     let _ = volume_tx.send(vol);
                 }
 
-                // Send 200 OK reply
-                let response = if let Some(ref seq) = cseq {
-                    format!(
-                        "RTSP/1.0 200 OK\r\nCSeq: {}\r\nServer: AirTunes/366.0\r\nContent-Length: 0\r\n\r\n",
-                        seq
-                    )
+                if let Some(cmd) = parse_remote_control_from_event(content_type.as_deref(), body) {
+                    tracing::info!("Received remote control command from HomePod reverse event: {:?}", cmd);
+                    let _ = remote_tx.send(cmd);
+                }
+
+                // Send 200 OK reply matching the request protocol and including Audio-Latency
+                let proto = header_text
+                    .lines()
+                    .next()
+                    .and_then(|line| line.split_whitespace().nth(2))
+                    .unwrap_or("HTTP/1.1");
+
+                let mut response = format!("{proto} 200 OK\r\nContent-Length: 0\r\nAudio-Latency: 0\r\n");
+                for line in header_text.lines() {
+                    let lower = line.to_ascii_lowercase();
+                    if lower.starts_with("cseq:") || lower.starts_with("server:") {
+                        response.push_str(line.trim());
+                        response.push_str("\r\n");
+                    }
+                }
+                response.push_str("\r\n");
+
+                let resp_bytes = if let Some(ref mut c) = cipher {
+                    match c.encrypt(response.as_bytes()) {
+                        Ok(enc) => enc,
+                        Err(e) => {
+                            tracing::warn!("Failed to encrypt events 200 OK response: {}", e);
+                            response.into_bytes()
+                        }
+                    }
                 } else {
-                    "HTTP/1.1 200 OK\r\nServer: AirTunes/366.0\r\nContent-Length: 0\r\n\r\n".to_string()
+                    response.into_bytes()
                 };
 
-                if let Err(e) = write_half.write_all(response.as_bytes()).await {
+                if let Err(e) = write_half.write_all(&resp_bytes).await {
                     tracing::debug!("Error sending response on events connection: {}", e);
                     return;
                 }
 
-                buffer.drain(..total_len);
-            } else if buffer.starts_with(b"bplist00") {
-                if let Ok(plist_val) = plist::Value::from_reader(std::io::Cursor::new(&buffer)) {
+                plaintext_buffer.drain(..total_len);
+            } else if plaintext_buffer.starts_with(b"bplist00") {
+                if let Ok(plist_val) = plist::Value::from_reader(std::io::Cursor::new(&plaintext_buffer)) {
                     if let Some(vol) = find_volume_in_plist(&plist_val) {
                         tracing::info!("Received volume from HomePod raw bplist: {:.3}", vol);
                         let _ = volume_tx.send(vol);
                     }
+                    if let Some(cmd) = find_remote_control_in_plist(&plist_val) {
+                        tracing::info!("Received remote control from HomePod raw bplist: {:?}", cmd);
+                        let _ = remote_tx.send(cmd);
+                    }
                 }
-                buffer.clear();
+                plaintext_buffer.clear();
                 break;
-            } else if buffer.len() > 65536 {
-                tracing::warn!("Events connection buffer overflow, clearing {} bytes", buffer.len());
-                buffer.clear();
+            } else if plaintext_buffer.len() > 65536 {
+                tracing::warn!("Events connection buffer overflow, clearing {} bytes", plaintext_buffer.len());
+                plaintext_buffer.clear();
                 break;
             } else {
                 break;
@@ -2402,6 +2872,7 @@ mod tests {
 
     mod link_local_detection {
         use super::*;
+        use airplay_core::net::is_link_local_v6;
 
         #[test]
         fn detects_link_local_fe80() {
@@ -2779,6 +3250,107 @@ mod tests {
             // From any state, stop() should set: PlaybackState::Stopped
             let stopped = PlaybackState::Stopped;
             assert_eq!(stopped, PlaybackState::Stopped);
+        }
+    }
+
+    mod remote_control_events {
+        use super::*;
+        use plist::Dictionary;
+
+        fn create_remote_event(modern_cmd: Option<u32>, value: Option<&str>) -> plist::Value {
+            let mut dict = Dictionary::new();
+            dict.insert("type".into(), "sendMediaRemoteCommand".into());
+            if let Some(cmd) = modern_cmd {
+                dict.insert("modernMediaRemoteCommand".into(), (cmd as u64).into());
+            }
+            if let Some(val) = value {
+                dict.insert("value".into(), val.into());
+            }
+            plist::Value::Dictionary(dict)
+        }
+
+        #[test]
+        fn test_modern_command_ids() {
+            assert_eq!(
+                find_remote_control_in_plist(&create_remote_event(Some(0), None)),
+                Some(RemoteControlCmd::Play)
+            );
+            assert_eq!(
+                find_remote_control_in_plist(&create_remote_event(Some(1), None)),
+                Some(RemoteControlCmd::Pause)
+            );
+            assert_eq!(
+                find_remote_control_in_plist(&create_remote_event(Some(2), None)),
+                Some(RemoteControlCmd::TogglePlayPause)
+            );
+            assert_eq!(
+                find_remote_control_in_plist(&create_remote_event(Some(4), None)),
+                Some(RemoteControlCmd::NextTrack)
+            );
+            assert_eq!(
+                find_remote_control_in_plist(&create_remote_event(Some(17), None)),
+                Some(RemoteControlCmd::NextTrack)
+            );
+            assert_eq!(
+                find_remote_control_in_plist(&create_remote_event(Some(5), None)),
+                Some(RemoteControlCmd::PreviousTrack)
+            );
+            assert_eq!(
+                find_remote_control_in_plist(&create_remote_event(Some(18), None)),
+                Some(RemoteControlCmd::PreviousTrack)
+            );
+        }
+
+        #[test]
+        fn test_dacp_string_fallback() {
+            assert_eq!(
+                find_remote_control_in_plist(&create_remote_event(None, Some("play"))),
+                Some(RemoteControlCmd::Play)
+            );
+            assert_eq!(
+                find_remote_control_in_plist(&create_remote_event(None, Some("paus"))),
+                Some(RemoteControlCmd::Pause)
+            );
+            assert_eq!(
+                find_remote_control_in_plist(&create_remote_event(None, Some("nitm"))),
+                Some(RemoteControlCmd::NextTrack)
+            );
+            assert_eq!(
+                find_remote_control_in_plist(&create_remote_event(None, Some("skfw"))),
+                Some(RemoteControlCmd::NextTrack)
+            );
+            assert_eq!(
+                find_remote_control_in_plist(&create_remote_event(None, Some("pitm"))),
+                Some(RemoteControlCmd::PreviousTrack)
+            );
+            assert_eq!(
+                find_remote_control_in_plist(&create_remote_event(None, Some("skbw"))),
+                Some(RemoteControlCmd::PreviousTrack)
+            );
+            assert_eq!(
+                find_remote_control_in_plist(&create_remote_event(None, Some("playpause"))),
+                Some(RemoteControlCmd::TogglePlayPause)
+            );
+        }
+
+        #[test]
+        fn test_nested_params_dictionary() {
+            let mut dict = Dictionary::new();
+            dict.insert("type".into(), "sendMediaRemoteCommand".into());
+            let mut params = Dictionary::new();
+            params.insert("modernMediaRemoteCommand".into(), 4u64.into());
+            dict.insert("params".into(), plist::Value::Dictionary(params));
+            assert_eq!(
+                find_remote_control_in_plist(&plist::Value::Dictionary(dict)),
+                Some(RemoteControlCmd::NextTrack)
+            );
+        }
+
+        #[test]
+        fn test_non_remote_command_ignored() {
+            let mut dict = Dictionary::new();
+            dict.insert("type".into(), "updateInfo".into());
+            assert_eq!(find_remote_control_in_plist(&plist::Value::Dictionary(dict)), None);
         }
     }
 }

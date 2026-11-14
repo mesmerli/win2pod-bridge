@@ -26,6 +26,8 @@ fdk-aac = { workspace = true, optional = true }
 
 # Audio processing
 biquad = "0.4"
+oximedia-effects = "0.2.1"
+serde = { workspace = true, features = ["derive"] }
 
 [features]
 default = []

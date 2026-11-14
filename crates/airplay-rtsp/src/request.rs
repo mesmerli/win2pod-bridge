@@ -151,6 +151,19 @@ impl RtspRequest {
             .body(body)
     }
 
+    pub fn set_parameter_dmap(uri: impl Into<String>, rtptime: u32, body: Vec<u8>) -> Self {
+        Self::new(RtspMethod::SetParameter, uri)
+            .header("Content-Type", "application/x-dmap-tagged")
+            .header("RTP-Info", format!("rtptime={}", rtptime))
+            .body(body)
+    }
+
+    pub fn post_command_bplist(body: Vec<u8>) -> Self {
+        Self::new(RtspMethod::Post, "/command")
+            .content_type_bplist()
+            .body(body)
+    }
+
     pub fn get_parameter_volume(uri: impl Into<String>) -> Self {
         Self::new(RtspMethod::GetParameter, uri)
             .header("Content-Type", "text/parameters")

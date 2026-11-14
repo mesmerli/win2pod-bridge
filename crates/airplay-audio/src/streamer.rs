@@ -4,6 +4,8 @@ use airplay_core::{StreamConfig, error::Result};
 use crate::{AudioBuffer, AudioDecoder, RtpSender, LiveAudioDecoder};
 use crate::encoder::{create_encoder, AudioEncoder};
 use crate::eq::{EqConfig, EqParams, Equalizer};
+use crate::enhancer::{SoundEnhancer, SoundEnhancerParams};
+use crate::warmth::{WarmthEnhancer, WarmthEnhancerParams};
 use airplay_timing::{Clock, ClockOffset, unix_to_ntp};
 use std::sync::{Arc, atomic::{AtomicU64, AtomicU8, Ordering}};
 use tokio::sync::{Mutex, watch};
@@ -11,6 +13,19 @@ use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration, Instant};
 use crossbeam_channel::{bounded, Sender, Receiver};
 use std::net::{SocketAddr, UdpSocket};
+use std::sync::RwLock;
+
+/// Hook called after DSP processing and before encoding, receiving stereo interleaved PCM i16 samples.
+pub type PostDspHook = Arc<dyn Fn(&[i16]) + Send + Sync>;
+
+pub static POST_DSP_HOOK: RwLock<Option<PostDspHook>> = RwLock::new(None);
+
+/// Set or clear the global post-DSP audio tap hook (e.g. for real-time spectrum and output peak monitoring).
+pub fn set_post_dsp_hook(hook: Option<PostDspHook>) {
+    if let Ok(mut lock) = POST_DSP_HOOK.write() {
+        *lock = hook;
+    }
+}
 
 /// Streaming state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -386,6 +401,12 @@ struct StreamerInner {
     encoder: Option<Box<dyn AudioEncoder>>,
     /// Audio equalizer for processing audio before encoding.
     equalizer: Option<Equalizer>,
+    /// Sound enhancer for Harmonic Exciter (HE) high-frequency restoration.
+    enhancer: Option<SoundEnhancer>,
+    /// Warmth enhancer for Warmth Enhancer (WE) vinyl/tube acoustic enhancement.
+    warmth: Option<WarmthEnhancer>,
+    /// Track consecutive silent frames to enter zero-overhead DSP sleep/bypass mode
+    consecutive_silent_frames: usize,
     /// Track whether first audio packet has been sent (requires marker bit)
     first_packet_sent: bool,
     /// Render delay in nanoseconds added to NTP timestamps in sync packets.
@@ -448,6 +469,9 @@ impl AudioStreamer {
                 live_decoder: None,
                 encoder: None,
                 equalizer: None,
+                enhancer: None,
+                warmth: None,
+                consecutive_silent_frames: 0,
                 first_packet_sent: false,
                 render_delay_ns: 0,
                 use_ptp_sync: false,
@@ -513,6 +537,34 @@ impl AudioStreamer {
     pub async fn eq_params(&self) -> Option<Arc<EqParams>> {
         let inner = self.inner.lock().await;
         inner.equalizer.as_ref().map(|eq| Arc::clone(eq.params()))
+    }
+
+    /// Set up the sound enhancer with shared parameters.
+    pub async fn set_sound_enhancer_params(&mut self, params: Arc<SoundEnhancerParams>) {
+        let mut inner = self.inner.lock().await;
+        let sample_rate = inner.config.audio_format.sample_rate.as_hz();
+        inner.enhancer = Some(SoundEnhancer::new(params, sample_rate));
+        tracing::info!("SoundEnhancer enabled at {} Hz", sample_rate);
+    }
+
+    /// Get a clone of the sound enhancer params if set up.
+    pub async fn sound_enhancer_params(&self) -> Option<Arc<SoundEnhancerParams>> {
+        let inner = self.inner.lock().await;
+        inner.enhancer.as_ref().map(|enhancer| Arc::clone(enhancer.params()))
+    }
+
+    /// Set up the warmth enhancer with shared parameters.
+    pub async fn set_warmth_enhancer_params(&mut self, params: Arc<WarmthEnhancerParams>) {
+        let mut inner = self.inner.lock().await;
+        let sample_rate = inner.config.audio_format.sample_rate.as_hz();
+        inner.warmth = Some(WarmthEnhancer::new(params, sample_rate));
+        tracing::info!("WarmthEnhancer enabled at {} Hz", sample_rate);
+    }
+
+    /// Get a clone of the warmth enhancer params if set up.
+    pub async fn warmth_enhancer_params(&self) -> Option<Arc<WarmthEnhancerParams>> {
+        let inner = self.inner.lock().await;
+        inner.warmth.as_ref().map(|warmth| Arc::clone(warmth.params()))
     }
 
     /// Handle retransmit request from control channel (delegates to first sender).
@@ -873,6 +925,13 @@ impl AudioStreamer {
         if let Some(ref mut eq) = inner.equalizer {
             eq.reset();
         }
+        if let Some(ref mut enhancer) = inner.enhancer {
+            enhancer.reset();
+        }
+        if let Some(ref mut warmth) = inner.warmth {
+            warmth.reset();
+        }
+        inner.consecutive_silent_frames = 0;
         inner.current_timestamp = position_samples;
         self.timestamp_cache.store(position_samples, Ordering::Relaxed);
         Ok(())
@@ -1073,14 +1132,53 @@ async fn run_streamer(
                     );
                 }
 
-                // Process through equalizer if enabled
-                let samples_to_encode: Vec<i16> = if let Some(ref mut eq) = guard.equalizer {
-                    let mut samples = (*frame.samples).clone();
-                    eq.process(&mut samples);
-                    samples
+                // Detect audible audio vs. digital silence
+                let is_silent = frame.samples.iter().all(|&s| s.abs() <= 2);
+                if is_silent {
+                    guard.consecutive_silent_frames = guard.consecutive_silent_frames.saturating_add(1);
                 } else {
+                    guard.consecutive_silent_frames = 0;
+                }
+
+                // Process through DSP chain in order: HE (Harmonic Exciter) -> EQ (Equalizer) -> WE (Warmth Enhancer)
+                // Silence Fast-Bypass:
+                // When audio is continuous silence (> 3 frames, ~25-70ms), filters have naturally
+                // rung down to absolute zero. We reset filter states once and completely bypass DSP loops.
+                let samples_to_encode: Vec<i16> = if guard.consecutive_silent_frames >= 4 {
+                    if guard.consecutive_silent_frames == 4 {
+                        if let Some(ref mut enhancer) = guard.enhancer {
+                            enhancer.reset();
+                        }
+                        if let Some(ref mut eq) = guard.equalizer {
+                            eq.reset();
+                        }
+                        if let Some(ref mut warmth) = guard.warmth {
+                            warmth.reset();
+                        }
+                    }
+                    // 100% DSP sleep / bypass: direct pass of silent PCM
                     (*frame.samples).clone()
+                } else {
+                    // Active audio or natural filter ring-down decay
+                    let mut samples = (*frame.samples).clone();
+                    if let Some(ref mut enhancer) = guard.enhancer {
+                        enhancer.process(&mut samples);
+                    }
+                    if let Some(ref mut eq) = guard.equalizer {
+                        eq.process(&mut samples);
+                    }
+                    if let Some(ref mut warmth) = guard.warmth {
+                        warmth.process(&mut samples);
+                    }
+                    samples
                 };
+
+                // Notify post-DSP tap for visualization (spectrum response, peak monitoring)
+                if let Ok(guard_hook) = POST_DSP_HOOK.read() {
+                    if let Some(ref hook) = *guard_hook {
+                        hook(&samples_to_encode);
+                    }
+                }
 
                 // Encode synchronously
                 let encode_start = Instant::now();

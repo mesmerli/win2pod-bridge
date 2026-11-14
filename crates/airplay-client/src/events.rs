@@ -4,6 +4,17 @@ use airplay_core::{Device, DeviceId};
 use crate::PlaybackState;
 use async_trait::async_trait;
 
+/// Playback command received from an AirPlay 2 receiver (such as a HomePod tap or Siri).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemoteControlCmd {
+    Play,
+    Pause,
+    TogglePlayPause,
+    NextTrack,
+    PreviousTrack,
+    Stop,
+}
+
 /// Events emitted by the client.
 #[derive(Debug, Clone)]
 pub enum ClientEvent {
@@ -21,6 +32,8 @@ pub enum ClientEvent {
     PositionUpdated(f64),
     /// Volume changed.
     VolumeChanged(f32),
+    /// Remote playback control command received from the receiver.
+    RemoteControl(RemoteControlCmd),
     /// Buffer level changed.
     BufferLevelChanged(f32),
     /// Error occurred.

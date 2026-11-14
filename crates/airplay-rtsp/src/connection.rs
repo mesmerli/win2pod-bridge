@@ -1,14 +1,14 @@
 //! RTSP connection management.
 
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use airplay_core::error::{Error as CoreError, Result, RtspError};
 use airplay_crypto::chacha::ControlCipher;
 use async_trait::async_trait;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::net::TcpStream;
+use tokio::net::{TcpSocket, TcpStream};
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 
@@ -18,6 +18,7 @@ use crate::{RtspRequest, RtspResponse};
 /// RTSP connection to an AirPlay receiver.
 pub struct RtspConnection {
     addr: SocketAddr,
+    local_bind_ip: Option<IpAddr>,
     cseq: u32,
     cipher: Option<ControlCipher>,
     stream: Option<TcpStream>,
@@ -30,6 +31,7 @@ impl RtspConnection {
     pub fn new(addr: SocketAddr) -> Self {
         Self {
             addr,
+            local_bind_ip: None,
             cseq: 0,
             cipher: None,
             stream: None,
@@ -37,11 +39,32 @@ impl RtspConnection {
         }
     }
 
+    /// Set an explicit local IP address to bind to before connecting.
+    pub fn set_local_bind_ip(&mut self, ip: IpAddr) {
+        self.local_bind_ip = Some(ip);
+    }
+
     /// Connect to the receiver.
     pub async fn connect(&mut self) -> Result<()> {
-        let stream = TcpStream::connect(self.addr)
-            .await
-            .map_err(|_| RtspError::ConnectionRefused)?;
+        let stream = if let Some(local_ip) = self.local_bind_ip {
+            let socket = match self.addr {
+                SocketAddr::V4(_) => TcpSocket::new_v4()
+                    .map_err(|_| RtspError::ConnectionRefused)?,
+                SocketAddr::V6(_) => TcpSocket::new_v6()
+                    .map_err(|_| RtspError::ConnectionRefused)?,
+            };
+            let bind_addr = SocketAddr::new(local_ip, 0);
+            if let Err(e) = socket.bind(bind_addr) {
+                tracing::warn!("Failed to bind TCP socket to local physical IP {}: {e}", local_ip);
+            }
+            socket.connect(self.addr)
+                .await
+                .map_err(|_| RtspError::ConnectionRefused)?
+        } else {
+            TcpStream::connect(self.addr)
+                .await
+                .map_err(|_| RtspError::ConnectionRefused)?
+        };
         self.stream = Some(stream);
         Ok(())
     }

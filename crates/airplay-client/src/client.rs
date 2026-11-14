@@ -534,8 +534,13 @@ impl AirPlayClient {
         let mut peer_addresses: Vec<String> = devices.iter()
             .flat_map(|d| d.addresses.iter().find(|a| a.is_ipv4()).map(|a| a.to_string()))
             .collect();
-        if let Some(local_addr) = connections[0].local_addr() {
-            peer_addresses.push(local_addr.ip().to_string());
+        let local_ip = connections[0].local_addr().map(|sa| sa.ip())
+            .or_else(|| {
+                devices[0].addresses.iter().find(|a| a.is_ipv4())
+                    .and_then(|target_ip| airplay_core::net::select_physical_local_ip_for_target(target_ip))
+            });
+        if let Some(ip) = local_ip {
+            peer_addresses.push(ip.to_string());
         }
 
         // Setup primary (first device) with PTP BMCA

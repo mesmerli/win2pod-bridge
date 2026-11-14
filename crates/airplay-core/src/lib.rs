@@ -13,6 +13,7 @@ pub mod codec;
 pub mod device;
 pub mod error;
 pub mod features;
+pub mod net;
 pub mod stream;
 
 pub use codec::{AudioCodec, AudioFormat, SampleRate};

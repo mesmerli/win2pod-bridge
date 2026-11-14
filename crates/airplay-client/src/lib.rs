@@ -42,6 +42,7 @@ mod builder;
 mod events;
 mod raop_connection;
 mod stats;
+pub mod metadata;
 
 pub use client::AirPlayClient;
 pub use connection::{Connection, StreamingParams};
@@ -49,7 +50,7 @@ pub use raop_connection::RaopConnection;
 pub use group::{DeviceGroup, GroupMember};
 pub use playback::{PlaybackState, PlaybackInfo};
 pub use builder::ClientBuilder;
-pub use events::{ClientEvent, EventHandler, NoOpHandler, CallbackHandler};
+pub use events::{ClientEvent, EventHandler, NoOpHandler, CallbackHandler, RemoteControlCmd};
 pub use stats::{StreamStats, StatsSnapshot, DeviceStatsSnapshot};
 
 // Re-export commonly used types

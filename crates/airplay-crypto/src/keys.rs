@@ -79,6 +79,23 @@ impl SessionKeys {
         let key = hkdf::derive_pair_verify_key(shared_secret.as_bytes())?;
         Ok(EncryptionKey(key))
     }
+
+    /// Derive session keys for events channel encryption.
+    ///
+    /// The events channel uses HAP ChaCha20-Poly1305 AEAD framing.
+    /// In the AirPlay 2 specification, the receiver (HomePod) writes with `Events-Write`
+    /// and reads with `Events-Read`. Therefore, the sender (win2pod) must write with
+    /// `Events-Read` (so the receiver can read it) and read with `Events-Write` (to decrypt
+    /// what the receiver wrote).
+    pub fn derive_events_keys(shared_secret: &SharedSecret) -> Result<Self, CryptoError> {
+        let write_key = hkdf::derive_events_write_key(shared_secret.as_bytes())?;
+        let read_key = hkdf::derive_events_read_key(shared_secret.as_bytes())?;
+
+        Ok(Self {
+            write_key: EncryptionKey(write_key),
+            read_key: EncryptionKey(read_key),
+        })
+    }
 }
 
 /// Derive stream keys from a FairPlay session key.

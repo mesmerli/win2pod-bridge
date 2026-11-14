@@ -42,11 +42,44 @@ impl ServiceBrowser {
         let port = service_info.get_port();
 
         // Collect addresses - mdns-sd returns IpAddr directly
-        let addresses: Vec<IpAddr> = service_info.get_addresses().iter().copied().collect();
+        let raw_addresses: Vec<IpAddr> = service_info.get_addresses().iter().copied().collect();
 
-        if addresses.is_empty() {
+        if raw_addresses.is_empty() {
             debug!("Service {} has no addresses, skipping", name);
             return None;
+        }
+
+        let physicals = airplay_core::net::get_physical_interfaces();
+        let mut addresses = Vec::new();
+        // 1. First add IPv4 addresses matching our physical interface subnets
+        for addr in &raw_addresses {
+            if addr.is_ipv4() && !airplay_core::net::is_virtual_or_special_ip(addr) {
+                if physicals.iter().any(|p| p.matches_subnet(addr)) {
+                    if !addresses.contains(addr) {
+                        addresses.push(*addr);
+                    }
+                }
+            }
+        }
+        // 2. Add other valid non-virtual IPv4 addresses
+        for addr in &raw_addresses {
+            if addr.is_ipv4() && !airplay_core::net::is_virtual_or_special_ip(addr) {
+                if !addresses.contains(addr) {
+                    addresses.push(*addr);
+                }
+            }
+        }
+        // 3. Add global IPv6 addresses
+        for addr in &raw_addresses {
+            if addr.is_ipv6() && !airplay_core::net::is_virtual_or_special_ip(addr) {
+                if !addresses.contains(addr) {
+                    addresses.push(*addr);
+                }
+            }
+        }
+        // 4. Fallback if everything was filtered
+        if addresses.is_empty() {
+            addresses = raw_addresses;
         }
 
         // Build TXT record map

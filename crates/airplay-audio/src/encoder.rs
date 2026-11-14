@@ -407,6 +407,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "aac")]
     mod aac_encoder {
         use super::*;
 
@@ -482,6 +483,7 @@ mod tests {
         }
 
         #[test]
+        #[cfg(feature = "aac")]
         fn creates_aac_for_aac_format() {
             let encoder = create_encoder(aac_format_44100()).unwrap();
             assert_eq!(encoder.codec(), AudioCodec::Aac);
@@ -511,6 +513,7 @@ mod tests {
         }
 
         #[test]
+        #[cfg(feature = "aac")]
         fn aac_reports_correct_codec() {
             let encoder = AacEncoder::new(aac_format_44100()).unwrap();
             assert_eq!(encoder.codec(), AudioCodec::Aac);
@@ -521,8 +524,11 @@ mod tests {
             let alac = AlacEncoder::new(alac_format_44100()).unwrap();
             assert_eq!(alac.frames_per_packet(), 352);
 
-            let aac = AacEncoder::new(aac_format_44100()).unwrap();
-            assert_eq!(aac.frames_per_packet(), 1024);
+            #[cfg(feature = "aac")]
+            {
+                let aac = AacEncoder::new(aac_format_44100()).unwrap();
+                assert_eq!(aac.frames_per_packet(), 1024);
+            }
         }
     }
 
@@ -698,6 +704,7 @@ mod tests {
         }
 
         #[test]
+        #[cfg(feature = "aac")]
         fn aac_encodes_sine_wave_440hz() {
             let mut encoder = AacEncoder::new(aac_format_44100()).unwrap();
 

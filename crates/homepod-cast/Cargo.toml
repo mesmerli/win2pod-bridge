@@ -1,6 +1,6 @@
 [package]
 name = "homepod-cast"
-version = "0.1.0"
+version = "0.1.15"
 edition = "2021"
 description = "Stream Windows system audio to a HomePod over AirPlay 2"
 

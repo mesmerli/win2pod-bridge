@@ -42,21 +42,10 @@ fn generate_device_id() -> String {
 
 /// Select the best address from a device's address list.
 fn select_best_address(addresses: &[IpAddr]) -> Option<&IpAddr> {
-    // Prefer IPv4
-    if let Some(addr) = addresses.iter().find(|a| a.is_ipv4()) {
-        return Some(addr);
-    }
-    // Then global IPv6 (not link-local)
-    if let Some(addr) = addresses.iter().find(|a| {
-        match a {
-            IpAddr::V6(v6) => {
-                let segments = v6.segments();
-                !v6.is_loopback() && (segments[0] & 0xffc0) != 0xfe80
-            }
-            _ => false,
+    if let Some(best) = airplay_core::net::select_best_receiver_address(addresses) {
+        if let Some(addr) = addresses.iter().find(|&&a| a == best) {
+            return Some(addr);
         }
-    }) {
-        return Some(addr);
     }
     addresses.first()
 }
@@ -109,6 +98,10 @@ impl RaopConnection {
         info!("RAOP connecting to {} at {}", device.name, addr);
 
         let mut rtsp = RtspConnection::new(addr);
+        if let Some(local_ip) = airplay_core::net::select_physical_local_ip_for_target(ip_addr) {
+            info!("Binding RAOP RTSP socket to physical interface IP {} for receiver {}", local_ip, ip_addr);
+            rtsp.set_local_bind_ip(local_ip);
+        }
         rtsp.connect().await?;
 
         // Create RAOP session

@@ -6,7 +6,7 @@
 # PublisherName:   mesmerli
 # PFN:             mesmerli.Win2PodBridge_6t1y50ntn36fm
 # Store ID:        9N9ZC9MB9SB3
-# Version:         0.1.0.0
+# Version:         0.1.16.0
 # ==============================================================================
 
 $ErrorActionPreference = "Stop"
@@ -49,7 +49,9 @@ $makeappx = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\makeapp
 if (-not (Test-Path $makeappx)) {
     throw "makeappx.exe not found at $makeappx"
 }
-$outMsix = Join-Path $dist "mesmerli.Win2PodBridge_0.1.0.0_x64.msix"
+[xml]$manifestXml = Get-Content (Join-Path $staging "AppxManifest.xml")
+$pkgVersion = $manifestXml.Package.Identity.Version
+$outMsix = Join-Path $dist "mesmerli.Win2PodBridge_${pkgVersion}_x64.msix"
 & $makeappx pack /v /o /d $staging /p $outMsix
 
 Write-Host "=== 5. Signing MSIX with Developer Certificate ===" -ForegroundColor Cyan
@@ -76,7 +78,7 @@ if (Test-Path $signtool) {
 
 Write-Host "=== 6. Creating msixupload Archive for Microsoft Partner Center ===" -ForegroundColor Cyan
 $tempZip = Join-Path $dist "temp_upload.zip"
-$msixupload = Join-Path $dist "mesmerli.Win2PodBridge_0.1.0.0_x64.msixupload"
+$msixupload = Join-Path $dist "mesmerli.Win2PodBridge_${pkgVersion}_x64.msixupload"
 Remove-Item -Force $tempZip, $msixupload -ErrorAction SilentlyContinue
 Compress-Archive -Path $outMsix -DestinationPath $tempZip -Force
 Move-Item -Path $tempZip -Destination $msixupload -Force
