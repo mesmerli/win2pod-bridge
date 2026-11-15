@@ -667,6 +667,37 @@ pub fn get_standin_device_id() -> Option<String> {
     None
 }
 
+/// Finds an active, non-AirPods physical playback endpoint (e.g. Speakers, Realtek, USB Audio, HDMI/DP Monitor)
+/// to serve as fallback when the system default is set to AirPods on startup or disconnects.
+pub fn find_fallback_playback_device() -> Option<String> {
+    let devices = get_audio_render_devices();
+    let non_airpods: Vec<_> = devices
+        .into_iter()
+        .filter(|d| d.id != "default" && !d.id.is_empty() && !is_airpods_playback_device(&d.name))
+        .collect();
+
+    // 1st Priority: Physical speakers / sound cards / USB Audio / C-Media
+    if let Some(speaker) = non_airpods.iter().find(|d| {
+        let n = d.name.to_lowercase();
+        n.contains("喇叭")
+            || n.contains("speaker")
+            || n.contains("realtek")
+            || n.contains("high definition audio")
+            || n.contains("c-media")
+            || n.contains("cmedia")
+            || n.contains("usb audio")
+    }) {
+        return Some(speaker.id.clone());
+    }
+
+    // 2nd Priority: Any non-AirPods active audio device (including monitor HDMI/DP)
+    if let Some(first) = non_airpods.first() {
+        return Some(first.id.clone());
+    }
+
+    None
+}
+
 /// Triggers a refresh of local audio devices across the UI and backend.
 /// Debounced with a secondary delayed query so newly connected Bluetooth devices
 /// that take a brief moment to finish driver/endpoint initialization are fully captured.
@@ -939,9 +970,9 @@ pub fn shield_endpoint(device_id: Option<&str>) {
         }
 
         // SAFETY BARRIER 2: Never shield or maximize volume on any AirPods / Beats device
+        let devices = get_audio_render_devices();
         if let Some(ref k) = key {
-            let devices = get_audio_render_devices();
-            if devices.iter().any(|d| d.id.eq_ignore_ascii_case(k) && is_airpods_playback_device(&d.name)) {
+            if is_airpods_device_or_id(&devices, k) {
                 tracing::warn!("shield_endpoint: refusing to shield AirPods device [{k}]");
                 return;
             }
@@ -1308,42 +1339,66 @@ pub fn update_saved_real_default_device(id: &str) {
 pub fn capture_initial_default_device() {
     let handle = std::thread::spawn(|| {
         let _com = wasapi::initialize_mta();
-        if let Ok(mut lock) = INITIAL_DEFAULT_DEVICE_ID.lock() {
-            if lock.is_none() {
-                if let Ok(enumerator) = wasapi::DeviceEnumerator::new() {
-                    if let Ok(def_dev) = enumerator.get_default_device(&wasapi::Direction::Render) {
-                        if let Ok(id) = def_dev.get_id() {
-                            let name = def_dev.get_friendlyname().unwrap_or_default();
-                            let is_airpods = is_airpods_playback_device(&name);
-                            if !is_airpods {
-                                let init_muted = get_endpoint_mute(Some(&id)).unwrap_or(false);
-                                let init_vol = get_endpoint_volume(Some(&id)).unwrap_or(1.0);
-                                tracing::info!(
-                                    "[Startup] Captured initial Windows default playback endpoint: [{}] ({}) (muted={}, volume={:.2})",
-                                    id, name, init_muted, init_vol
-                                );
-                                *lock = Some(id.clone());
-                                if let Ok(mut m_lock) = INITIAL_DEFAULT_DEVICE_MUTED.lock() {
-                                    *m_lock = Some(init_muted);
-                                }
-                                if let Ok(mut v_lock) = INITIAL_DEFAULT_DEVICE_VOLUME.lock() {
-                                    *v_lock = Some(init_vol);
-                                }
-                            } else {
-                                // Default was AirPods on startup:
-                                // Capture stand-in device as the initial fallback
-                                if let Some(standin_id) = get_standin_device_id() {
-                                    tracing::info!(
-                                        "[Startup] Windows default was [{}] ({}); captured stand-in device [{standin_id}] as initial fallback",
-                                        id, name
-                                    );
-                                    *lock = Some(standin_id);
-                                }
-                            }
+        let already_captured = INITIAL_DEFAULT_DEVICE_ID.lock().map(|l| l.is_some()).unwrap_or(false);
+        if already_captured {
+            return;
+        }
+
+        let mut target_id = None;
+        let mut target_muted = false;
+        let mut target_vol = 1.0;
+
+        if let Ok(enumerator) = wasapi::DeviceEnumerator::new() {
+            if let Ok(def_dev) = enumerator.get_default_device(&wasapi::Direction::Render) {
+                if let Ok(id) = def_dev.get_id() {
+                    let name = def_dev.get_friendlyname().unwrap_or_default();
+                    let is_airpods = is_airpods_playback_device(&name);
+                    if !is_airpods {
+                        let init_muted = get_endpoint_mute(Some(&id)).unwrap_or(false);
+                        let init_vol = get_endpoint_volume(Some(&id)).unwrap_or(1.0);
+                        tracing::info!(
+                            "[Startup] Captured initial Windows default playback endpoint: [{}] ({}) (muted={}, volume={:.2})",
+                            id, name, init_muted, init_vol
+                        );
+                        target_id = Some(id);
+                        target_muted = init_muted;
+                        target_vol = init_vol;
+                    } else {
+                        // Default was AirPods on startup:
+                        // Find a non-AirPods physical speaker as initial fallback
+                        if let Some(fb_id) = find_fallback_playback_device() {
+                            let fb_muted = get_endpoint_mute(Some(&fb_id)).unwrap_or(false);
+                            let fb_vol = get_endpoint_volume(Some(&fb_id)).unwrap_or(1.0);
+                            tracing::info!(
+                                "[Startup] Windows default was [{}] ({}); captured fallback device [{fb_id}] as initial fallback (muted={}, vol={:.2})",
+                                id, name, fb_muted, fb_vol
+                            );
+                            target_id = Some(fb_id);
+                            target_muted = fb_muted;
+                            target_vol = fb_vol;
                         }
                     }
                 }
             }
+        }
+
+        if let Some(final_id) = target_id {
+            if let Ok(mut lock) = INITIAL_DEFAULT_DEVICE_ID.lock() {
+                if lock.is_none() {
+                    *lock = Some(final_id.clone());
+                }
+            }
+            if let Ok(mut m_lock) = INITIAL_DEFAULT_DEVICE_MUTED.lock() {
+                if m_lock.is_none() {
+                    *m_lock = Some(target_muted);
+                }
+            }
+            if let Ok(mut v_lock) = INITIAL_DEFAULT_DEVICE_VOLUME.lock() {
+                if v_lock.is_none() {
+                    *v_lock = Some(target_vol);
+                }
+            }
+            update_saved_standin_device(&final_id);
         }
     });
     let _ = handle.join();
@@ -1352,87 +1407,66 @@ pub fn capture_initial_default_device() {
 /// Restores the system default audio playback endpoint back to what was active at startup or before proxy handoff,
 /// and faithfully restores its startup mute state and master volume.
 pub fn restore_initial_default_device() {
+    set_audio_shield_state(AudioShieldState::Idle);
     let _com = wasapi::initialize_mta();
     let orig_id = match INITIAL_DEFAULT_DEVICE_ID.lock() {
         Ok(g) => g.clone(),
         Err(p) => p.into_inner().clone(),
     };
     if let Some(id) = orig_id {
-        let is_cur_standin = if let Some(standin_id) = get_standin_device_id() {
-            if let Ok(enumerator) = wasapi::DeviceEnumerator::new() {
-                if let Ok(def_dev) = enumerator.get_default_device(&wasapi::Direction::Render) {
-                    def_dev.get_id().unwrap_or_default().eq_ignore_ascii_case(&standin_id)
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
+        let devices = get_audio_render_devices();
+        // Under NO circumstances should exit restore Windows default to AirPods
+        let target_device_id = if is_airpods_device_or_id(&devices, &id) {
+            tracing::warn!("[Default Device] Captured startup default was AirPods [{}]; falling back to physical speaker on exit", id);
+            find_fallback_playback_device()
         } else {
-            false
+            Some(id)
         };
 
-        if is_cur_standin {
-            let orig_muted = INITIAL_DEFAULT_DEVICE_MUTED.lock().ok().and_then(|m| *m).unwrap_or(false);
-            let orig_vol = INITIAL_DEFAULT_DEVICE_VOLUME.lock().ok().and_then(|v| *v);
+        let Some(final_target_id) = target_device_id else {
+            return;
+        };
 
-            // Verify if original default device is still present and active
-            let (target_id, is_fallback) = if let Ok(enumerator) = wasapi::DeviceEnumerator::new() {
-                let orig_active = enumerator.get_device(&id).ok()
-                    .and_then(|d| d.get_state().ok())
-                    .map(|s| s == wasapi::DeviceState::Active)
-                    .unwrap_or(false);
-                if orig_active {
-                    (id.clone(), false)
-                } else {
-                    // Original device was disconnected/unplugged. Look for any active playback device (excluding stand-in proxy)
-                    let fallback = enumerator.get_device_collection(&wasapi::Direction::Render).ok().and_then(|col| {
-                        let count = col.get_nbr_devices().ok()?;
-                        for i in 0..count {
-                            if let Ok(dev) = col.get_device_at_index(i) {
-                                if dev.get_state().ok() == Some(wasapi::DeviceState::Active) {
-                                    if let Ok(dev_id) = dev.get_id() {
-                                        if Some(&dev_id) != get_standin_device_id().as_ref() {
-                                            return Some(dev_id);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        None
-                    });
-                    if let Some(fb_id) = fallback {
-                        (fb_id, true)
-                    } else {
-                        (id.clone(), false)
-                    }
-                }
-            } else {
-                (id.clone(), false)
-            };
+        let orig_muted = INITIAL_DEFAULT_DEVICE_MUTED.lock().ok().and_then(|m| *m).unwrap_or(false);
+        let orig_vol = INITIAL_DEFAULT_DEVICE_VOLUME.lock().ok().and_then(|v| *v);
 
-            if is_fallback {
-                tracing::warn!(
-                    "[Default Device] Original default device [{}] was disconnected before exit. Falling back to active device: [{}]",
-                    id, target_id
-                );
+        // Verify if target device is still present and active
+        let (actual_id, is_fallback) = if let Ok(enumerator) = wasapi::DeviceEnumerator::new() {
+            let orig_active = enumerator.get_device(&final_target_id).ok()
+                .and_then(|d| d.get_state().ok())
+                .map(|s| s == wasapi::DeviceState::Active)
+                .unwrap_or(false);
+            if orig_active {
+                (final_target_id.clone(), false)
             } else {
-                tracing::info!(
-                    "[Default Device] Reverting Windows default playback endpoint from stand-in to real device: [{}] (mute={}, volume={:?})",
-                    target_id, orig_muted, orig_vol
-                );
+                let fb = find_fallback_playback_device();
+                (fb.unwrap_or_else(|| final_target_id.clone()), true)
             }
+        } else {
+            (final_target_id.clone(), false)
+        };
 
-            let _ = crate::policy_config::set_default_render_device(&target_id);
+        if is_fallback {
+            tracing::warn!(
+                "[Default Device] Target device was disconnected before exit. Falling back to active device: [{actual_id}]",
+            );
+        } else {
+            tracing::info!(
+                "[Default Device] Reverting Windows default playback endpoint to: [{actual_id}] (mute={}, volume={:?})",
+                orig_muted, orig_vol
+            );
+        }
+
+        let _ = crate::policy_config::set_default_render_device(&actual_id);
+        // Restore mute and volume ONLY on the physical speaker, never on AirPods or blind default
+        if !is_airpods_device_or_id(&devices, &actual_id) {
             if !is_fallback {
-                let _ = set_endpoint_mute(Some(&target_id), orig_muted);
+                let _ = set_endpoint_mute(Some(&actual_id), orig_muted);
                 if let Some(vol) = orig_vol {
-                    let _ = set_endpoint_volume(Some(&target_id), vol);
+                    let _ = set_endpoint_volume(Some(&actual_id), vol);
                 }
-            }
-            let _ = set_endpoint_mute(None, orig_muted);
-            if let Some(vol) = orig_vol {
-                let _ = set_endpoint_volume(None, vol);
+            } else {
+                let _ = set_endpoint_mute(Some(&actual_id), false);
             }
         }
     }
@@ -1444,14 +1478,13 @@ pub fn restore_original_speaker_state() {
     let orig_muted = INITIAL_DEFAULT_DEVICE_MUTED.lock().ok().and_then(|m| *m).unwrap_or(false);
     let orig_vol = INITIAL_DEFAULT_DEVICE_VOLUME.lock().ok().and_then(|v| *v);
     if let Some(ref id) = orig_id {
-        let _ = set_endpoint_mute(Some(id), orig_muted);
-        if let Some(vol) = orig_vol {
-            let _ = set_endpoint_volume(Some(id), vol);
+        let devices = get_audio_render_devices();
+        if !is_airpods_device_or_id(&devices, id) {
+            let _ = set_endpoint_mute(Some(id), orig_muted);
+            if let Some(vol) = orig_vol {
+                let _ = set_endpoint_volume(Some(id), vol);
+            }
         }
-    }
-    let _ = set_endpoint_mute(None, orig_muted);
-    if let Some(vol) = orig_vol {
-        let _ = set_endpoint_volume(None, vol);
     }
 }
 

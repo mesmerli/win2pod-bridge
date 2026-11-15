@@ -76,6 +76,8 @@ fn main() -> anyhow::Result<()> {
         };
         tracing::error!("FATAL PANIC at {location}: {payload}");
         eprintln!("FATAL PANIC at {location}: {payload}");
+        crate::controller::restore_original_speaker_mute();
+        crate::controller::restore_initial_default_device();
     }));
 
     // Parse command line arguments:
