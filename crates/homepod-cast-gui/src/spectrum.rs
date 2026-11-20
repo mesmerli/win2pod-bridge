@@ -21,10 +21,35 @@ static RAW_SPECTRUM: Mutex<[u8; RAW_SPECTRUM_SIZE]> = Mutex::new([0u8; RAW_SPECT
 
 static ANALYZER: Mutex<Option<SpectrumAnalyzer>> = Mutex::new(None);
 static WAS_AUDIO_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static IS_SPECTRUM_NEEDED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Fast path query for the audio DSP thread:
+/// Checks if any spectrum-consuming window is currently active and visible on screen.
+/// Uses a single relaxed atomic read (< 1ns) with zero syscall / Win32 API overhead.
+#[inline]
+pub fn is_spectrum_needed() -> bool {
+    IS_SPECTRUM_NEEDED.load(Ordering::Relaxed)
+}
+
+/// Evaluates whether any window requiring audio spectrum is currently visible and active,
+/// updating the atomic cache flag. Returns the new state.
+pub fn update_spectrum_needed_state() -> bool {
+    let needed = crate::snapping::ALL_WINDOW_KINDS
+        .iter()
+        .any(|&kind| kind.consumes_spectrum() && crate::snapping::is_window_visible_and_active(kind));
+
+    IS_SPECTRUM_NEEDED.store(needed, Ordering::SeqCst);
+    needed
+}
+
+/// Set manual override for testing
+pub fn set_spectrum_needed_override(needed: bool) {
+    IS_SPECTRUM_NEEDED.store(needed, Ordering::SeqCst);
+}
 
 /// Process post-DSP audio samples (interleaved stereo i16) to update real-time spectrum and peak level.
 pub fn process_post_dsp_pcm(samples: &[i16]) {
-    if samples.is_empty() || !crate::tray::is_any_window_visible() {
+    if samples.is_empty() || !is_spectrum_needed() {
         return;
     }
     let mut mono = Vec::with_capacity(samples.len() / 2);
@@ -216,5 +241,38 @@ impl SpectrumAnalyzer {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::snapping::WindowKind;
+
+    #[test]
+    fn test_spectrum_consumer_property_matrix() {
+        // Strict property check:
+        // Main, MiniPlayer, and Visualizer display real-time audio spectrum.
+        // Equalizer ONLY controls EQ sliders/presets and has ZERO spectrum widgets!
+        assert!(WindowKind::Main.consumes_spectrum());
+        assert!(WindowKind::MiniPlayer.consumes_spectrum());
+        assert!(WindowKind::Visualizer.consumes_spectrum());
+        assert!(!WindowKind::Equalizer.consumes_spectrum());
+    }
+
+    #[test]
+    fn test_is_spectrum_needed_override_and_fast_path() {
+        set_spectrum_needed_override(false);
+        assert!(!is_spectrum_needed());
+
+        // When false, process_post_dsp_pcm must drop samples immediately without panic or FFT
+        let dummy_samples = vec![1000i16; 1024];
+        process_post_dsp_pcm(&dummy_samples);
+
+        set_spectrum_needed_override(true);
+        assert!(is_spectrum_needed());
+
+        // Restore clean state
+        set_spectrum_needed_override(false);
     }
 }

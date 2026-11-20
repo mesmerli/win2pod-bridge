@@ -336,7 +336,7 @@ impl AudioDecoder {
 }
 
 /// Convert symphonia audio buffer to interleaved i16 samples.
-fn audio_buffer_to_i16(buffer: &AudioBufferRef) -> Vec<i16> {
+pub fn audio_buffer_to_i16(buffer: &AudioBufferRef) -> Vec<i16> {
     match buffer {
         AudioBufferRef::S8(buf) => {
             let mut samples = Vec::with_capacity(buf.frames() * buf.spec().channels.count());
@@ -797,6 +797,31 @@ mod tests {
 
             // Should have 352 frames * 2 channels = 704 samples
             assert_eq!(frame.samples.len(), 704);
+        }
+
+        #[test]
+        fn test_symphonia_alac_instantiation() {
+            use symphonia::core::codecs::{CodecParameters, DecoderOptions, CODEC_TYPE_ALAC};
+            // 24-byte ALAC magic cookie (excluding 12-byte atom header)
+            const ALAC_COOKIE: [u8; 24] = [
+                0x00, 0x00, 0x01, 0x60, // frame_length = 352
+                0x00,                   // compatible_version = 0
+                0x10,                   // bit_depth = 16
+                0x28,                   // pb = 40
+                0x0a,                   // mb = 10
+                0x0e,                   // kb = 14
+                0x02,                   // num_channels = 2
+                0x00, 0xff,             // max_run = 255
+                0x00, 0x00, 0x00, 0x00, // max_frame_bytes = 0
+                0x00, 0x00, 0x00, 0x00, // avg_bit_rate = 0
+                0x00, 0x00, 0xac, 0x44, // sample_rate = 44100
+            ];
+            let mut params = CodecParameters::new();
+            params.for_codec(CODEC_TYPE_ALAC);
+            params.with_extra_data(ALAC_COOKIE.to_vec().into_boxed_slice());
+            let decoder = symphonia::default::get_codecs()
+                .make(&params, &DecoderOptions::default());
+            assert!(decoder.is_ok(), "Failed to create ALAC decoder: {:?}", decoder.err());
         }
     }
 }

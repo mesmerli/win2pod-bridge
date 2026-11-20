@@ -12,12 +12,13 @@ members = [
     "crates/airplay-tui",
     "crates/airplay-bluetooth",
     "crates/airplay-resampler",
+    "crates/airplay-receiver",
     "crates/homepod-cast",
     "crates/homepod-cast-gui",
 ]
 
 [workspace.package]
-version = "0.1.16"
+version = "0.1.18"
 edition = "2021"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/mesmerli/win2pod-bridge"

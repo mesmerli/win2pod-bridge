@@ -1,17 +1,20 @@
 # Ficha de Microsoft Store - Español (es-ES)
-# Win2Pod Bridge - Versión 0.1.16
+# Win2Pod Bridge - Versión 0.1.18
 
 ## 0. Novedades de esta versión (What's new in this version - Para Partner Center)
 ```text
-[Actualización importante de Win2Pod Bridge 0.1.16]
-• 🔔 Notificación de la bandeja del sistema en dos líneas compactas: El texto flotante del icono de la barra de tareas se ha rediseñado por completo en dos líneas independientes. La línea 1 muestra el estado de transmisión de HomePod / AirPlay y el volumen (ej.: «🔊 Reproduciendo: Salón (9%)» o Silenciado); la línea 2 muestra la batería y colocación de los AirPods (ej.: «🎧 AirPods 3: ● L 100%»). Elimina prefijos innecesarios y textos cortados.
-• 🔄 Reflejo dinámico de estado AirPods ↔ HomePod: Al colocarse los auriculares y activarse el enrutamiento prioritario, la bandeja pasa en tiempo real al estado de mejora de audio local, y regresa automáticamente a la transmisión de HomePod al guardar los auriculares en el estuche.
-• 🛡️ Auto Pre-Amp y Gestión dinámica de Headroom: El ecualizador de 10 bandas incorpora compensación automática de ganancia. Al aumentar cualquier banda, atenúa dinámicamente el preamplificador para evitar saturación y distorsión digital, junto con un limitador de picos transparente y lineal.
-• 🔄 Protección y Fallback global de puntos finales de audio: Supervisión del estado de los dispositivos de Windows. Si los altavoces predeterminados o el dispositivo proxy se desconectan, Win2Pod conmuta automáticamente a otro dispositivo activo, evitando bloqueos en el sonido del sistema.
-• 🎧 Aislamiento de estado y volumen de AirPods: Resolución dinámica de GUID de hardware para reflejar con precisión el volumen real de los AirPods al cambiar desde HomePod, compatible con el control táctil del auricular.
-• ⚡ Handoff inteligente basado en eventos: Detección precisa al guardar los AirPods en su estuche, reanudando la reproducción multimedia de forma fiable dentro de una ventana de 30 segundos.
-• 🛡️ Protección acústica Anti-Feedback Shield: Detecta riesgos de bucle de retroalimentación en entornos con un solo dispositivo mediante GUID, suprimiendo la reemisión a los auriculares mientras el analizador de espectro continúa funcionando de forma eficiente.
-• 🚀 Refactorización de código y estabilidad: Rutinas de conmutación de audio simplificadas para garantizar máxima estabilidad en sesiones prolongadas de transmisión.
+[Win2Pod Bridge 0.1.18 Gran actualización - ¡Llega el receptor de audio AirPlay!]
+• 📲 Nuevo «Receptor de audio AirPlay (Audio Receiver)»:
+  - ¡Convierta su PC con Windows en un auténtico altavoz inalámbrico AirPlay! Transmita música y audio de vídeos directamente desde el Centro de control de iPhone, iPad o Mac («AirPlay») a sus altavoces o auriculares de PC.
+  - Decodificación ALAC sin pérdidas en tiempo real a 44,1 kHz / 16 bits para un sonido Hi-Fi cristalino.
+• ✨ Rango dinámico máximo (Passthrough Unity Gain):
+  - Evita las restricciones de volumen de iOS. El receptor de PC decodifica a 1,0 (0 dB Unity Gain) a escala completa digital, preservando el rango dinámico y los detalles aunque el volumen del móvil esté bajo.
+  - Nueva insignia «✨ Rango dinámico máx.» con información emergente del volumen del teléfono.
+• ⏯️ Reanudación inteligente en espera (Caché de sesión DACP):
+  - Si el iPhone pausa la reproducción, la tarjeta de espera conserva el botón ▶ para reanudar la reproducción de forma remota con un solo clic.
+• 🎛️ Control multimedia bidireccional y Lip-Sync:
+  - Controle la reproducción del iPhone (Reproducir/Pausar, Pista ant./sig.) desde el PC con carátulas sincronizadas en tiempo real.
+  - Modos de latencia Estándar (1,5 s) y Profunda (2,0 s) para sincronizar labios en YouTube y películas en streaming.
 ```
 
 ## 1. Nombre del producto (Product Name)
@@ -25,9 +28,9 @@ Win2Pod Bridge
 *(Se muestra en los resultados de búsqueda de Microsoft Store, categorías y tarjetas de promoción)*
 
 ```text
-Transmita audio de Windows 10 y 11 a Apple HomePod y altavoces AirPlay 2 en calidad ALAC sin pérdidas. Incluye visualizador 3D Win2Pod Motion, clic en portada para abrir reproductor, balance estéreo con puntero dinámico, gestos táctiles HomePod y EQ de 10 bandas.
+¡Integración perfecta de Windows y Apple! Transmita audio de PC a HomePod en ALAC sin pérdidas o reciba audio AirPlay desde iPhone/iPad con rango dinámico máximo Unity Gain. Incluye relevo AirPods, visualizador 3D, control multimedia remoto y EQ de 10 bandas.
 ```
-*(Longitud: aprox. 260 caracteres, dentro del límite de 270 caracteres)*
+*(Longitud: aprox. 252 caracteres, dentro del límite de 270 caracteres)*
 
 ---
 

@@ -3,7 +3,7 @@ use raw_window_handle::{
 };
 use std::borrow::Cow;
 use std::num::NonZeroIsize;
-use std::sync::atomic::{AtomicIsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::thread;
 use wry::dpi::{PhysicalPosition, PhysicalSize, Position, Size};
 use wry::WebViewBuilder;
@@ -66,12 +66,53 @@ fn get_embedded_file(path: &str) -> Option<(&'static str, &'static [u8])> {
     }
 }
 
+static VISUALIZER_HIDDEN_WITH_CLUSTER: AtomicBool = AtomicBool::new(false);
+static VISUALIZER_CLOSING: AtomicBool = AtomicBool::new(false);
+
+pub fn is_visualizer_hidden_with_cluster() -> bool {
+    VISUALIZER_HIDDEN_WITH_CLUSTER.load(Ordering::SeqCst)
+}
+
+pub fn hide_visualizer_with_cluster() {
+    let hwnd = get_visualizer_hwnd();
+    if !hwnd.is_null() && unsafe { IsWindow(hwnd) != 0 } {
+        VISUALIZER_HIDDEN_WITH_CLUSTER.store(true, Ordering::SeqCst);
+        unsafe {
+            KillTimer(hwnd, TIMER_AUDIO_SPECTRUM);
+            ShowWindow(hwnd, SW_HIDE);
+        }
+    }
+}
+
+pub fn restore_visualizer_with_cluster() {
+    if VISUALIZER_HIDDEN_WITH_CLUSTER.swap(false, Ordering::SeqCst) {
+        let hwnd = get_visualizer_hwnd();
+        if !hwnd.is_null() && unsafe { IsWindow(hwnd) != 0 } {
+            unsafe {
+                ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                SetTimer(hwnd, TIMER_AUDIO_SPECTRUM, 16, None);
+            }
+        }
+    }
+}
+
+pub fn is_visualizer_visible() -> bool {
+    let hwnd = get_visualizer_hwnd();
+    !hwnd.is_null() && unsafe { IsWindow(hwnd) != 0 && IsWindowVisible(hwnd) != 0 }
+}
+
 pub fn is_visualizer_open() -> bool {
+    if VISUALIZER_CLOSING.load(Ordering::SeqCst) {
+        return false;
+    }
     let hwnd = VISUALIZER_HWND.load(Ordering::SeqCst);
     hwnd != 0 && unsafe { IsWindow(hwnd as HWND) != 0 }
 }
 
 pub fn get_visualizer_hwnd() -> HWND {
+    if VISUALIZER_CLOSING.load(Ordering::SeqCst) {
+        return std::ptr::null_mut();
+    }
     let hwnd = VISUALIZER_HWND.load(Ordering::SeqCst);
     if hwnd != 0 && unsafe { IsWindow(hwnd as HWND) != 0 } {
         hwnd as HWND
@@ -137,12 +178,14 @@ pub fn yield_visualizer_topmost() {
 }
 
 pub fn close_visualizer() {
-    let hwnd = VISUALIZER_HWND.load(Ordering::SeqCst);
+    VISUALIZER_CLOSING.store(true, Ordering::SeqCst);
+    let hwnd = VISUALIZER_HWND.swap(0, Ordering::SeqCst);
     if hwnd != 0 && unsafe { IsWindow(hwnd as HWND) != 0 } {
         unsafe {
             PostMessageW(hwnd as HWND, WM_CLOSE, 0, 0);
         }
     }
+    crate::spectrum::update_spectrum_needed_state();
 }
 
 pub fn set_visualizer_pinned(pinned: bool) {
@@ -163,15 +206,16 @@ pub fn toggle_visualizer() {
 }
 
 pub fn open_visualizer() {
-    let existing = VISUALIZER_HWND.load(Ordering::SeqCst);
-    if existing != 0 && unsafe { IsWindow(existing as HWND) != 0 } {
+    let existing = get_visualizer_hwnd();
+    if !existing.is_null() && unsafe { IsWindow(existing) != 0 } {
         unsafe {
-            ShowWindow(existing as HWND, SW_RESTORE);
-            SetForegroundWindow(existing as HWND);
+            ShowWindow(existing, SW_RESTORE);
+            SetForegroundWindow(existing);
         }
         return;
     }
 
+    VISUALIZER_CLOSING.store(false, Ordering::SeqCst);
     thread::spawn(|| {
         unsafe {
             run_visualizer_window();
@@ -386,39 +430,20 @@ unsafe fn run_visualizer_window() {
     let has_main = !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 && IsWindowVisible(main_hwnd) != 0;
     let mut main_rect: RECT = std::mem::zeroed();
 
-    let (width, height, x, y) = if has_main {
+    let (width, height, x, y, chosen_anchor) = if has_main {
         GetWindowRect(main_hwnd, &mut main_rect);
         let main_h = (main_rect.bottom - main_rect.top).max(400);
         let w = ((main_h as f32) * 16.0 / 9.0).round() as i32;
 
-        let work_area = crate::snapping::get_monitor_work_area(main_hwnd);
-
-        // Position directly docked to the right of the Main Window if space permits
-        let (init_x, init_y) = if main_rect.right + w <= work_area.right {
-            (main_rect.right, main_rect.top)
-        } else if main_rect.left - w >= work_area.left {
-            // If right edge exceeds screen, dock to the left of the Main Window
-            (main_rect.left - w, main_rect.top)
-        } else {
-            // Shift main window left to accommodate both windows docked side-by-side
-            let shift_needed = (main_rect.right + w) - work_area.right;
-            let new_main_x = (main_rect.left - shift_needed).max(work_area.left);
-            let main_w = main_rect.right - main_rect.left;
-            SetWindowPos(
-                main_hwnd,
-                std::ptr::null_mut(),
-                new_main_x,
-                main_rect.top,
-                0,
-                0,
-                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
-            );
-            main_rect.left = new_main_x;
-            main_rect.right = new_main_x + main_w;
-            (main_rect.right, main_rect.top)
-        };
-
-        (w, main_h, init_x, init_y)
+        let spawner = crate::snapping::get_window_spawner(crate::snapping::WindowKind::Visualizer);
+        let (best_rect, anchor) = crate::snapping::find_best_spawn_rect(crate::snapping::WindowKind::Visualizer, w, main_h, spawner);
+        (
+            best_rect.right - best_rect.left,
+            best_rect.bottom - best_rect.top,
+            best_rect.left,
+            best_rect.top,
+            anchor,
+        )
     } else {
         let screen_w = GetSystemMetrics(SM_CXSCREEN);
         let screen_h = GetSystemMetrics(SM_CYSCREEN);
@@ -426,7 +451,7 @@ unsafe fn run_visualizer_window() {
         let h = 720;
         let init_x = (screen_w - w) / 2;
         let init_y = (screen_h - h) / 2;
-        (w, h, init_x, init_y)
+        (w, h, init_x, init_y, None)
     };
 
     let hwnd = CreateWindowExW(
@@ -453,14 +478,18 @@ unsafe fn run_visualizer_window() {
     SendMessageW(hwnd, WM_SETICON, ICON_SMALL as usize, icon as isize);
 
     VISUALIZER_HWND.store(hwnd as isize, Ordering::SeqCst);
+    crate::spectrum::update_spectrum_needed_state();
 
-    // Directly bind magnetic dock with Main Window upon creation!
-    if has_main {
-        let mut actual_vis_rect: RECT = std::mem::zeroed();
-        GetWindowRect(hwnd, &mut actual_vis_rect);
-        let mut actual_main_rect: RECT = std::mem::zeroed();
-        GetWindowRect(main_hwnd, &mut actual_main_rect);
-        crate::snapping::set_dock_bond(&actual_vis_rect, &actual_main_rect);
+    // Directly bind magnetic dock with chosen anchor upon creation!
+    if let Some(anchor_kind) = chosen_anchor {
+        let anchor_hwnd = crate::snapping::get_window_hwnd(anchor_kind);
+        if !anchor_hwnd.is_null() && IsWindow(anchor_hwnd) != 0 {
+            let mut actual_vis_rect: RECT = std::mem::zeroed();
+            GetWindowRect(hwnd, &mut actual_vis_rect);
+            let mut actual_anchor_rect: RECT = std::mem::zeroed();
+            GetWindowRect(anchor_hwnd, &mut actual_anchor_rect);
+            crate::snapping::set_dock_relation(crate::snapping::WindowKind::Visualizer, anchor_kind, &actual_vis_rect, &actual_anchor_rect);
+        }
     }
 
     // Create state container
@@ -522,12 +551,15 @@ unsafe fn run_visualizer_window() {
                 }
             } else if body.contains("show_main") {
                 tracing::info!("visualizer IPC: show_main received");
-                crate::tray::bring_main_to_front();
-                let vis = VISUALIZER_HWND.load(Ordering::SeqCst) as HWND;
-                if !vis.is_null() && unsafe { IsWindow(vis) != 0 } {
+                if crate::visualizer::is_visualizer_fullscreen() {
+                    tracing::info!("visualizer is fullscreen -> only bring fleet to front, skip dock stage 2");
                     unsafe {
-                        SetForegroundWindow(vis);
+                        crate::snapping::bring_fleet_to_top();
                     }
+                    return;
+                }
+                unsafe {
+                    crate::snapping::handle_home_summon_request(crate::snapping::WindowKind::Visualizer);
                 }
             }
         });
@@ -590,6 +622,7 @@ unsafe fn run_visualizer_window() {
     }
 
     VISUALIZER_HWND.store(0, Ordering::SeqCst);
+    VISUALIZER_CLOSING.store(false, Ordering::SeqCst);
     windows::Win32::System::Com::CoUninitialize();
 }
 
@@ -651,64 +684,48 @@ unsafe extern "system" fn visualizer_wnd_proc(
         }
         WM_MOVING => {
             if !state_ptr.is_null() && !(*state_ptr).is_fullscreen {
-                if crate::snapping::SNAPPING_ENABLED.load(Ordering::Relaxed) {
-                    let rect_ptr = lparam as *mut RECT;
-                    if !rect_ptr.is_null() {
-                        let dist = crate::snapping::SNAP_DISTANCE.load(Ordering::Relaxed);
-                        let work = crate::snapping::get_monitor_work_area(hwnd);
-                        crate::snapping::snap_rect_to_work_area(&mut *rect_ptr, &work, dist);
-
-                        let main_hwnd = crate::tray::get_main_hwnd();
-                        if !main_hwnd.is_null()
-                            && IsWindow(main_hwnd) != 0
-                            && IsWindowVisible(main_hwnd) != 0
-                        {
-                            let mut main_rect: RECT = std::mem::zeroed();
-                            GetWindowRect(main_hwnd, &mut main_rect);
-                            if crate::snapping::snap_rect_to_rect(&mut *rect_ptr, &main_rect, dist) {
-                                crate::snapping::set_dock_bond(&*rect_ptr, &main_rect);
-                            } else {
-                                let bond = crate::snapping::get_dock_bond();
-                                if bond.is_bonded {
-                                    let (expected_x, expected_y) = crate::snapping::calc_bonded_visualizer_pos(&bond, &*rect_ptr, &main_rect);
-                                    if ((*rect_ptr).left - expected_x).abs() > dist * 2
-                                        || ((*rect_ptr).top - expected_y).abs() > dist * 2
-                                    {
-                                        crate::snapping::break_dock_bond();
-                                    }
-                                }
-                            }
-                        }
-                        return 1;
-                    }
+                let rect_ptr = lparam as *mut RECT;
+                unsafe {
+                    crate::snapping::handle_window_moving(
+                        crate::snapping::WindowKind::Visualizer,
+                        hwnd,
+                        rect_ptr,
+                    );
                 }
+                return 1;
             }
             0
         }
         WM_EXITSIZEMOVE => {
             if !state_ptr.is_null() && !(*state_ptr).is_fullscreen {
-                let mut vis_rect: RECT = std::mem::zeroed();
-                GetWindowRect(hwnd, &mut vis_rect);
-                let main_hwnd = crate::tray::get_main_hwnd();
-                if !main_hwnd.is_null()
-                    && IsWindow(main_hwnd) != 0
-                    && IsWindowVisible(main_hwnd) != 0
-                {
-                    let mut main_rect: RECT = std::mem::zeroed();
-                    GetWindowRect(main_hwnd, &mut main_rect);
-                    if crate::snapping::are_rects_docked(&vis_rect, &main_rect, 4) {
-                        crate::snapping::set_dock_bond(&vis_rect, &main_rect);
-                    } else {
-                        crate::snapping::break_dock_bond();
-                    }
+                unsafe {
+                    crate::snapping::handle_window_exit_size_move(
+                        crate::snapping::WindowKind::Visualizer,
+                        hwnd,
+                    );
                 }
             }
             0
+        }
+        WM_MOUSEACTIVATE => {
+            if crate::snapping::SNAPPING_ENABLED.load(Ordering::Relaxed) {
+                crate::snapping::bring_cluster_to_top(crate::snapping::WindowKind::Visualizer, hwnd);
+            }
+            DefWindowProcW(hwnd, msg, wparam, lparam)
+        }
+        WM_NCLBUTTONDOWN => {
+            if crate::snapping::SNAPPING_ENABLED.load(Ordering::Relaxed) {
+                crate::snapping::bring_cluster_to_top(crate::snapping::WindowKind::Visualizer, hwnd);
+            }
+            DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         WM_ACTIVATE => {
             let active_type = (wparam & 0xFFFF) as u32;
             if active_type != 0 {
                 // WA_ACTIVE or WA_CLICKACTIVE: User focused or clicked on the visualizer.
+                if crate::snapping::SNAPPING_ENABLED.load(Ordering::Relaxed) {
+                    crate::snapping::bring_cluster_to_top(crate::snapping::WindowKind::Visualizer, hwnd);
+                }
                 if !state_ptr.is_null() && ((*state_ptr).is_fullscreen || (*state_ptr).is_pinned) {
                     let main_hwnd = crate::tray::get_main_hwnd();
                     let main_active = !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 && !crate::tray::is_window_hidden_to_tray();
@@ -717,38 +734,6 @@ unsafe extern "system" fn visualizer_wnd_proc(
                         SetWindowPos(main_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                     } else {
                         SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                    }
-                }
-
-                // If visualizer is docked with main window, bring main window along!
-                if crate::snapping::SNAPPING_ENABLED.load(Ordering::Relaxed) {
-                    let bond = crate::snapping::get_dock_bond();
-                    if bond.is_bonded && !state_ptr.is_null() && !(*state_ptr).is_fullscreen && !VISUALIZER_FULLSCREEN.load(Ordering::Relaxed) {
-                        let main_hwnd = crate::tray::get_main_hwnd();
-                        if !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 && !crate::tray::is_window_hidden_to_tray() {
-                            if IsIconic(main_hwnd) != 0 {
-                                ShowWindow(main_hwnd, SW_SHOWNOACTIVATE);
-                            }
-                            let mut vis_rect: RECT = std::mem::zeroed();
-                            GetWindowRect(hwnd, &mut vis_rect);
-                            let mut main_rect: RECT = std::mem::zeroed();
-                            GetWindowRect(main_hwnd, &mut main_rect);
-                            let (mut main_x, mut main_y) = crate::snapping::calc_bonded_main_pos(&bond, &vis_rect, &main_rect);
-                            let work = crate::snapping::get_monitor_work_area(main_hwnd);
-                            let main_w = main_rect.right - main_rect.left;
-                            let main_h = main_rect.bottom - main_rect.top;
-                            main_x = main_x.max(work.left).min(work.right - main_w);
-                            main_y = main_y.max(work.top).min(work.bottom - main_h);
-                            SetWindowPos(
-                                main_hwnd,
-                                hwnd,
-                                main_x,
-                                main_y,
-                                0,
-                                0,
-                                SWP_NOSIZE | SWP_NOACTIVATE,
-                            );
-                        }
                     }
                 }
             }
@@ -776,45 +761,14 @@ unsafe extern "system" fn visualizer_wnd_proc(
         WM_SYSCOMMAND => {
             let sc = (wparam & 0xFFF0) as u32;
             let bond = crate::snapping::get_dock_bond();
-            if bond.is_bonded && (sc == SC_CLOSE || sc == SC_MINIMIZE || sc == SC_MAXIMIZE) {
-                // When magnetically docked to main window, caption buttons are locked
+            if bond.is_bonded && (sc == SC_MINIMIZE || sc == SC_MAXIMIZE) {
+                // When magnetically docked, minimize/maximize are locked
                 return 0;
             }
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         WM_SIZE => {
-            let resize_type = wparam as u32;
-            if resize_type == SIZE_RESTORED && crate::snapping::SNAPPING_ENABLED.load(Ordering::Relaxed) {
-                let bond = crate::snapping::get_dock_bond();
-                if bond.is_bonded && !state_ptr.is_null() && !(*state_ptr).is_fullscreen && !VISUALIZER_FULLSCREEN.load(Ordering::Relaxed) {
-                    let main_hwnd = crate::tray::get_main_hwnd();
-                    if !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 && !crate::tray::is_window_hidden_to_tray() {
-                        if IsIconic(main_hwnd) != 0 {
-                            ShowWindow(main_hwnd, SW_SHOWNOACTIVATE);
-                        }
-                        let mut vis_rect: RECT = std::mem::zeroed();
-                        GetWindowRect(hwnd, &mut vis_rect);
-                        let mut main_rect: RECT = std::mem::zeroed();
-                        GetWindowRect(main_hwnd, &mut main_rect);
-                        let (mut main_x, mut main_y) = crate::snapping::calc_bonded_main_pos(&bond, &vis_rect, &main_rect);
-                        let work = crate::snapping::get_monitor_work_area(main_hwnd);
-                        let main_w = main_rect.right - main_rect.left;
-                        let main_h = main_rect.bottom - main_rect.top;
-                        main_x = main_x.max(work.left).min(work.right - main_w);
-                        main_y = main_y.max(work.top).min(work.bottom - main_h);
-                        SetWindowPos(
-                            main_hwnd,
-                            hwnd,
-                            main_x,
-                            main_y,
-                            0,
-                            0,
-                            SWP_NOSIZE | SWP_NOACTIVATE,
-                        );
-                    }
-                }
-            }
-            if !state_ptr.is_null() {
+            if !state_ptr.is_null() && !VISUALIZER_CLOSING.load(Ordering::SeqCst) {
                 if let Some(ref wv) = (*state_ptr).webview {
                     let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
                     GetClientRect(hwnd, &mut rect);
@@ -830,7 +784,7 @@ unsafe extern "system" fn visualizer_wnd_proc(
         }
         WM_TIMER => {
             if wparam == TIMER_AUDIO_SPECTRUM {
-                if !state_ptr.is_null() {
+                if !state_ptr.is_null() && !VISUALIZER_CLOSING.load(Ordering::SeqCst) {
                     if let Some(ref wv) = (*state_ptr).webview {
                         if let Ok(guard) = VISUALIZER_LANG.lock() {
                             if let Some(ref current) = *guard {
@@ -861,6 +815,16 @@ unsafe extern "system" fn visualizer_wnd_proc(
             0
         }
         WM_CLOSE => {
+            let was_closing = VISUALIZER_CLOSING.swap(true, Ordering::SeqCst);
+            VISUALIZER_HWND.store(0, Ordering::SeqCst);
+            crate::spectrum::update_spectrum_needed_state();
+            if !was_closing {
+                let members = crate::snapping::get_cluster_members(crate::snapping::WindowKind::Visualizer);
+                if members.len() > 1 {
+                    crate::gui::request_close_cluster(crate::snapping::WindowKind::Visualizer);
+                }
+            }
+            crate::snapping::break_dock_bond();
             let main_hwnd = crate::tray::get_main_hwnd();
             if !main_hwnd.is_null() {
                 const GWLP_HWNDPARENT: i32 = -8;
@@ -871,6 +835,8 @@ unsafe extern "system" fn visualizer_wnd_proc(
             0
         }
         WM_DESTROY => {
+            VISUALIZER_HIDDEN_WITH_CLUSTER.store(false, Ordering::SeqCst);
+            VISUALIZER_HWND.store(0, Ordering::SeqCst);
             let main_hwnd = crate::tray::get_main_hwnd();
             if !main_hwnd.is_null() {
                 const GWLP_HWNDPARENT: i32 = -8;
@@ -886,7 +852,8 @@ unsafe extern "system" fn visualizer_wnd_proc(
                 *applied = None;
             }
             if !state_ptr.is_null() {
-                let _ = Box::from_raw(state_ptr);
+                let mut boxed = Box::from_raw(state_ptr);
+                boxed.webview.take(); // cleanly drops wry WebView & InnerWebView before clearing user data
                 SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
             }
             let main_hwnd = crate::tray::get_main_hwnd();

@@ -1,0 +1,30 @@
+[package]
+name = "airplay-receiver"
+version.workspace = true
+edition.workspace = true
+description = "AirPlay 1 (RAOP) Audio Receiver in Pure Rust"
+
+[dependencies]
+airplay-core = { path = "../airplay-core" }
+airplay-crypto = { path = "../airplay-crypto" }
+airplay-audio = { path = "../airplay-audio" }
+tokio = { workspace = true, features = ["full"] }
+socket2.workspace = true
+mdns-sd.workspace = true
+base64 = "0.22"
+tracing.workspace = true
+crossbeam-channel = "0.5"
+thiserror.workspace = true
+async-trait.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Media_Audio_Endpoints",
+    "Win32_Media_Audio",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+] }
+
+[dev-dependencies]
+tokio-test.workspace = true

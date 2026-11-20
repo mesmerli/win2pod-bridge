@@ -17,19 +17,23 @@ mod encoder;
 pub mod eq;
 pub mod enhancer;
 pub mod warmth;
+pub mod mixer;
 mod live_decoder;
+pub mod packet_decoder;
 mod rtp;
 mod buffer;
 mod streamer;
 mod traits;
 
 pub use decoder::{AudioDecoder, DecodedFrame};
+pub use packet_decoder::{AlacPacketDecoder, AlacDecodeError, DEFAULT_ALAC_MAGIC_COOKIE};
 pub use encoder::{AlacEncoder, AudioEncoder, EncodedPacket, create_encoder};
 #[cfg(feature = "aac")]
 pub use encoder::AacEncoder;
 pub use eq::{EqConfig, EqParams, Equalizer};
 pub use enhancer::{SoundEnhancer, SoundEnhancerMode, SoundEnhancerParams};
 pub use warmth::{WarmthEnhancer, WarmthEnhancerMode, WarmthEnhancerParams};
+pub use mixer::{SoftwareAudioMixer, soft_limit};
 pub use live_decoder::{LiveAudioDecoder, LiveFrameSender, LivePcmFrame};
 pub use rtp::{RtpPacket, RtpSender, RtpReceiver, RtpHeader, RetransmitRequest, build_retransmit_response};
 pub use buffer::{AudioBuffer, AudioFrame};

@@ -1,17 +1,20 @@
 # 微软商店产品描述 - 简体中文 (zh-CN)
-# Win2Pod Bridge - 版本 0.1.16
+# Win2Pod Bridge - 版本 0.1.18
 
 ## 0. 此版本的新功能 (What's new in this version - 请粘贴至 Partner Center 发行说明)
 ```text
-【Win2Pod Bridge 0.1.16 重大更新】
-• 🔔 系统托盘悬停提示全新双行极简架构：任务栏（System Tray）悬停提示全面重构为双行独立呈现。第 1 行专用于呈现 HomePod / AirPlay 串流状态与音量（如“🔊 正在串流：书房 (9%)”或静音提示）；第 2 行呈现 AirPods 耳机电量与入耳佩戴状态（如“🎧 AirPods 3：● L 100%”）。彻底去除冗余前缀与单行挤压截断问题，信息清晰直观。
-• 🔄 AirPods ↔ HomePod 智能状态动态联动：佩戴耳机触发音路优先接力时，托盘实时转为本机音频增强状态；耳机放回充电盒收纳时自动恢复 HomePod 串流显示，真实输出端点一目了然。
-• 🛡️ Auto Pre-Amp 自动动态前级防破音技术：10 频段均衡器全面升级自动净空（Headroom）管理，当拉高任意 EQ 频段时，前级会依最大增益量自动进行等量动态衰减，搭配 100% 线性无染的通透平滑限制器（Transparent Peak Limiter），彻底消除数字爆音与削波失真，音质纯净饱满。
-• 🔄 全局音频端点 Fallback 智能备援机制：系统级音频设备存活性防护。当原默认实体扬声器或代理设备在程序退出前或运行中被拔除/离线时，底层自动无缝切换至电脑上其他活动实体音频设备，100% 确保 Windows 系统音频绝不悬空、绝不卡死。
-• 🎧 AirPods 音路状态隔离与音量精准联动：建立实体端点动态解析防御，修正自 HomePod 切换至 AirPods 时误读代理端点音量与静音状态的缺陷，精准维持真实耳机音量，并支持耳机柄触控滑动即时双向联动。
-• ⚡ 事件驱动智能接力与播放收敛（Event-Driven Handoff）：将耳机入盒暂停与播放恢复机制全面升级为事件驱动模型，在 30 秒入盒窗口内精准自动恢复播放器播放，彻底告别传统时间差失准。
-• 🛡️ Anti-Feedback Shield 防啸叫安全隔离：在无外部实体音响、仅连接耳机的极限环境下，以 GUID 穿透解析精准识别回路风险，自动安全抑制二次渲染防范破音，同时维持频谱实时跳动与智能省电休眠。
-• 🚀 代码重构与底层性能优化：精简音路切换与 AirPods 状态判定逻辑，显著提升长时间串流与窗口消息循环稳定性。
+【Win2Pod Bridge 0.1.18 重大功能更新 - AirPlay 音频投放接收端正式登场】
+• 📲 全新推出“AirPlay 音频投放接收端 (Audio Receiver)”：
+  - Windows 电脑化身为合法的 AirPlay 无线音箱！现在可直接从 iPhone、iPad 与 Mac 的控制中心“隔空播放”，将音乐或视频声音无线投放到电脑扬声器或耳机播放。
+  - 支持 44.1 kHz / 16-bit 无损 ALAC 实时解密，音质原汁原味、细致纯净。
+• ✨ 最大动态范围输出（Unity Gain 直通解码技术）：
+  - 突破 iOS 控制中心音量滑块单向保护限制，电脑解码直接以 1.0 (0 dB 最大动态范围) 满格数字输出，即使手机音量拉低，也不会压缩电脑端输出的声音细节与动态范围。
+  - 界面以精致的“✨ 最大动态范围”标签呈现，鼠标悬停即可直观查看手机当前音量数值。
+• ⏯️ 智能待命唤醒机制（DACP Session Target Caching）：
+  - 即使 iPhone 暂停片刻使音频通道休眠，电脑待命卡片依然保留唤醒播放按钮。点击即可隔空唤醒手机继续接续播放；若手机离线则即时提示连接引导。
+• 🎛️ 双向远程媒体控制与音画同步校正：
+  - 电脑卡片支持“播放 / 暂停 / 上一首 / 下一首”实时反向遥控 iPhone 播放器，并同步呈现歌曲名、歌手与专辑封面。
+  - 针对 YouTube、Netflix 音视频串流提供标准 (1.5s) 与深度 (2.0s) 双延迟同步档位，音画唇形完美对齐。
 ```
 
 ## 1. 产品名称 (Product Name)
@@ -25,9 +28,9 @@ Win2Pod Bridge
 *(显示于微软商店搜索预览、类别卡片与宣传横幅)*
 
 ```text
-将 Windows 10 & 11 电脑音频无损实时串流至 Apple HomePod 与 AirPlay 2 智能音箱。全新推出 Win2Pod Motion 3D 印象派油画音频律动可视化窗口！支持点击封面唤起播放软件、动态指针声道平衡、HomePod 双向手势控制、高频谐波修复与 10 频段 EQ。
+将 Windows 电脑与 Apple 设备完美融合！支持将电脑音频无损串流至 HomePod，更全新支持将 iPhone / iPad 音乐通过 AirPlay 无线投放到电脑播放！具备最大动态范围直通输出、AirPods 双向智能接力、3D 油画音频脉冲律动、双向媒体手势遥控与 10 频段专业 EQ。
 ```
-*(字数约 146 字，符合 270 字符限制)*
+*(字数约 160 字，符合 270 字符限制)*
 
 ---
 
@@ -35,15 +38,23 @@ Win2Pod Bridge
 *(请直接复制并粘贴至微软合作伙伴中心 Partner Center 的“描述 / Description”栏位)*
 
 ```text
-将您的 Windows PC 升级为强大的 AirPlay 2 高保真无线音频发射中心！
+将您的 Windows PC 升级为强大的 AirPlay 2 高保真无线音频发射中心与接收中心！
 
-Win2Pod Bridge 是一款专为 Windows 10 与 Windows 11 设计的现代化、极具轻量高保真音频串流桥接工具。通过 Windows 原生底层低延迟 WASAPI Loopback 捕获技术，以 44.1 kHz / 16-bit 双声道无损 ALAC（Apple Lossless Audio Codec）格式，将电脑系统声音或指定应用程序音效，实时、低延迟地传输至 Apple HomePod、HomePod mini、Apple TV 以及任何兼容 AirPlay 2 的智能音箱。
+Win2Pod Bridge 是一款专为 Windows 10 与 Windows 11 设计的现代化、极具轻量高保真音频串流桥接工具。不仅能将电脑系统声音以 44.1 kHz / 16-bit 双声道无损 ALAC（Apple Lossless Audio Codec）实时传输至 Apple HomePod、HomePod mini、Apple TV 以及任何兼容 AirPlay 2 的智能音箱，更全新支持“AirPlay 音频投放接收”，让 Windows PC 成为 iPhone、iPad 与 Mac 的专属无线音箱！
 
-Windows 原生无法发送 AirPlay 2 协议，且 Apple HomePod 严格要求 HomeKit Transient 瞬态加密配对握手，导致市面上多数传统工具无法支持。Win2Pod Bridge 完全采用纯 Rust 语言从底层实现软件级加密配对，无需改机、无需 Apple MFi 硬件授权芯片，更无需安装庞大繁杂的后台辅助常驻程序，即可享受原汁原味的顶级声学体验！
+Windows 原生无法发送与接收 AirPlay 协议，Win2Pod Bridge 完全采用纯 Rust 语言从底层实现软件级加密配对与串流解码，无需改机、无需 Apple MFi 硬件授权芯片，更无需安装庞大繁杂的后台辅助常驻程序，即可享受原汁原味的顶级声学体验！
 
 ============================================================
 🌟 核心功能与特色亮点 (KEY FEATURES)
 ============================================================
+
+📲 AIRPLAY 音频投放接收端 (AIRPLAY AUDIO RECEIVER)
+• 让 Windows PC 成为 Apple 设备的无线音箱：iPhone、iPad 或 Mac 打开“控制中心”点击“隔空播放 (AirPlay)”，即可将 Apple Music、YouTube、Spotify 等任何 App 的音频直接传输到电脑播放。
+• 44.1 kHz / 16-bit 无损 ALAC 解密：支持 Apple Lossless 实时解密串流，保留录音室级别的细节表现。
+• ✨ 最大动态范围直通 (Unity Gain)：本地解码以 1.0 (0 dB) 满格数字输出，彻底消除手机音量滑块造成的动态压缩与音质衰减。
+• ⏯️ 智能待命唤醒 (Smart Standby Resume)：手机暂停使连接休眠后，电脑待命卡片依然能一键隔空唤醒 iPhone 接续播放。
+• 双向媒体控制与封面同步：电脑支持上一首、下一首、播放/暂停反向遥控 iPhone，即时同步显示专辑封面与歌曲信息。
+• 音画唇形同步延迟校正：内置“标准 (1.5秒)”与“深度 (2.0秒)”双延迟档位，观看 YouTube 或视频串流声音与画面精准同步。
 
 • 🛡️ Auto Pre-Amp 自动动态前级防破音 & 10 频段专业均衡器：
   - 10 频段均衡器引入自动动态 Headroom 管理，拉高任意频段时前级依据最大增益量自动进行等量动态衰减，搭配 100% 线性无染的通透平滑限制器（Transparent Peak Limiter），彻底根绝数字爆音与削波失真，音质纯净饱满。

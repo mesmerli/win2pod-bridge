@@ -93,7 +93,7 @@ rustup default stable-x86_64-pc-windows-gnu
 
 ## 📜 授權與鳴謝 (Acknowledgements & License)
 
-本專案基於 Lucas McGartland 的 [**airplay2-rs**](https://github.com/lmcgartland/airplay2-rs) 核心研究與 SpriteOvO 的 [**AirPodsDesktop**](https://github.com/SpriteOvO/AirPodsDesktop)（Apple Continuity BLE 鄰近配對協定與入耳偵測逆向邏輯）進行深度重構與擴充，新增了：
+本專案基於 Lucas McGartland 的 [**airplay2-rs**](https://github.com/lmcgartland/airplay2-rs) 核心研究、[**UxPlay**](https://github.com/FDH2/UxPlay)（AirPlay RAOP / RTSP 音訊接收端伺服器與 DACP 遙控參考）與 SpriteOvO 的 [**AirPodsDesktop**](https://github.com/SpriteOvO/AirPodsDesktop)（Apple Continuity BLE 鄰近配對協定與入耳偵測逆向邏輯）進行深度重構與擴充，新增了：
 - 純 Rust Fluent 浮動 GUI 與系統匣管理（`crates/homepod-cast-gui`）
 - 原生 AirPods / Beats BLE 入耳偵測、電量監視與優先音路轉移交接架構
 - Windows 原生 WASAPI Loopback 擷取管線與即時 ALAC 編碼器

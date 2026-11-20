@@ -23,6 +23,9 @@ pub enum Language {
     Japanese,            // ja
     Korean,              // ko
     PortugueseBrazil,    // pt-BR
+    PortuguesePortugal,  // pt-PT
+    Indonesian,          // id-ID
+    Vietnamese,          // vi-VN
     Russian,             // ru
     Spanish,             // es
 }
@@ -37,6 +40,9 @@ pub const ALL_LANGUAGES: &[Language] = &[
     Language::Japanese,
     Language::Korean,
     Language::PortugueseBrazil,
+    Language::PortuguesePortugal,
+    Language::Indonesian,
+    Language::Vietnamese,
     Language::Russian,
     Language::Spanish,
 ];
@@ -53,6 +59,9 @@ impl Language {
             Self::Japanese => "ja",
             Self::Korean => "ko",
             Self::PortugueseBrazil => "pt-BR",
+            Self::PortuguesePortugal => "pt-PT",
+            Self::Indonesian => "id-ID",
+            Self::Vietnamese => "vi-VN",
             Self::Russian => "ru",
             Self::Spanish => "es",
         }
@@ -68,7 +77,10 @@ impl Language {
             "it" | "it-it" => Some(Self::Italian),
             "ja" | "ja-jp" => Some(Self::Japanese),
             "ko" | "ko-kr" => Some(Self::Korean),
+            "pt-pt" => Some(Self::PortuguesePortugal),
             "pt-br" | "pt" => Some(Self::PortugueseBrazil),
+            "id" | "id-id" | "in" | "in-id" => Some(Self::Indonesian),
+            "vi" | "vi-vn" => Some(Self::Vietnamese),
             "ru" | "ru-ru" => Some(Self::Russian),
             "es" | "es-es" | "es-mx" => Some(Self::Spanish),
             _ => None,
@@ -86,6 +98,9 @@ impl Language {
             Self::Japanese => "日本語 (Japanese)",
             Self::Korean => "한국어 (Korean)",
             Self::PortugueseBrazil => "Português do Brasil (Portuguese Brazil)",
+            Self::PortuguesePortugal => "Português de Portugal (Portuguese Portugal)",
+            Self::Indonesian => "Bahasa Indonesia (Indonesian)",
+            Self::Vietnamese => "Tiếng Việt (Vietnamese)",
             Self::Russian => "Русский (Russian)",
             Self::Spanish => "Español (Spanish)",
         }
@@ -116,7 +131,15 @@ impl Language {
             0x10 => Self::Italian,
             0x11 => Self::Japanese,
             0x12 => Self::Korean,
-            0x16 => Self::PortugueseBrazil,
+            0x16 => {
+                if sub == 0x02 {
+                    Self::PortugueseBrazil
+                } else {
+                    Self::PortuguesePortugal
+                }
+            }
+            0x21 => Self::Indonesian,
+            0x2A => Self::Vietnamese,
             0x19 => Self::Russian,
             0x0A => Self::Spanish,
             _ => Self::English,
@@ -138,6 +161,9 @@ impl Language {
             Self::Japanese => " ⟳ 再読み込み ",
             Self::Korean => " ⟳ 새로고침 ",
             Self::PortugueseBrazil => " ⟳ Atualizar ",
+            Self::PortuguesePortugal => " ⟳ Atualizar ",
+            Self::Indonesian => " ⟳ Segarkan ",
+            Self::Vietnamese => " ⟳ Làm mới ",
             Self::Russian => " ⟳ Обновить ",
             Self::Spanish => " ⟳ Actualizar ",
         }
@@ -154,6 +180,9 @@ impl Language {
             Self::Japanese => "⬅ 戻る",
             Self::Korean => "⬅ 뒤로",
             Self::PortugueseBrazil => "⬅ Voltar",
+            Self::PortuguesePortugal => "⬅ Voltar",
+            Self::Indonesian => "⬅ Kembali",
+            Self::Vietnamese => "⬅ Quay lại",
             Self::Russian => "⬅ Назад",
             Self::Spanish => "⬅ Volver",
         }
@@ -170,6 +199,9 @@ impl Language {
             Self::Japanese => "詳細設定を開く",
             Self::Korean => "고급 설정 열기",
             Self::PortugueseBrazil => "Abrir configurações avançadas",
+            Self::PortuguesePortugal => "Abrir definições avançadas",
+            Self::Indonesian => "Buka Pengaturan Lanjutan",
+            Self::Vietnamese => "Mở cài đặt nâng cao",
             Self::Russian => "Открыть расширенные настройки",
             Self::Spanish => "Abrir configuración avanzada",
         }
@@ -186,6 +218,9 @@ impl Language {
             Self::Japanese => "音声ソースと出力",
             Self::Korean => "오디오 소스 및 출력",
             Self::PortugueseBrazil => "Fonte de áudio e saída",
+            Self::PortuguesePortugal => "Fonte de áudio e saída",
+            Self::Indonesian => "Sumber & Output Audio",
+            Self::Vietnamese => "Nguồn & Đầu ra âm thanh",
             Self::Russian => "Источник звука и вывод",
             Self::Spanish => "Fuente de audio y salida",
         }
@@ -202,6 +237,9 @@ impl Language {
             Self::Japanese => "ストリーミングと電源",
             Self::Korean => "스트리밍 및 전원",
             Self::PortugueseBrazil => "Transmissão e energia",
+            Self::PortuguesePortugal => "Transmissão e energia",
+            Self::Indonesian => "Streaming & Daya",
+            Self::Vietnamese => "Truyền phát & Nguồn điện",
             Self::Russian => "Трансляция и питание",
             Self::Spanish => "Transmisión y energía",
         }
@@ -218,6 +256,9 @@ impl Language {
             Self::Japanese => "システムとショートカット",
             Self::Korean => "시스템 및 단축키",
             Self::PortugueseBrazil => "Sistema e atalhos",
+            Self::PortuguesePortugal => "Sistema e atalhos",
+            Self::Indonesian => "Sistem & Pintasan",
+            Self::Vietnamese => "Hệ thống & Phím tắt",
             Self::Russian => "Система и горячие клавиши",
             Self::Spanish => "Sistema y atajos",
         }
@@ -234,6 +275,9 @@ impl Language {
             Self::Japanese => "✕ 閉じるとタスクトレイに常駐します",
             Self::Korean => "✕ 창을 닫으면 시스템 트레이로 최소화됩니다",
             Self::PortugueseBrazil => "✕ Fechar minimiza para a bandeja do sistema",
+            Self::PortuguesePortugal => "✕ Fechar minimiza para a área de notificação",
+            Self::Indonesian => "✕ Menutup akan meminimalkan ke baki sistem",
+            Self::Vietnamese => "✕ Đóng sẽ thu nhỏ xuống khay hệ thống",
             Self::Russian => "✕ Закрытие сворачивает в системный трей",
             Self::Spanish => "✕ Al cerrar se minimiza a la bandeja del sistema",
         }
@@ -241,17 +285,39 @@ impl Language {
 
     pub fn btn_quit_app(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "🚪 結束程式",
-            Self::SimplifiedChinese => "🚪 退出程序",
-            Self::English => "🚪 Exit App",
-            Self::French => "🚪 Quitter",
-            Self::German => "🚪 Beenden",
-            Self::Italian => "🚪 Esci",
-            Self::Japanese => "🚪 終了",
-            Self::Korean => "🚪 앱 종료",
-            Self::PortugueseBrazil => "🚪 Sair do app",
-            Self::Russian => "🚪 Выйти",
-            Self::Spanish => "🚪 Salir de la app",
+            Self::TraditionalChinese => "⏻ 結束程式",
+            Self::SimplifiedChinese => "⏻ 退出程序",
+            Self::English => "⏻ Exit App",
+            Self::French => "⏻ Quitter",
+            Self::German => "⏻ Beenden",
+            Self::Italian => "⏻ Esci",
+            Self::Japanese => "⏻ 終了",
+            Self::Korean => "⏻ 앱 종료",
+            Self::PortugueseBrazil => "⏻ Sair do app",
+            Self::PortuguesePortugal => "⏻ Sair da aplicação",
+            Self::Indonesian => "⏻ Keluar dari Aplikasi",
+            Self::Vietnamese => "⏻ Thoát ứng dụng",
+            Self::Russian => "⏻ Выйти",
+            Self::Spanish => "⏻ Salir de la app",
+        }
+    }
+
+    pub fn btn_quitting_app(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "⏻ 正在結束...",
+            Self::SimplifiedChinese => "⏻ 正在退出...",
+            Self::English => "⏻ Quitting...",
+            Self::French => "⏻ Fermeture...",
+            Self::German => "⏻ Wird beendet...",
+            Self::Italian => "⏻ Chiusura...",
+            Self::Japanese => "⏻ 終了中...",
+            Self::Korean => "⏻ 종료 중...",
+            Self::PortugueseBrazil => "⏻ Encerrando...",
+            Self::PortuguesePortugal => "⏻ A encerrar...",
+            Self::Indonesian => "⏻ Sedang keluar...",
+            Self::Vietnamese => "⏻ Đang thoát...",
+            Self::Russian => "⏻ Завершение...",
+            Self::Spanish => "⏻ Saliendo...",
         }
     }
 
@@ -266,6 +332,9 @@ impl Language {
             Self::Japanese => "ローカルネットワーク内のAirPlayデバイスを再検索",
             Self::Korean => "로컬 네트워크의 AirPlay 기기 다시 검색",
             Self::PortugueseBrazil => "Buscar dispositivos AirPlay na rede local",
+            Self::PortuguesePortugal => "Procurar dispositivos AirPlay na rede local",
+            Self::Indonesian => "Pindai ulang perangkat AirPlay di jaringan lokal",
+            Self::Vietnamese => "Quét lại các thiết bị AirPlay trên mạng cục bộ",
             Self::Russian => "Поиск устройств AirPlay в локальной сети",
             Self::Spanish => "Buscar dispositivos AirPlay en la red local",
         }
@@ -282,6 +351,9 @@ impl Language {
             Self::Japanese => "🛡 自動プリアンプ減衰補正：現在のEQ最大ブースト量に合わせてヘッドルームを自動調整し、音割れやデジタルクリッピング歪みを完全に防止します。",
             Self::Korean => "🛡 자동 프리앰프 감쇄 보정: 현재 EQ 최대 부스트에 맞춰 헤드룸을 자동 확보하여 음 왜곡 및 디지털 클리핑을 방지합니다.",
             Self::PortugueseBrazil => "🛡 Pré-amplificador automático: compensa o ganho máximo do equalizador para evitar distorção por corte.",
+            Self::PortuguesePortugal => "🛡 Pré-amplificador automático: compensa o ganho máximo do equalizador para evitar distorção por corte.",
+            Self::Indonesian => "🛡 Ruang Kepala Pra-Amp Otomatis: Mengompensasi penguatan EQ tertinggi secara otomatis untuk mencegah distorsi kliping.",
+            Self::Vietnamese => "🛡 Khoảng đệm tiền khuếch đại tự động: Tự động bù dải tăng EQ cao nhất để chống méo tiếng vỡ âm (clipping).",
             Self::Russian => "🛡 Авто-предусиление: автоматически компенсирует максимальное усиление эквалайзера для предотвращения клиппинга.",
             Self::Spanish => "🛡 Preamplificador automático: compensa la ganancia máxima del ecualizador para evitar la distorsión por saturación.",
         }
@@ -298,6 +370,9 @@ impl Language {
             Self::Japanese => "待機中 (未接続)",
             Self::Korean => "대기 중 (연결되지 않음)",
             Self::PortugueseBrazil => "Em espera (Não conectado)",
+            Self::PortuguesePortugal => "Em espera (Não ligado)",
+            Self::Indonesian => "Siaga (Tidak terhubung)",
+            Self::Vietnamese => "Chờ (Chưa kết nối)",
             Self::Russian => "Ожидание (Не подключено)",
             Self::Spanish => "En espera (No conectado)",
         }
@@ -314,6 +389,9 @@ impl Language {
             Self::Japanese => format!("{name} に接続中..."),
             Self::Korean => format!("{name}에 연결 중..."),
             Self::PortugueseBrazil => format!("Conectando a {name}..."),
+            Self::PortuguesePortugal => format!("A ligar a {name}..."),
+            Self::Indonesian => format!("Menghubungkan ke {name}..."),
+            Self::Vietnamese => format!("Đang kết nối tới {name}..."),
             Self::Russian => format!("Подключение к {name}..."),
             Self::Spanish => format!("Conectando a {name}..."),
         }
@@ -330,6 +408,9 @@ impl Language {
             Self::Japanese => format!("ストリーミング中：{name}"),
             Self::Korean => format!("스트리밍 중: {name}"),
             Self::PortugueseBrazil => format!("Transmitindo: {name}"),
+            Self::PortuguesePortugal => format!("A transmitir: {name}"),
+            Self::Indonesian => format!("Streaming: {name}"),
+            Self::Vietnamese => format!("Đang truyền phát: {name}"),
             Self::Russian => format!("Трансляция: {name}"),
             Self::Spanish => format!("Transmitiendo: {name}"),
         }
@@ -347,6 +428,9 @@ impl Language {
                 Self::Japanese => "HomePod (第1世代)",
                 Self::Korean => "HomePod (1세대)",
                 Self::PortugueseBrazil => "HomePod (1ª ger.)",
+                Self::PortuguesePortugal => "HomePod (1ª ger.)",
+                Self::Indonesian => "HomePod (Gen ke-1)",
+                Self::Vietnamese => "HomePod (Thế hệ 1)",
                 Self::Russian => "HomePod (1-го пок.)",
                 Self::Spanish => "HomePod (1.ª gen.)",
             },
@@ -361,6 +445,9 @@ impl Language {
                 Self::Japanese => "HomePod (第2世代)",
                 Self::Korean => "HomePod (2세대)",
                 Self::PortugueseBrazil => "HomePod (2ª ger.)",
+                Self::PortuguesePortugal => "HomePod (2ª ger.)",
+                Self::Indonesian => "HomePod (Gen ke-2)",
+                Self::Vietnamese => "HomePod (Thế hệ 2)",
                 Self::Russian => "HomePod (2-го пок.)",
                 Self::Spanish => "HomePod (2.ª gen.)",
             },
@@ -381,6 +468,9 @@ impl Language {
             Self::Japanese => format!("ステレオペア ({count} 台 • {friendly_model})"),
             Self::Korean => format!("스테레오 페어 ({count}대 • {friendly_model})"),
             Self::PortugueseBrazil => format!("Par estéreo ({count} aparelhos • {friendly_model})"),
+            Self::PortuguesePortugal => format!("Par estéreo ({count} aparelhos • {friendly_model})"),
+            Self::Indonesian => format!("Pasangan Stereo ({count} unit • {friendly_model})"),
+            Self::Vietnamese => format!("Cặp âm thanh nổi ({count} thiết bị • {friendly_model})"),
             Self::Russian => format!("Стереопара ({count} устр. • {friendly_model})"),
             Self::Spanish => format!("Par estéreo ({count} unidades • {friendly_model})"),
         }
@@ -399,6 +489,9 @@ impl Language {
                 Self::Japanese => "接続失敗：470 未認証（Apple TVの「設定 > AirPlayとHomeKit > アクセスを許可」を「全員」に設定し、パスワードを無効にしてください）".to_string(),
                 Self::Korean => "연결 실패: 470 인증 필요 (Apple TV \"설정 > AirPlay 및 HomeKit > 접근 허용\"을 \"모든 사람\"으로 설정하고 암호 요구를 끄십시오)".to_string(),
                 Self::PortugueseBrazil => "Falha na conexão: 470 Autorização necessária (Defina na Apple TV \"Ajustes > AirPlay e HomeKit > Permitir Acesso\" como \"Todos\" e desative a senha)".to_string(),
+                Self::PortuguesePortugal => "Falha na ligação: 470 Autorização necessária (Defina na Apple TV \"Definições > AirPlay e HomeKit > Permitir Acesso\" como \"Todos\" e desative a palavra-passe)".to_string(),
+                Self::Indonesian => "Koneksi gagal: 470 Otorisasi Diperlukan (Harap atur Apple TV \"Pengaturan > AirPlay & HomeKit > Izinkan Akses\" ke \"Semua Orang\" dan matikan kata sandi)".to_string(),
+                Self::Vietnamese => "Kết nối thất bại: 470 Yêu cầu cấp quyền (Vui lòng đặt Apple TV \"Cài đặt > AirPlay & HomeKit > Cho phép truy cập\" thành \"Mọi người\" và tắt mật khẩu)".to_string(),
                 Self::Russian => "Ошибка подключения: 470 Требуется авторизация (Установите на Apple TV «Настройки > AirPlay и HomeKit > Доступ» в значение «Все» и отключите пароль)".to_string(),
                 Self::Spanish => "Error de conexión: 470 Autorización requerida (Configure en Apple TV \"Ajustes > AirPlay y HomeKit > Permitir acceso\" en \"Todos\" y desactive la contraseña)".to_string(),
             };
@@ -415,6 +508,9 @@ impl Language {
                 Self::Japanese => "接続失敗：403 アクセス拒否（受信機に接続を拒否されました。AirPlayアクセス許可設定を確認してください）".to_string(),
                 Self::Korean => "연결 실패: 403 거부됨 (수신 기기가 연결을 거부했습니다. AirPlay 접근 권한 설정을 확인하십시오)".to_string(),
                 Self::PortugueseBrazil => "Falha na conexão: 403 Proibido (O receptor recusou a conexão, verifique as permissões do AirPlay)".to_string(),
+                Self::PortuguesePortugal => "Falha na ligação: 403 Proibido (O recetor recusou a ligação, verifique as permissões do AirPlay)".to_string(),
+                Self::Indonesian => "Koneksi gagal: 403 Dilarang (Penerima menolak koneksi, periksa izin akses AirPlay)".to_string(),
+                Self::Vietnamese => "Kết nối thất bại: 403 Bị cấm (Thiết bị nhận đã từ chối kết nối, vui lòng kiểm tra quyền truy cập AirPlay)".to_string(),
                 Self::Russian => "Ошибка подключения: 403 Запрещено (Приемник отклонил подключение, проверьте разрешения AirPlay)".to_string(),
                 Self::Spanish => "Error de conexión: 403 Prohibido (El receptor rechazó la conexión, verifique los permisos de AirPlay)".to_string(),
             };
@@ -431,6 +527,9 @@ impl Language {
                 Self::Japanese => "接続失敗：401 認証が必要（受信機にAirPlayパスワードが必要です）".to_string(),
                 Self::Korean => "연결 실패: 401 인증 필요 (수신 기기에 AirPlay 암호가 필요합니다)".to_string(),
                 Self::PortugueseBrazil => "Falha na conexão: 401 Não autorizado (O receptor requer uma senha do AirPlay)".to_string(),
+                Self::PortuguesePortugal => "Falha na ligação: 401 Não autorizado (O recetor requer uma palavra-passe do AirPlay)".to_string(),
+                Self::Indonesian => "Koneksi gagal: 401 Tidak Diotorisasi (Penerima memerlukan kata sandi AirPlay)".to_string(),
+                Self::Vietnamese => "Kết nối thất bại: 401 Chưa xác thực (Thiết bị nhận yêu cầu mật khẩu AirPlay)".to_string(),
                 Self::Russian => "Ошибка подключения: 401 Не авторизован (Приемник требует пароль AirPlay)".to_string(),
                 Self::Spanish => "Error de conexión: 401 No autorizado (El receptor requiere una contraseña de AirPlay)".to_string(),
             };
@@ -447,6 +546,9 @@ impl Language {
                 Self::Japanese => "接続失敗：接続拒否（ターゲット機器に接続できません。電源とWi-Fi接続を確認してください）".to_string(),
                 Self::Korean => "연결 실패: 연결 거부 (대상 기기에 연결할 수 없습니다. 전원 및 Wi-Fi 연결을 확인하십시오)".to_string(),
                 Self::PortugueseBrazil => "Falha na conexão: Conexão recusada (Não foi possível conectar ao dispositivo, verifique energia e Wi-Fi)".to_string(),
+                Self::PortuguesePortugal => "Falha na ligação: Ligação recusada (Não foi possível ligar ao dispositivo, verifique energia e Wi-Fi)".to_string(),
+                Self::Indonesian => "Koneksi gagal: Koneksi ditolak (Tidak dapat terhubung ke perangkat target, periksa daya dan Wi-Fi)".to_string(),
+                Self::Vietnamese => "Kết nối thất bại: Kết nối bị từ chối (Không thể kết nối đến thiết bị đích, vui lòng kiểm tra nguồn điện và Wi-Fi)".to_string(),
                 Self::Russian => "Ошибка подключения: В соединении отказано (Не удалось подключиться к устройству, проверьте питание и Wi-Fi)".to_string(),
                 Self::Spanish => "Error de conexión: Conexión rechazada (No se pudo conectar al dispositivo objetivo, compruebe alimentación y Wi-Fi)".to_string(),
             };
@@ -463,6 +565,9 @@ impl Language {
                 Self::Japanese => "接続失敗：接続タイムアウト（ターゲット機器から応答がありません。ネットワークを確認してください）".to_string(),
                 Self::Korean => "연결 실패: 연결 시간 초과 (대상 기기가 응답하지 않습니다. 네트워크 품질을 확인하십시오)".to_string(),
                 Self::PortugueseBrazil => "Falha na conexão: Tempo limite esgotado (O dispositivo não respondeu, verifique a rede)".to_string(),
+                Self::PortuguesePortugal => "Falha na ligação: Tempo limite esgotado (O dispositivo não respondeu, verifique a qualidade da rede)".to_string(),
+                Self::Indonesian => "Koneksi gagal: Waktu koneksi habis (Perangkat target tidak merespons, periksa kualitas jaringan)".to_string(),
+                Self::Vietnamese => "Kết nối thất bại: Quá thời gian chờ kết nối (Thiết bị đích không phản hồi, vui lòng kiểm tra chất lượng mạng)".to_string(),
                 Self::Russian => "Ошибка подключения: Время ожидания истекло (Устройство не отвечает, проверьте сеть)".to_string(),
                 Self::Spanish => "Error de conexión: Tiempo de espera agotado (El dispositivo no responde, verifique la red)".to_string(),
             };
@@ -479,6 +584,9 @@ impl Language {
                 Self::Japanese => "接続失敗：選択したデバイスの有効なIPv4アドレスが見つかりませんでした".to_string(),
                 Self::Korean => "연결 실패: 선택한 기기의 유효한 IPv4 주소를 찾을 수 없습니다".to_string(),
                 Self::PortugueseBrazil => "Falha na conexão: Nenhum endereço IPv4 utilizável encontrado para o dispositivo selecionado".to_string(),
+                Self::PortuguesePortugal => "Falha na ligação: Nenhum endereço IPv4 utilizável encontrado para o dispositivo selecionado".to_string(),
+                Self::Indonesian => "Koneksi gagal: Tidak ada alamat IPv4 yang dapat digunakan untuk perangkat yang dipilih".to_string(),
+                Self::Vietnamese => "Kết nối thất bại: Không tìm thấy địa chỉ IPv4 khả dụng cho thiết bị đã chọn".to_string(),
                 Self::Russian => "Ошибка подключения: Не найден доступный адрес IPv4 для выбранного устройства".to_string(),
                 Self::Spanish => "Error de conexión: No se encontró una dirección IPv4 utilizable para el dispositivo seleccionado".to_string(),
             };
@@ -495,6 +603,9 @@ impl Language {
                 Self::Japanese => "接続失敗：PTPクロック同期に失敗しました。再試行またはデバイス一覧を更新してください".to_string(),
                 Self::Korean => "연결 실패: PTP 시계 동기화에 실패했습니다. 다시 시도하거나 기기 목록을 새로고침하십시오".to_string(),
                 Self::PortugueseBrazil => "Falha na conexão: Falha na sincronização do relógio PTP, tente novamente".to_string(),
+                Self::PortuguesePortugal => "Falha na ligação: Falha na sincronização do relógio PTP, tente novamente ou atualize os dispositivos".to_string(),
+                Self::Indonesian => "Koneksi gagal: Sinkronisasi jam PTP gagal, silakan coba lagi atau segarkan perangkat".to_string(),
+                Self::Vietnamese => "Kết nối thất bại: Đồng bộ hóa xung nhịp PTP thất bại, vui lòng thử lại hoặc làm mới danh sách thiết bị".to_string(),
                 Self::Russian => "Ошибка подключения: Сбой синхронизации часов PTP, повторите попытку".to_string(),
                 Self::Spanish => "Error de conexión: Error de sincronización del reloj PTP, intente nuevamente".to_string(),
             };
@@ -510,6 +621,9 @@ impl Language {
             Self::Japanese => format!("接続失敗：{trimmed}"),
             Self::Korean => format!("연결 실패: {trimmed}"),
             Self::PortugueseBrazil => format!("Falha na conexão: {trimmed}"),
+            Self::PortuguesePortugal => format!("Falha na ligação: {trimmed}"),
+            Self::Indonesian => format!("Koneksi gagal: {trimmed}"),
+            Self::Vietnamese => format!("Kết nối thất bại: {trimmed}"),
             Self::Russian => format!("Ошибка подключения: {trimmed}"),
             Self::Spanish => format!("Error de conexión: {trimmed}"),
         }
@@ -526,6 +640,9 @@ impl Language {
             Self::Japanese => "切断",
             Self::Korean => "연결 해제",
             Self::PortugueseBrazil => "Desconectar",
+            Self::PortuguesePortugal => "Desligar",
+            Self::Indonesian => "Putuskan",
+            Self::Vietnamese => "Ngắt kết nối",
             Self::Russian => "Отключить",
             Self::Spanish => "Desconectar",
         }
@@ -542,6 +659,9 @@ impl Language {
             Self::Japanese => "スピーカー接続が乗っ取られました",
             Self::Korean => "스피커 연결이 다른 기기에서 가져감",
             Self::PortugueseBrazil => "Conexão do alto-falante assumida",
+            Self::PortuguesePortugal => "Ligação do altifalante assumida",
+            Self::Indonesian => "Koneksi speaker diambil alih",
+            Self::Vietnamese => "Kết nối loa đã bị chiếm quyền",
             Self::Russian => "Подключение колонки перехвачено",
             Self::Spanish => "Conexión del altavoz transferida",
         }
@@ -558,6 +678,9 @@ impl Language {
             Self::Japanese => "利用可能な AirPlay オーディオ機器",
             Self::Korean => "사용 가능한 AirPlay 오디오 기기",
             Self::PortugueseBrazil => "Dispositivos de áudio AirPlay disponíveis",
+            Self::PortuguesePortugal => "Dispositivos de áudio AirPlay disponíveis",
+            Self::Indonesian => "Perangkat Audio AirPlay yang Tersedia",
+            Self::Vietnamese => "Thiết bị âm thanh AirPlay khả dụng",
             Self::Russian => "Доступные аудиоустройства AirPlay",
             Self::Spanish => "Dispositivos de audio AirPlay disponibles",
         }
@@ -574,6 +697,9 @@ impl Language {
             Self::Japanese => "利用可能な AirPods",
             Self::Korean => "사용 가능한 AirPods",
             Self::PortugueseBrazil => "AirPods disponíveis",
+            Self::PortuguesePortugal => "AirPods disponíveis",
+            Self::Indonesian => "AirPods yang Tersedia",
+            Self::Vietnamese => "AirPods khả dụng",
             Self::Russian => "Доступные AirPods",
             Self::Spanish => "AirPods disponibles",
         }
@@ -590,6 +716,9 @@ impl Language {
             Self::Japanese => "ペアリングされた AirPods が見つかりません",
             Self::Korean => "페어링된 AirPods를 찾을 수 없습니다",
             Self::PortugueseBrazil => "Nenhum AirPods emparelhado detectado",
+            Self::PortuguesePortugal => "Nenhum AirPods emparelhado detetado",
+            Self::Indonesian => "Tidak ada AirPods terpasang yang terdeteksi",
+            Self::Vietnamese => "Không phát hiện AirPods đã ghép đôi nào",
             Self::Russian => "Сопряженные AirPods не обнаружены",
             Self::Spanish => "No se detectaron AirPods emparejados",
         }
@@ -606,6 +735,9 @@ impl Language {
             Self::Japanese => "初回は Windows の Bluetooth 設定からペアリングしてください。名前に「AirPods」または「Pods」を含める必要があります。",
             Self::Korean => "처음 사용 시 Windows Bluetooth 설정에서 페어링하세요. 이름에 'AirPods' 또는 'Pods'가 포함되어야 합니다.",
             Self::PortugueseBrazil => "Emparelhe pelo Bluetooth do Windows primeiro; o nome deve conter 'AirPods' ou 'Pods'.",
+            Self::PortuguesePortugal => "Emparelhe através das definições de Bluetooth do Windows primeiro; o nome deve conter \"AirPods\" ou \"Pods\".",
+            Self::Indonesian => "Pasangkan melalui pengaturan Bluetooth Windows terlebih dahulu; nama perangkat harus mempertahankan \"AirPods\" atau \"Pods\".",
+            Self::Vietnamese => "Ghép đôi qua cài đặt Bluetooth của Windows trước; tên thiết bị phải giữ từ \"AirPods\" hoặc \"Pods\".",
             Self::Russian => "Сначала выполните сопряжение в Windows Bluetooth; имя должно содержать «AirPods» или «Pods».",
             Self::Spanish => "Empareje primero en Bluetooth de Windows; el nombre debe incluir 'AirPods' o 'Pods'.",
         }
@@ -622,6 +754,9 @@ impl Language {
             Self::Japanese => "使用中",
             Self::Korean => "사용 중",
             Self::PortugueseBrazil => "Em uso",
+            Self::PortuguesePortugal => "Em utilização",
+            Self::Indonesian => "Sedang Digunakan",
+            Self::Vietnamese => "Đang sử dụng",
             Self::Russian => "Используется",
             Self::Spanish => "En uso",
         }
@@ -638,6 +773,9 @@ impl Language {
             Self::Japanese => "待機中",
             Self::Korean => "대기 중",
             Self::PortugueseBrazil => "Em espera",
+            Self::PortuguesePortugal => "Em espera",
+            Self::Indonesian => "Siaga",
+            Self::Vietnamese => "Chế độ chờ",
             Self::Russian => "Ожидание",
             Self::Spanish => "En espera",
         }
@@ -654,6 +792,9 @@ impl Language {
             Self::Japanese => "接続済み",
             Self::Korean => "연결됨",
             Self::PortugueseBrazil => "Conectado",
+            Self::PortuguesePortugal => "Ligado",
+            Self::Indonesian => "Terhubung",
+            Self::Vietnamese => "Đã kết nối",
             Self::Russian => "Подключено",
             Self::Spanish => "Conectado",
         }
@@ -670,6 +811,9 @@ impl Language {
             Self::Japanese => "未接続",
             Self::Korean => "연결 안 됨",
             Self::PortugueseBrazil => "Desconectado",
+            Self::PortuguesePortugal => "Desligado",
+            Self::Indonesian => "Terputus",
+            Self::Vietnamese => "Đã ngắt kết nối",
             Self::Russian => "Отключено",
             Self::Spanish => "Desconectado",
         }
@@ -686,6 +830,9 @@ impl Language {
             Self::Japanese => "AirPods の充電ケースを開けると自動的に接続されます",
             Self::Korean => "AirPods 충전 케이스를 열면 자동으로 연결됩니다",
             Self::PortugueseBrazil => "Abra o estojo de recarga dos AirPods para conectar automaticamente",
+            Self::PortuguesePortugal => "Abra a caixa de carregamento dos AirPods para ligar automaticamente",
+            Self::Indonesian => "Buka wadah pengisi daya AirPods untuk menghubungkan otomatis",
+            Self::Vietnamese => "Mở hộp sạc AirPods để tự động kết nối",
             Self::Russian => "Откройте зарядный футляр AirPods для автоматического подключения",
             Self::Spanish => "Abre el estuche de carga de los AirPods para conectar automáticamente",
         }
@@ -702,6 +849,9 @@ impl Language {
             Self::Japanese => "⚙ Windows の Bluetooth 設定を開く",
             Self::Korean => "⚙ Windows Bluetooth 설정 열기",
             Self::PortugueseBrazil => "⚙ Abrir configurações de Bluetooth",
+            Self::PortuguesePortugal => "⚙ Abrir Definições de Bluetooth",
+            Self::Indonesian => "⚙ Buka Pengaturan Bluetooth Windows",
+            Self::Vietnamese => "⚙ Mở Cài đặt Bluetooth của Windows",
             Self::Russian => "⚙ Открыть параметры Bluetooth",
             Self::Spanish => "⚙ Abrir configuración de Bluetooth",
         }
@@ -718,6 +868,9 @@ impl Language {
             Self::Japanese => format!("(マルチルーム同期 • {count}台)"),
             Self::Korean => format!("(멀티룸 동기화 • {count}대)"),
             Self::PortugueseBrazil => format!("(Multiambiente • {count} disp.)"),
+            Self::PortuguesePortugal => format!("(Multi-divisão • {count} disp.)"),
+            Self::Indonesian => format!("(Sinkronisasi multi-ruangan • {count} perangkat)"),
+            Self::Vietnamese => format!("(Đồng bộ đa phòng • {count} thiết bị)"),
             Self::Russian => format!("(Мультирум • {count} устр.)"),
             Self::Spanish => format!("(Multisala • {count} disp.)"),
         }
@@ -734,6 +887,9 @@ impl Language {
             Self::Japanese => "検索中 / サポートされているAirPlayデバイスが見つかりません",
             Self::Korean => "검색 중 / 지원되는 AirPlay 기기를 찾을 수 없음",
             Self::PortugueseBrazil => "Procurando / Nenhum dispositivo AirPlay encontrado",
+            Self::PortuguesePortugal => "A procurar / Nenhum dispositivo AirPlay encontrado",
+            Self::Indonesian => "Mencari / Tidak ada perangkat AirPlay yang didukung ditemukan",
+            Self::Vietnamese => "Đang tìm kiếm / Không tìm thấy thiết bị AirPlay tương thích",
             Self::Russian => "Поиск / Устройства AirPlay не найдены",
             Self::Spanish => "Buscando / No se encontraron dispositivos AirPlay",
         }
@@ -750,6 +906,9 @@ impl Language {
             Self::Japanese => "ステレオペア",
             Self::Korean => "스테레오 페어",
             Self::PortugueseBrazil => "Par estéreo",
+            Self::PortuguesePortugal => "Par estéreo",
+            Self::Indonesian => "Pasangan Stereo",
+            Self::Vietnamese => "Cặp âm thanh nổi",
             Self::Russian => "Стереопара",
             Self::Spanish => "Par estéreo",
         }
@@ -766,6 +925,9 @@ impl Language {
             Self::Japanese => "HomePodステレオペアが検出されました。左右チャンネルに自動同期されます",
             Self::Korean => "HomePod 스테레오 페어가 감지되었습니다. 좌우 채널에 자동 동기화됩니다",
             Self::PortugueseBrazil => "Par estéreo HomePod detectado; áudio sincronizado automaticamente nos canais E/D",
+            Self::PortuguesePortugal => "Par estéreo HomePod detetado; fluxo estéreo sincronizado automaticamente nos canais E/D",
+            Self::Indonesian => "Pasangan stereo HomePod terdeteksi; streaming stereo akan disinkronkan otomatis ke saluran kiri & kanan",
+            Self::Vietnamese => "Đã phát hiện cặp âm thanh nổi HomePod; luồng âm thanh nổi sẽ tự động đồng bộ sang kênh trái & phải",
             Self::Russian => "Обнаружена стереопара HomePod; стереопоток автоматически синхронизируется",
             Self::Spanish => "Par estéreo HomePod detectado; sincronización automática a los canales izquierdo y derecho",
         }
@@ -782,6 +944,9 @@ impl Language {
             Self::Japanese => "離脱",
             Self::Korean => "제외",
             Self::PortugueseBrazil => "Sair",
+            Self::PortuguesePortugal => "Sair",
+            Self::Indonesian => "Tinggalkan",
+            Self::Vietnamese => "Rời khỏi",
             Self::Russian => "Выйти",
             Self::Spanish => "Salir",
         }
@@ -798,6 +963,9 @@ impl Language {
             Self::Japanese => "+ 再生に追加",
             Self::Korean => "+ 재생에 추가",
             Self::PortugueseBrazil => "+ Adicionar à reprodução",
+            Self::PortuguesePortugal => "+ Adicionar à reprodução",
+            Self::Indonesian => "+ Tambahkan ke Pemutaran",
+            Self::Vietnamese => "+ Thêm vào danh sách phát",
             Self::Russian => "+ Добавить к трансляции",
             Self::Spanish => "+ Agregar a reproducción",
         }
@@ -814,6 +982,9 @@ impl Language {
             Self::Japanese => "接続",
             Self::Korean => "연결",
             Self::PortugueseBrazil => "Conectar",
+            Self::PortuguesePortugal => "Ligar",
+            Self::Indonesian => "Hubungkan",
+            Self::Vietnamese => "Kết nối",
             Self::Russian => "Подключить",
             Self::Spanish => "Conectar",
         }
@@ -830,6 +1001,9 @@ impl Language {
             Self::Japanese => "このスピーカーの音量を個別に微調整",
             Self::Korean => "이 스피커의 볼륨을 개별적으로 미세 조정",
             Self::PortugueseBrazil => "Ajustar volume individual deste alto-falante",
+            Self::PortuguesePortugal => "Ajustar volume individual deste altifalante",
+            Self::Indonesian => "Sesuaikan volume speaker ini secara individual",
+            Self::Vietnamese => "Tinh chỉnh riêng âm lượng cho loa này",
             Self::Russian => "Индивидуальная настройка громкости этой колонки",
             Self::Spanish => "Ajustar individualmente el volumen de este altavoz",
         }
@@ -846,6 +1020,9 @@ impl Language {
             Self::Japanese => format!("▶ 選択した{count}台のスピーカーを同時接続 (マルチルーム)"),
             Self::Korean => format!("▶ 선택한 {count}대 스피커 동시 연결 (멀티룸 그룹)"),
             Self::PortugueseBrazil => format!("▶ Conectar os {count} alto-falantes selecionados (Multiambiente)"),
+            Self::PortuguesePortugal => format!("▶ Ligar os {count} altifalantes selecionados (Grupo multi-divisão)"),
+            Self::Indonesian => format!("▶ Hubungkan {count} speaker terpilih (Grup multi-ruangan)"),
+            Self::Vietnamese => format!("▶ Kết nối {count} loa đã chọn (Nhóm đa phòng)"),
             Self::Russian => format!("▶ Подключить выбранные {count} колонок (Мультирум)"),
             Self::Spanish => format!("▶ Conectar los {count} altavoces seleccionados (Multisala)"),
         }
@@ -862,6 +1039,9 @@ impl Language {
             Self::Japanese => "音量とミュート設定",
             Self::Korean => "볼륨 및 음소거 설정",
             Self::PortugueseBrazil => "Controle de volume e mudo",
+            Self::PortuguesePortugal => "Controlos de volume e sem som",
+            Self::Indonesian => "Kontrol Volume & Bisu",
+            Self::Vietnamese => "Điều khiển âm lượng & Tắt tiếng",
             Self::Russian => "Управление громкостью и звуком",
             Self::Spanish => "Control de volumen y silencio",
         }
@@ -878,6 +1058,9 @@ impl Language {
             Self::Japanese => format!("🔇 {name} はミュート中"),
             Self::Korean => format!("🔇 {name} 음소거됨"),
             Self::PortugueseBrazil => format!("🔇 {name} silenciado"),
+            Self::PortuguesePortugal => format!("🔇 {name} sem som"),
+            Self::Indonesian => format!("🔇 {name} dibisukan"),
+            Self::Vietnamese => format!("🔇 {name} đã tắt tiếng"),
             Self::Russian => format!("🔇 {name} без звука"),
             Self::Spanish => format!("🔇 {name} silenciado"),
         }
@@ -894,6 +1077,9 @@ impl Language {
             Self::Japanese => format!("🔊 {name} 再生中"),
             Self::Korean => format!("🔊 {name} 재생 중"),
             Self::PortugueseBrazil => format!("🔊 {name} reproduzindo"),
+            Self::PortuguesePortugal => format!("🔊 {name} em reprodução"),
+            Self::Indonesian => format!("🔊 {name} sedang memutar"),
+            Self::Vietnamese => format!("🔊 {name} đang phát"),
             Self::Russian => format!("🔊 {name} играет"),
             Self::Spanish => format!("🔊 {name} reproduciendo"),
         }
@@ -910,6 +1096,9 @@ impl Language {
             Self::Japanese => "⏳ 接続中 (ミュート)",
             Self::Korean => "⏳ 연결 중 (음소거)",
             Self::PortugueseBrazil => "⏳ Conectando (Mudo)",
+            Self::PortuguesePortugal => "⏳ A ligar (Sem som)",
+            Self::Indonesian => "⏳ Menghubungkan (Dibisukan)",
+            Self::Vietnamese => "⏳ Đang kết nối (Đã tắt tiếng)",
             Self::Russian => "⏳ Подключение (Без звука)",
             Self::Spanish => "⏳ Conectando (Silenciado)",
         }
@@ -926,6 +1115,9 @@ impl Language {
             Self::Japanese => "⏳ 接続中...",
             Self::Korean => "⏳ 연결 중...",
             Self::PortugueseBrazil => "⏳ Conectando...",
+            Self::PortuguesePortugal => "⏳ A ligar...",
+            Self::Indonesian => "⏳ Menghubungkan...",
+            Self::Vietnamese => "⏳ Đang kết nối...",
             Self::Russian => "⏳ Подключение...",
             Self::Spanish => "⏳ Conectando...",
         }
@@ -942,6 +1134,9 @@ impl Language {
             Self::Japanese => "🔇 ミュート中 (待機中 / 未接続)",
             Self::Korean => "🔇 음소거 모드 (대기 중 / 연결되지 않음)",
             Self::PortugueseBrazil => "🔇 Silenciado (Em espera / Não conectado)",
+            Self::PortuguesePortugal => "🔇 Sem som (Em espera / Não ligado)",
+            Self::Indonesian => "🔇 Dibisukan (Siaga / Tidak terhubung)",
+            Self::Vietnamese => "🔇 Đã tắt tiếng (Chờ / Chưa kết nối)",
             Self::Russian => "🔇 Без звука (Ожидание / Не подключено)",
             Self::Spanish => "🔇 Silenciado (En espera / No conectado)",
         }
@@ -958,6 +1153,9 @@ impl Language {
             Self::Japanese => "🔊 待機中 (未接続)",
             Self::Korean => "🔊 대기 중 (연결되지 않음)",
             Self::PortugueseBrazil => "🔊 Em espera (Não conectado)",
+            Self::PortuguesePortugal => "🔊 Em espera (Não ligado)",
+            Self::Indonesian => "🔊 Siaga (Tidak terhubung)",
+            Self::Vietnamese => "🔊 Chờ (Chưa kết nối)",
             Self::Russian => "🔊 Ожидание (Не подключено)",
             Self::Spanish => "🔊 En espera (No conectado)",
         }
@@ -974,6 +1172,9 @@ impl Language {
             Self::Japanese => "🔇 ミュート中 (接続異常)",
             Self::Korean => "🔇 음소거 모드 (연결 오류)",
             Self::PortugueseBrazil => "🔇 Silenciado (Erro de conexão)",
+            Self::PortuguesePortugal => "🔇 Sem som (Erro de ligação)",
+            Self::Indonesian => "🔇 Dibisukan (Kesalahan koneksi)",
+            Self::Vietnamese => "🔇 Đã tắt tiếng (Lỗi kết nối)",
             Self::Russian => "🔇 Без звука (Ошибка соединения)",
             Self::Spanish => "🔇 Silenciado (Error de conexión)",
         }
@@ -990,6 +1191,9 @@ impl Language {
             Self::Japanese => "🔊 待機 (接続異常)",
             Self::Korean => "🔊 대기 (연결 오류)",
             Self::PortugueseBrazil => "🔊 Em espera (Erro de conexão)",
+            Self::PortuguesePortugal => "🔊 Em espera (Erro de ligação)",
+            Self::Indonesian => "🔊 Siaga (Kesalahan koneksi)",
+            Self::Vietnamese => "🔊 Chờ (Lỗi kết nối)",
             Self::Russian => "🔊 Ожидание (Ошибка соединения)",
             Self::Spanish => "🔊 En espera (Error de conexión)",
         }
@@ -1006,6 +1210,9 @@ impl Language {
             Self::Japanese => "🔊 解除",
             Self::Korean => "🔊 해제",
             Self::PortugueseBrazil => "🔊 Som",
+            Self::PortuguesePortugal => "🔊 Ativar som",
+            Self::Indonesian => "🔊 Bunyikan",
+            Self::Vietnamese => "🔊 Bật tiếng",
             Self::Russian => "🔊 Звук",
             Self::Spanish => "🔊 Sonido",
         }
@@ -1022,6 +1229,9 @@ impl Language {
             Self::Japanese => "🔇 ミュート",
             Self::Korean => "🔇 음소거",
             Self::PortugueseBrazil => "🔇 Mudo",
+            Self::PortuguesePortugal => "🔇 Sem som",
+            Self::Indonesian => "🔇 Bisukan",
+            Self::Vietnamese => "🔇 Tắt tiếng",
             Self::Russian => "🔇 Без звука",
             Self::Spanish => "🔇 Silencio",
         }
@@ -1038,6 +1248,9 @@ impl Language {
             Self::Japanese => "グループ全体音量:",
             Self::Korean => "그룹 전체 볼륨:",
             Self::PortugueseBrazil => "Volume do grupo:",
+            Self::PortuguesePortugal => "Volume do grupo:",
+            Self::Indonesian => "Volume Grup:",
+            Self::Vietnamese => "Âm lượng nhóm:",
             Self::Russian => "Общая громкость:",
             Self::Spanish => "Volumen del grupo:",
         }
@@ -1054,6 +1267,9 @@ impl Language {
             Self::Japanese => "接続中のすべてのスピーカーを連動調整します。個別調整は上記リストで行えます",
             Self::Korean => "연결된 모든 스피커 볼륨을 함께 조절합니다. 개별 볼륨은 상단 목록에서 조절 가능합니다",
             Self::PortugueseBrazil => "Ajusta todos os alto-falantes conectados; ajustes individuais acima",
+            Self::PortuguesePortugal => "Ajusta todos os altifalantes ligados em conjunto; volume individual pode ser ajustado acima",
+            Self::Indonesian => "Menyesuaikan semua speaker yang terhubung bersama-sama; volume individu dapat disesuaikan di atas",
+            Self::Vietnamese => "Điều chỉnh đồng thời tất cả các loa đang kết nối; âm lượng từng loa có thể chỉnh ở trên",
             Self::Russian => "Регулирует громкость всех колонок; индивидуальная настройка доступна выше",
             Self::Spanish => "Ajusta todos los altavoces conectados; el volumen individual se puede ajustar arriba",
         }
@@ -1070,6 +1286,9 @@ impl Language {
             Self::Japanese => "音量:",
             Self::Korean => "볼륨:",
             Self::PortugueseBrazil => "Volume:",
+            Self::PortuguesePortugal => "Volume:",
+            Self::Indonesian => "Volume:",
+            Self::Vietnamese => "Âm lượng:",
             Self::Russian => "Громкость:",
             Self::Spanish => "Volumen:",
         }
@@ -1086,6 +1305,9 @@ impl Language {
             Self::Japanese => " (ミュート中)",
             Self::Korean => " (음소거됨)",
             Self::PortugueseBrazil => " (Mudo)",
+            Self::PortuguesePortugal => " (Sem som)",
+            Self::Indonesian => " (Dibisukan)",
+            Self::Vietnamese => " (Đã tắt tiếng)",
             Self::Russian => " (Без звука)",
             Self::Spanish => " (Silenciado)",
         }
@@ -1102,6 +1324,9 @@ impl Language {
             Self::Japanese => " (デフォルト)",
             Self::Korean => " (기본 볼륨)",
             Self::PortugueseBrazil => " (Padrão)",
+            Self::PortuguesePortugal => " (Predefinido)",
+            Self::Indonesian => " (Default)",
+            Self::Vietnamese => " (Mặc định)",
             Self::Russian => " (По умолч.)",
             Self::Spanish => " (Predeterminado)",
         }
@@ -1118,6 +1343,9 @@ impl Language {
             Self::Japanese => "詳細設定",
             Self::Korean => "고급 설정",
             Self::PortugueseBrazil => "Configurações Avançadas",
+            Self::PortuguesePortugal => "Definições Avançadas",
+            Self::Indonesian => "Pengaturan Lanjutan",
+            Self::Vietnamese => "Cài đặt nâng cao",
             Self::Russian => "Расширенные настройки",
             Self::Spanish => "Configuración avanzada",
         }
@@ -1134,8 +1362,30 @@ impl Language {
             Self::Japanese => "オーディオと機器",
             Self::Korean => "오디오 및 기기",
             Self::PortugueseBrazil => "Áudio e dispositivos",
+            Self::PortuguesePortugal => "Áudio e dispositivos",
+            Self::Indonesian => "Audio & Perangkat",
+            Self::Vietnamese => "Âm thanh & Thiết bị",
             Self::Russian => "Аудио и устройства",
             Self::Spanish => "Audio y dispositivos",
+        }
+    }
+
+    pub fn settings_tab_receiver(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "音訊接收",
+            Self::SimplifiedChinese => "音频接收",
+            Self::English => "Audio Receiver",
+            Self::French => "Récepteur audio",
+            Self::German => "Audioempfänger",
+            Self::Italian => "Ricevitore audio",
+            Self::Japanese => "音声受信",
+            Self::Korean => "오디오 수신",
+            Self::PortugueseBrazil => "Receptor de áudio",
+            Self::PortuguesePortugal => "Recetor de áudio",
+            Self::Indonesian => "Penerima Audio",
+            Self::Vietnamese => "Bộ nhận âm thanh",
+            Self::Russian => "Аудиоприемник",
+            Self::Spanish => "Receptor de audio",
         }
     }
 
@@ -1150,6 +1400,9 @@ impl Language {
             Self::Japanese => "システムとストリーミング",
             Self::Korean => "시스템 및 스트리밍",
             Self::PortugueseBrazil => "Sistema e streaming",
+            Self::PortuguesePortugal => "Sistema e transmissão",
+            Self::Indonesian => "Sistem & Streaming",
+            Self::Vietnamese => "Hệ thống & Truyền phát",
             Self::Russian => "Система и трансляция",
             Self::Spanish => "Sistema y transmisión",
         }
@@ -1166,6 +1419,9 @@ impl Language {
             Self::Japanese => "音声ソース:",
             Self::Korean => "오디오 소스:",
             Self::PortugueseBrazil => "Fonte de áudio:",
+            Self::PortuguesePortugal => "Fonte de áudio:",
+            Self::Indonesian => "Sumber Audio:",
+            Self::Vietnamese => "Nguồn âm thanh:",
             Self::Russian => "Источник звука:",
             Self::Spanish => "Fuente de audio:",
         }
@@ -1182,6 +1438,9 @@ impl Language {
             Self::Japanese => "🖥 システムとデバイス",
             Self::Korean => "🖥 시스템 및 장치",
             Self::PortugueseBrazil => "🖥 Sistema e dispositivos",
+            Self::PortuguesePortugal => "🖥 Sistema e dispositivos",
+            Self::Indonesian => "🖥 Sistem & Perangkat",
+            Self::Vietnamese => "🖥 Hệ thống & Thiết bị",
             Self::Russian => "🖥 Система и устройства",
             Self::Spanish => "🖥 Sistema y dispositivos",
         }
@@ -1198,6 +1457,9 @@ impl Language {
             Self::Japanese => "🎯 アプリケーション",
             Self::Korean => "🎯 애플리케이션",
             Self::PortugueseBrazil => "🎯 Aplicativo",
+            Self::PortuguesePortugal => "🎯 Aplicação",
+            Self::Indonesian => "🎯 Aplikasi",
+            Self::Vietnamese => "🎯 Ứng dụng",
             Self::Russian => "🎯 Приложение",
             Self::Spanish => "🎯 Aplicación",
         }
@@ -1214,6 +1476,9 @@ impl Language {
             Self::Japanese => "キャストするアプリを選択...",
             Self::Korean => "스트리밍할 애플리케이션 선택...",
             Self::PortugueseBrazil => "Selecione um aplicativo para transmitir...",
+            Self::PortuguesePortugal => "Selecione uma aplicação para transmitir...",
+            Self::Indonesian => "Pilih aplikasi untuk streaming...",
+            Self::Vietnamese => "Chọn ứng dụng để truyền phát...",
             Self::Russian => "Выберите приложение для трансляции...",
             Self::Spanish => "Selecciona una aplicación para transmitir...",
         }
@@ -1230,6 +1495,9 @@ impl Language {
             Self::Japanese => "実行中のアプリ一覧を更新",
             Self::Korean => "실행 중인 애플리케이션 목록 새로고침",
             Self::PortugueseBrazil => "Atualizar lista de aplicativos",
+            Self::PortuguesePortugal => "Atualizar lista de aplicações em execução",
+            Self::Indonesian => "Perbarui daftar aplikasi yang berjalan",
+            Self::Vietnamese => "Làm mới danh sách ứng dụng đang chạy",
             Self::Russian => "Обновить список запущенных приложений",
             Self::Spanish => "Actualizar lista de aplicaciones",
         }
@@ -1246,6 +1514,9 @@ impl Language {
             Self::Japanese => "互換性のあるアプリが見つかりません",
             Self::Korean => "호환되는 애플리케이션을 찾을 수 없습니다",
             Self::PortugueseBrazil => "Nenhum aplicativo compatível detectado",
+            Self::PortuguesePortugal => "Nenhuma aplicação compatível detetada",
+            Self::Indonesian => "Tidak ada aplikasi yang kompatibel terdeteksi",
+            Self::Vietnamese => "Không phát hiện ứng dụng tương thích nào",
             Self::Russian => "Совместимые приложения не найдены",
             Self::Spanish => "No se encontraron aplicaciones compatibles",
         }
@@ -1262,6 +1533,9 @@ impl Language {
             Self::Japanese => "💡 アプリモード: 選択したアプリの音声をHomePodに直接ストリーミングします。「接続時にPCスピーカーを自動ミュート」を有効にすると、PCとスピーカーの同時再生によるズレやエコーを防げます。",
             Self::Korean => "💡 앱 모드: 선택한 앱의 오디오를 HomePod으로 직접 스트리밍합니다. '연결 시 PC 스피커 자동 음소거'를 활성화하면 동시 재생으로 인한 시간차와 에코를 방지할 수 있습니다.",
             Self::PortugueseBrazil => "💡 Modo Aplicativo: Transmite o áudio do aplicativo diretamente para o HomePod. Manter o mudo automático ativado evita atrasos e eco.",
+            Self::PortuguesePortugal => "💡 Modo Aplicação: Transmite o áudio da aplicação diretamente para o HomePod. Manter o corte automático ativado evita atrasos e eco.",
+            Self::Indonesian => "💡 Mode Aplikasi: Mengalirkan audio dari aplikasi yang dipilih langsung ke HomePod. Mengaktifkan \"Bisukan speaker komputer otomatis\" mencegah gema dan penundaan waktu.",
+            Self::Vietnamese => "💡 Chế độ ứng dụng: Truyền phát âm thanh từ ứng dụng đã chọn trực tiếp tới HomePod. Bật \"Tự động tắt tiếng loa máy tính\" giúp chống tiếng vang và trễ tiếng.",
             Self::Russian => "💡 Режим приложений: прямая трансляция звука программы на HomePod. Включение автозаглушения колонок ПК предотвращает эхо и рассинхрон.",
             Self::Spanish => "💡 Modo de aplicación: Transmite el audio de la app directamente a HomePod. Activar el silenciado automático de los altavoces evita eco y desfases.",
         }
@@ -1278,6 +1552,9 @@ impl Language {
             Self::Japanese => "システム全体音声 (既定の出力デバイス)",
             Self::Korean => "전체 시스템 오디오 (기본 출력 장치)",
             Self::PortugueseBrazil => "Áudio do sistema (Dispositivo padrão)",
+            Self::PortuguesePortugal => "Áudio do sistema (Dispositivo de saída predefinido)",
+            Self::Indonesian => "Audio Sistem (Perangkat Output Default)",
+            Self::Vietnamese => "Âm thanh hệ thống (Thiết bị đầu ra mặc định)",
             Self::Russian => "Все системные звуки (По умолчанию)",
             Self::Spanish => "Audio del sistema (Dispositivo predeterminado)",
         }
@@ -1294,6 +1571,9 @@ impl Language {
             Self::Japanese => "既定の出力デバイス",
             Self::Korean => "기본 출력 장치",
             Self::PortugueseBrazil => "Dispositivo de saída padrão",
+            Self::PortuguesePortugal => "Dispositivo de saída predefinido",
+            Self::Indonesian => "Perangkat Output Default",
+            Self::Vietnamese => "Thiết bị đầu ra mặc định",
             Self::Russian => "Устройство вывода по умолчанию",
             Self::Spanish => "Dispositivo de salida predeterminado",
         }
@@ -1310,6 +1590,9 @@ impl Language {
             Self::Japanese => "オーディオデバイスを再スキャン (ヘッドホン接続時など)",
             Self::Korean => "오디오 장치 다시 검색 (헤드폰 연결 또는 가상 사운드카드 설치 시)",
             Self::PortugueseBrazil => "Escanear dispositivos de áudio novamente",
+            Self::PortuguesePortugal => "Procurar dispositivos de áudio novamente (ex.: se auscultadores foram ligados)",
+            Self::Indonesian => "Pindai ulang perangkat audio (misalnya jika headphone atau perangkat virtual terhubung)",
+            Self::Vietnamese => "Quét lại các thiết bị âm thanh (ví dụ: khi vừa cắm tai nghe hoặc thiết bị ảo)",
             Self::Russian => "Повторное сканирование аудиоустройств",
             Self::Spanish => "Volver a escanear dispositivos de audio",
         }
@@ -1326,6 +1609,9 @@ impl Language {
             Self::Japanese => "ℹ 個別ルーティングモード：",
             Self::Korean => "ℹ 개별 라우팅 모드:",
             Self::PortugueseBrazil => "ℹ Modo de roteamento separado:",
+            Self::PortuguesePortugal => "ℹ Modo de encaminhamento separado:",
+            Self::Indonesian => "ℹ Mode Perutean Terpisah:",
+            Self::Vietnamese => "ℹ Chế độ định tuyến riêng biệt:",
             Self::Russian => "ℹ Режим раздельного вывода:",
             Self::Spanish => "ℹ Modo de enrutamiento separado:",
         }
@@ -1342,6 +1628,9 @@ impl Language {
             Self::Japanese => "選択したデバイスの音声のみを配信し、PCのメインスピーカーは鳴り続けます。",
             Self::Korean => "선택한 장치의 오디오만 스트리밍하며, PC 주 스피커는 정상 작동합니다.",
             Self::PortugueseBrazil => "Transmite apenas o áudio do dispositivo selecionado; alto-falantes do PC ativos.",
+            Self::PortuguesePortugal => "Transmite apenas o áudio do dispositivo selecionado; os altifalantes principais do PC mantêm-se ativos.",
+            Self::Indonesian => "Mengalirkan hanya audio perangkat yang dipilih; speaker utama PC tetap aktif.",
+            Self::Vietnamese => "Chỉ truyền phát âm thanh của thiết bị đã chọn; loa chính của PC vẫn hoạt động bình thường.",
             Self::Russian => "Транслирует звук только выбранного устройства; динамики ПК активны.",
             Self::Spanish => "Solo transmite el audio del dispositivo seleccionado; los altavoces del PC siguen activos.",
         }
@@ -1358,6 +1647,9 @@ impl Language {
             Self::Japanese => "⚙ Windows 音量ミキサーを開く (アプリ出力先設定)",
             Self::Korean => "⚙ Windows 볼륨 믹서 열기 (앱 출력 설정)",
             Self::PortugueseBrazil => "⚙ Abrir Mixer de Volume do Windows",
+            Self::PortuguesePortugal => "⚙ Abrir Misturador de Volume do Windows (Definições de saída de aplicações)",
+            Self::Indonesian => "⚙ Buka Mixer Volume Windows (Pengaturan Output Aplikasi)",
+            Self::Vietnamese => "⚙ Mở Bộ trộn âm lượng Windows (Cài đặt đầu ra ứng dụng)",
             Self::Russian => "⚙ Открыть микшер громкости Windows",
             Self::Spanish => "⚙ Abrir Mezclador de volumen de Windows",
         }
@@ -1374,6 +1666,9 @@ impl Language {
             Self::Japanese => "⚙ Windows の Bluetooth とデバイスを開く (事前に AirPods のペアリングを完了してください)",
             Self::Korean => "⚙ Windows Bluetooth 및 장치 설정 열기 (먼저 AirPods 블루투스 페어링 완료 필요)",
             Self::PortugueseBrazil => "⚙ Abrir Bluetooth e dispositivos do Windows (Emparelhe os AirPods primeiro)",
+            Self::PortuguesePortugal => "⚙ Abrir Bluetooth e dispositivos do Windows (Emparelhe os AirPods primeiro)",
+            Self::Indonesian => "⚙ Buka Bluetooth & Perangkat Windows (Pasangkan AirPods terlebih dahulu)",
+            Self::Vietnamese => "⚙ Mở Bluetooth & Thiết bị của Windows (Ghép đôi AirPods trước)",
             Self::Russian => "⚙ Открыть параметры Bluetooth и других устройств Windows (Сначала выполните сопряжение с AirPods)",
             Self::Spanish => "⚙ Abrir Bluetooth y dispositivos de Windows (Emparejar primero los AirPods)",
         }
@@ -1390,6 +1685,9 @@ impl Language {
             Self::Japanese => "音量ミキサー",
             Self::Korean => "볼륨 믹서",
             Self::PortugueseBrazil => "Mixer de volume",
+            Self::PortuguesePortugal => "Misturador de volume",
+            Self::Indonesian => "Mixer Volume",
+            Self::Vietnamese => "Bộ trộn âm lượng",
             Self::Russian => "Микшер громкости",
             Self::Spanish => "Mezclador",
         }
@@ -1406,6 +1704,9 @@ impl Language {
             Self::Japanese => "AirPlay/AirPods 接続時にPCスピーカーを自動ミュート (二重再生・エコー防止)",
             Self::Korean => "AirPlay/AirPods 재생 시 PC 스피커 자동 음소거 (이중 소리 / 에코 방지)",
             Self::PortugueseBrazil => "Silenciar alto-falantes do PC durante reprodução AirPlay/AirPods (evita eco)",
+            Self::PortuguesePortugal => "Cortar som dos altifalantes do PC durante reprodução AirPlay/AirPods (evita som duplicado / eco)",
+            Self::Indonesian => "Bisukan speaker PC selama pemutaran AirPlay/AirPods (mencegah audio ganda / gema)",
+            Self::Vietnamese => "Tắt tiếng loa PC khi đang phát qua AirPlay/AirPods (chống lặp âm thanh / tiếng vang)",
             Self::Russian => "Отключать динамики ПК при воспроизведении AirPlay/AirPods (без эха)",
             Self::Spanish => "Silenciar altavoces del PC al reproducir AirPlay/AirPods (evita eco)",
         }
@@ -1422,6 +1723,9 @@ impl Language {
             Self::Japanese => "AirPlay/AirPods 接続時PCスピーカー自動ミュート (個別ルーティング時は無効)",
             Self::Korean => "AirPlay/AirPods 재생 시 PC 스피커 음소거 (개별 라우팅 모드에서는 비활성화)",
             Self::PortugueseBrazil => "Silenciar alto-falantes do PC (Desativado no modo separado)",
+            Self::PortuguesePortugal => "Cortar som dos altifalantes do PC durante reprodução AirPlay/AirPods (Desativado no modo separado)",
+            Self::Indonesian => "Bisukan speaker PC selama pemutaran AirPlay/AirPods (Dinonaktifkan dalam mode terpisah)",
+            Self::Vietnamese => "Tắt tiếng loa PC khi phát AirPlay/AirPods (Bị tắt trong chế độ tách luồng)",
             Self::Russian => "Отключать динамики ПК (Недоступно в режиме разделения)",
             Self::Spanish => "Silenciar altavoces del PC (Desactivado en modo separado)",
         }
@@ -1438,6 +1742,9 @@ impl Language {
             Self::Japanese => "個別ルーティング中：システム音や通話を聞くためPCスピーカーは鳴り続けます。",
             Self::Korean => "특정 장치 라우팅 활성화됨: 시스템 소리 및 음성 대화를 위해 주 스피커가 유지됩니다.",
             Self::PortugueseBrazil => "Roteamento específico ativo; alto-falantes principais continuam ligados.",
+            Self::PortuguesePortugal => "Encaminhamento específico ativo; os altifalantes principais continuam ligados para sons de sistema e voz.",
+            Self::Indonesian => "Perutean perangkat tertentu aktif; speaker utama tetap aktif untuk suara sistem dan panggilan suara.",
+            Self::Vietnamese => "Đang định tuyến thiết bị cụ thể; loa chính vẫn mở cho âm thanh hệ thống và đàm thoại.",
             Self::Russian => "Раздельный вывод активен; динамики ПК продолжают воспроизводить системные звуки.",
             Self::Spanish => "Enrutamiento específico activo; los altavoces principales siguen activos.",
         }
@@ -1454,6 +1761,9 @@ impl Language {
             Self::Japanese => "AirPlay/AirPods 接続時にPCスピーカーを自動ミュート 🔒 (試用期間終了)",
             Self::Korean => "AirPlay/AirPods 연결 시 PC 스피커 자동 음소거 🔒 (체험 기간 만료)",
             Self::PortugueseBrazil => "Silenciar alto-falantes do PC ao conectar AirPlay/AirPods 🔒 (Avaliação expirada)",
+            Self::PortuguesePortugal => "Cortar som automático dos altifalantes do PC ao ligar AirPlay/AirPods 🔒 (Avaliação expirada)",
+            Self::Indonesian => "Otomatis bisukan speaker PC saat AirPlay/AirPods terhubung 🔒 (Uji Coba Berakhir)",
+            Self::Vietnamese => "Tự động tắt tiếng loa PC khi kết nối AirPlay/AirPods 🔒 (Hết hạn dùng thử)",
             Self::Russian => "Автозаглушение динамиков ПК при подключении AirPlay/AirPods 🔒 (Пробный период истек)",
             Self::Spanish => "Silenciar altavoces de PC al conectar AirPlay/AirPods 🔒 (Prueba expirada)",
         }
@@ -1470,6 +1780,9 @@ impl Language {
             Self::Japanese => "Microsoft Storeの試用期間が終了しました。自動ミュート機能を有効にするには製品をご購入ください。",
             Self::Korean => "Microsoft Store 체험 기간이 만료되었습니다. 자동 음소거 기능을 사용하려면 제품을 구매해 주세요.",
             Self::PortugueseBrazil => "O período de avaliação da Microsoft Store expirou. Compre o produto para desbloquear este recurso.",
+            Self::PortuguesePortugal => "O período de avaliação da Microsoft Store expirou. Esta funcionalidade está bloqueada. Adquira o produto para desbloquear.",
+            Self::Indonesian => "Masa uji coba Microsoft Store telah berakhir. Fitur ini terkunci. Silakan beli produk untuk membuka kunci pembisuan otomatis.",
+            Self::Vietnamese => "Thời gian dùng thử Microsoft Store đã hết hạn. Tính năng này đã bị khóa. Vui lòng mua bản quyền để mở khóa tính năng tự động tắt tiếng.",
             Self::Russian => "Пробный период Microsoft Store истек. Пожалуйста, приобретите продукт для разблокировки этой функции.",
             Self::Spanish => "El período de prueba de Microsoft Store ha expirado. Compre el producto para desbloquear esta función.",
         }
@@ -1486,6 +1799,9 @@ impl Language {
             Self::Japanese => "試用期間が終了しました。製品をご購入いただくとこの機能が開放されます。",
             Self::Korean => "체험 기간이 만료되었습니다. 제품을 구매하시면 이 기능이 활성화됩니다.",
             Self::PortugueseBrazil => "Período de avaliação expirado. Recurso bloqueado. Compre o produto para desbloquear.",
+            Self::PortuguesePortugal => "Período de avaliação expirado. Esta funcionalidade está bloqueada. Adquira o produto para desbloquear.",
+            Self::Indonesian => "Masa uji coba telah berakhir. Fitur ini terkunci. Beli produk untuk membuka kunci.",
+            Self::Vietnamese => "Thời gian dùng thử đã hết hạn. Tính năng này đã bị khóa. Vui lòng mua bản quyền để mở khóa.",
             Self::Russian => "Пробный период истек. Функция заблокирована. Приобретите продукт для разблокировки.",
             Self::Spanish => "Período de prueba expirado. Función bloqueada. Compre el producto para desbloquear.",
         }
@@ -1502,6 +1818,9 @@ impl Language {
             Self::Japanese => "🛍 Microsoft Storeで製品を購入",
             Self::Korean => "🛍 Microsoft Store에서 제품 구매",
             Self::PortugueseBrazil => "🛍 Comprar na Microsoft Store",
+            Self::PortuguesePortugal => "🛍 Comprar produto na Microsoft Store",
+            Self::Indonesian => "🛍 Beli Produk di Microsoft Store",
+            Self::Vietnamese => "🛍 Mua sản phẩm trên Microsoft Store",
             Self::Russian => "🛍 Купить в Microsoft Store",
             Self::Spanish => "🛍 Comprar en Microsoft Store",
         }
@@ -1518,6 +1837,9 @@ impl Language {
             Self::Japanese => "購入",
             Self::Korean => "구매",
             Self::PortugueseBrazil => "Comprar",
+            Self::PortuguesePortugal => "Comprar",
+            Self::Indonesian => "Beli",
+            Self::Vietnamese => "Mua ngay",
             Self::Russian => "Купить",
             Self::Spanish => "Comprar",
         }
@@ -1534,6 +1856,9 @@ impl Language {
             Self::Japanese => format!("(試用残り {days}日)"),
             Self::Korean => format!("(체험 잔여 {days}일)"),
             Self::PortugueseBrazil => format!("(Avaliação: {days}d restantes)"),
+            Self::PortuguesePortugal => format!("(Avaliação: {days}d restantes)"),
+            Self::Indonesian => format!("(Uji Coba: sisa {days}hr)"),
+            Self::Vietnamese => format!("(Dùng thử: còn {days} ngày)"),
             Self::Russian => format!("(Пробный: ост. {days}д)"),
             Self::Spanish => format!("(Prueba: {days}d restantes)"),
         }
@@ -1550,6 +1875,9 @@ impl Language {
             Self::Japanese => format!("試用中 (残り {days} 日)"),
             Self::Korean => format!("체험판 사용 중 (남은 기간 {days}일)"),
             Self::PortugueseBrazil => format!("Avaliação ativa ({days} dias restantes)"),
+            Self::PortuguesePortugal => format!("Avaliação ativa ({days} dias restantes)"),
+            Self::Indonesian => format!("Uji Coba Aktif (sisa {days} hari)"),
+            Self::Vietnamese => format!("Bản dùng thử đang hoạt động (còn {days} ngày)"),
             Self::Russian => format!("Пробный период (осталось {days} дн.)"),
             Self::Spanish => format!("Prueba activa ({days} días restantes)"),
         }
@@ -1566,6 +1894,9 @@ impl Language {
             Self::Japanese => "製品版ライセンス ✅",
             Self::Korean => "정식 라이선스 버전 ✅",
             Self::PortugueseBrazil => "Versão com licença completa ✅",
+            Self::PortuguesePortugal => "Versão com licença completa ✅",
+            Self::Indonesian => "Versi Berlisensi Penuh ✅",
+            Self::Vietnamese => "Phiên bản đầy đủ bản quyền ✅",
             Self::Russian => "Полная лицензионная версия ✅",
             Self::Spanish => "Versión con licencia completa ✅",
         }
@@ -1582,6 +1913,9 @@ impl Language {
             Self::Japanese => "試用期間終了 🔒",
             Self::Korean => "체험 기간 만료 🔒",
             Self::PortugueseBrazil => "Avaliação expirada 🔒",
+            Self::PortuguesePortugal => "Avaliação expirada 🔒",
+            Self::Indonesian => "Uji Coba Berakhir 🔒",
+            Self::Vietnamese => "Hết hạn dùng thử 🔒",
             Self::Russian => "Пробный период истек 🔒",
             Self::Spanish => "Prueba expirada 🔒",
         }
@@ -1598,8 +1932,106 @@ impl Language {
             Self::Japanese => "スタンドアロン実行 (Unpackaged)",
             Self::Korean => "독립 실행 파일 (Unpackaged)",
             Self::PortugueseBrazil => "Executável independente (Desempacotado)",
+            Self::PortuguesePortugal => "Executável autónomo (Não empacotado)",
+            Self::Indonesian => "Eksekusi Mandiri (Tanpa Paket)",
+            Self::Vietnamese => "Bản thực thi độc lập (Chưa đóng gói)",
             Self::Russian => "Автономный исполняемый файл (Unpackaged)",
             Self::Spanish => "Ejecutable independiente (Desempaquetado)",
+        }
+    }
+
+    pub fn footer_trial_remaining(&self, days: u32) -> String {
+        match self {
+            Self::TraditionalChinese => format!("⏳ 試用期剩餘 {days} 天"),
+            Self::SimplifiedChinese => format!("⏳ 试用期剩余 {days} 天"),
+            Self::English => format!("⏳ Trial: {days} days left"),
+            Self::French => format!("⏳ Essai : {days} jours restants"),
+            Self::German => format!("⏳ Testversion: Noch {days} Tage"),
+            Self::Italian => format!("⏳ Prova: {days} giorni rimasti"),
+            Self::Japanese => format!("⏳ 試用期間：残り {days} 日"),
+            Self::Korean => format!("⏳ 평가판: {days}일 남음"),
+            Self::PortugueseBrazil => format!("⏳ Avaliação: restam {days} dias"),
+            Self::PortuguesePortugal => format!("⏳ Avaliação: restam {days} dias"),
+            Self::Indonesian => format!("⏳ Uji Coba: sisa {days} hari"),
+            Self::Vietnamese => format!("⏳ Dùng thử: còn {days} ngày"),
+            Self::Russian => format!("⏳ Пробный период: осталось {days} дн."),
+            Self::Spanish => format!("⏳ Prueba: quedan {days} días"),
+        }
+    }
+
+    pub fn footer_btn_buy_full(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "⭐ 購買正式版 ➜",
+            Self::SimplifiedChinese => "⭐ 购买正式版 ➜",
+            Self::English => "⭐ Buy Full Version ➜",
+            Self::French => "⭐ Acheter la version complète ➜",
+            Self::German => "⭐ Vollversion kaufen ➜",
+            Self::Italian => "⭐ Acquista versione completa ➜",
+            Self::Japanese => "⭐ 製品版を購入 ➜",
+            Self::Korean => "⭐ 정식 버전 구매 ➜",
+            Self::PortugueseBrazil => "⭐ Comprar versão completa ➜",
+            Self::PortuguesePortugal => "⭐ Comprar versão completa ➜",
+            Self::Indonesian => "⭐ Beli Versi Penuh ➜",
+            Self::Vietnamese => "⭐ Mua phiên bản đầy đủ ➜",
+            Self::Russian => "⭐ Купить полную версию ➜",
+            Self::Spanish => "⭐ Comprar versión completa ➜",
+        }
+    }
+
+    pub fn footer_trial_expired(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "⚠️ 試用期已結束，進階功能已鎖定",
+            Self::SimplifiedChinese => "⚠️ 试用期已结束，高级功能已锁定",
+            Self::English => "⚠️ Trial expired, premium features locked",
+            Self::French => "⚠️ Essai expiré, fonctionnalités avancées verrouillées",
+            Self::German => "⚠️ Testversion abgelaufen, Premium-Funktionen gesperrt",
+            Self::Italian => "⚠️ Prova scaduta, funzionalità avanzate bloccate",
+            Self::Japanese => "⚠️ 試用期間が終了し、上位機能が制限されています",
+            Self::Korean => "⚠️ 평가판 기간이 만료되어 고급 기능이 잠겼습니다",
+            Self::PortugueseBrazil => "⚠️ Avaliação expirada, recursos premium bloqueados",
+            Self::PortuguesePortugal => "⚠️ Avaliação expirada, funcionalidades premium bloqueadas",
+            Self::Indonesian => "⚠️ Masa uji coba berakhir, fitur premium terkunci",
+            Self::Vietnamese => "⚠️ Bản dùng thử đã hết hạn, các tính năng cao cấp bị khóa",
+            Self::Russian => "⚠️ Пробный период истек, функции заблокированы",
+            Self::Spanish => "⚠️ Prueba finalizada, funciones avanzadas bloqueadas",
+        }
+    }
+
+    pub fn footer_btn_unlock_now(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🔓 立即購買解鎖",
+            Self::SimplifiedChinese => "🔓 立即购买解锁",
+            Self::English => "🔓 Unlock Full Version",
+            Self::French => "🔓 Débloquer la version complète",
+            Self::German => "🔓 Jetzt freischalten",
+            Self::Italian => "🔓 Sblocca ora",
+            Self::Japanese => "🔓 今すぐ購入して解除",
+            Self::Korean => "🔓 지금 구매하고 잠금 해제",
+            Self::PortugueseBrazil => "🔓 Desbloquear versão completa",
+            Self::PortuguesePortugal => "🔓 Desbloquear versão completa",
+            Self::Indonesian => "🔓 Buka Kunci Versi Penuh",
+            Self::Vietnamese => "🔓 Mở khóa phiên bản đầy đủ",
+            Self::Russian => "🔓 Разблокировать версию",
+            Self::Spanish => "🔓 Desbloquear versión completa",
+        }
+    }
+
+    pub fn footer_trial_tooltip(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "感謝體驗 Win2Pod Bridge！試用期間享有完整功能，點擊右側按鈕可隨時前往微軟商店升級正式版。",
+            Self::SimplifiedChinese => "感谢体验 Win2Pod Bridge！试用期间享有完整功能，点击右侧按钮可随时前往微软商店升级正式版。",
+            Self::English => "Thank you for trying Win2Pod Bridge! All features are unlocked during the trial. Click the button to buy the full version in Microsoft Store anytime.",
+            Self::French => "Merci d'essayer Win2Pod Bridge ! Toutes les fonctionnalités sont disponibles pendant l'essai. Cliquez sur le bouton pour acheter la version complète sur le Microsoft Store.",
+            Self::German => "Vielen Dank fürs Ausprobieren von Win2Pod Bridge! Während der Testphase sind alle Funktionen freigeschaltet. Klicken Sie rechts, um die Vollversion im Microsoft Store zu kaufen.",
+            Self::Italian => "Grazie per aver provato Win2Pod Bridge! Tutte le funzionalità sono sbloccate durante la prova. Fai clic sul pulsante per acquistare la versione completa su Microsoft Store.",
+            Self::Japanese => "Win2Pod Bridge をお試しいただきありがとうございます！試用期間中は全機能をご利用いただけます。右側のボタンからいつでも Microsoft Store で製品版を購入できます。",
+            Self::Korean => "Win2Pod Bridge를 이용해 주셔서 감사합니다! 평가판 기간 동안 모든 기능을 이용할 수 있습니다. 오른쪽 버튼을 클릭하여 언제든지 Microsoft Store에서 정식 버전을 구매하세요.",
+            Self::PortugueseBrazil => "Obrigado por experimentar o Win2Pod Bridge! Todos os recursos estão disponíveis durante o teste. Clique no botão para comprar a versão completa na Microsoft Store a qualquer momento.",
+            Self::PortuguesePortugal => "Obrigado por experimentar o Win2Pod Bridge! Todas as funcionalidades estão disponíveis durante o teste. Clique no botão para comprar a versão completa na Microsoft Store a qualquer momento.",
+            Self::Indonesian => "Terima kasih telah mencoba Win2Pod Bridge! Semua fitur tidak terkunci selama masa uji coba. Klik tombol untuk membeli versi penuh di Microsoft Store kapan saja.",
+            Self::Vietnamese => "Cảm ơn bạn đã dùng thử Win2Pod Bridge! Tất cả tính năng đều được mở khóa trong thời gian dùng thử. Nhấp vào nút để mua phiên bản đầy đủ trên Microsoft Store bất kỳ lúc nào.",
+            Self::Russian => "Спасибо за использование Win2Pod Bridge! В пробный период доступны все функции. Нажмите кнопку справа, чтобы приобрести полную версию в Microsoft Store.",
+            Self::Spanish => "¡Gracias por probar Win2Pod Bridge! Todas las funciones están desbloqueadas durante la prueba. Haga clic en el botón para comprar la versión completa en Microsoft Store en cualquier momento.",
         }
     }
 
@@ -1614,6 +2046,9 @@ impl Language {
             Self::Japanese => "ライセンス状態：",
             Self::Korean => "라이선스 상태:",
             Self::PortugueseBrazil => "Status da licença:",
+            Self::PortuguesePortugal => "Estado da licença:",
+            Self::Indonesian => "Status Lisensi:",
+            Self::Vietnamese => "Trạng thái bản quyền:",
             Self::Russian => "Статус лицензии:",
             Self::Spanish => "Estado de licencia:",
         }
@@ -1630,6 +2065,9 @@ impl Language {
             Self::Japanese => "🧪 テスト切替：",
             Self::Korean => "🧪 테스트 모드:",
             Self::PortugueseBrazil => "🧪 Modo de teste:",
+            Self::PortuguesePortugal => "🧪 Modo de teste:",
+            Self::Indonesian => "🧪 Mode Uji:",
+            Self::Vietnamese => "🧪 Chế độ thử nghiệm:",
             Self::Russian => "🧪 Тестовый режим:",
             Self::Spanish => "🧪 Modo de prueba:",
         }
@@ -1646,6 +2084,9 @@ impl Language {
             Self::Japanese => "試用終了 (機能ロック)",
             Self::Korean => "체험 만료 (기능 잠금)",
             Self::PortugueseBrazil => "Avaliação expirada (Bloqueado)",
+            Self::PortuguesePortugal => "Avaliação expirada (Bloqueado)",
+            Self::Indonesian => "Uji Coba Berakhir (Terkunci)",
+            Self::Vietnamese => "Hết hạn dùng thử (Đã khóa)",
             Self::Russian => "Период истек (Блокировка)",
             Self::Spanish => "Prueba expirada (Bloqueado)",
         }
@@ -1662,6 +2103,9 @@ impl Language {
             Self::Japanese => "試用中 (残り7日)",
             Self::Korean => "체험판 (남은 7일)",
             Self::PortugueseBrazil => "Avaliação ativa (7 dias)",
+            Self::PortuguesePortugal => "Avaliação ativa (7 dias)",
+            Self::Indonesian => "Uji Coba Aktif (7 hari)",
+            Self::Vietnamese => "Bản dùng thử đang hoạt động (7 ngày)",
             Self::Russian => "Пробный период (7 дней)",
             Self::Spanish => "Prueba activa (7 días)",
         }
@@ -1678,6 +2122,9 @@ impl Language {
             Self::Japanese => "製品版",
             Self::Korean => "정식 버전",
             Self::PortugueseBrazil => "Versão completa",
+            Self::PortuguesePortugal => "Versão completa",
+            Self::Indonesian => "Versi Penuh",
+            Self::Vietnamese => "Phiên bản đầy đủ",
             Self::Russian => "Полная версия",
             Self::Spanish => "Versión completa",
         }
@@ -1694,6 +2141,9 @@ impl Language {
             Self::Japanese => "リセット",
             Self::Korean => "재설정 (미패키징)",
             Self::PortugueseBrazil => "Redefinir",
+            Self::PortuguesePortugal => "Repor (Não empacotado)",
+            Self::Indonesian => "Atur Ulang (Tanpa Paket)",
+            Self::Vietnamese => "Đặt lại (Chưa đóng gói)",
             Self::Russian => "Сброс",
             Self::Spanish => "Restablecer",
         }
@@ -1710,6 +2160,9 @@ impl Language {
             Self::Japanese => "ストリーミング中のPCスリープを防止 (画面OFFは許可)",
             Self::Korean => "스트리밍 중 시스템 절전 모드 방지 (화면 꺼짐 허용)",
             Self::PortugueseBrazil => "Prevenir suspensão do sistema ao transmitir (tela pode desligar)",
+            Self::PortuguesePortugal => "Prevenir suspensão do sistema durante a transmissão (o ecrã pode desligar)",
+            Self::Indonesian => "Cegah tidur sistem selama streaming (layar dapat mati)",
+            Self::Vietnamese => "Ngăn hệ thống vào chế độ ngủ khi đang truyền phát (màn hình có thể tắt)",
             Self::Russian => "Запретить спящий режим при трансляции (экран может выключаться)",
             Self::Spanish => "Evitar suspensión del sistema durante reproducción (la pantalla puede apagarse)",
         }
@@ -1726,6 +2179,9 @@ impl Language {
             Self::Japanese => "ON：再生中のスリープを抑止し画面OFFでも再生継続。\nOFF：Windows設定時間後に通常通りスリープ。",
             Self::Korean => "켜짐: 스트리밍 중 PC 절전 방지, 화면이 꺼져도 음악 재생 지속.\n꺼짐: Windows 설정에 따라 절전 모드로 진입.",
             Self::PortugueseBrazil => "Ligado: Impede a suspensão ao transmitir; música continua com a tela desligada.\nDesligado: Suspende conforme o plano do Windows.",
+            Self::PortuguesePortugal => "Ligado: Mantém o PC ativo durante a transmissão; a música continua com o ecrã desligado.\nDesligado: O PC suspende de acordo com o plano do Windows.",
+            Self::Indonesian => "Aktif: Menjaga PC tetap bangun saat streaming; musik berlanjut saat layar mati.\nNonaktif: PC tidur sesuai dengan paket daya Windows.",
+            Self::Vietnamese => "Bật: Giữ máy tính hoạt động khi đang truyền phát; âm nhạc tiếp tục phát ngay cả khi tắt màn hình.\nTắt: Máy tính sẽ ngủ theo cài đặt nguồn của Windows.",
             Self::Russian => "Вкл: Запрещает сон при трансляции; музыка играет при погасшем экране.\nВыкл: Обычный спящий режим по настройкам Windows.",
             Self::Spanish => "Activado: Evita la suspensión al reproducir; la música continúa con la pantalla apagada.\nDesactivado: Suspende según el plan de energía.",
         }
@@ -1742,6 +2198,9 @@ impl Language {
             Self::Japanese => "🟢 音声ストリーミング中：スリープ一時抑止中 (画面OFF可)。",
             Self::Korean => "🟢 오디오 스트리밍 중: 시스템 절전 일시 차단됨 (화면 꺼짐 가능).",
             Self::PortugueseBrazil => "🟢 Transmissão de áudio ativa; suspensão do sistema temporariamente desativada.",
+            Self::PortuguesePortugal => "🟢 Transmissão de áudio ativa; suspensão do sistema temporariamente desativada (o ecrã pode suspender).",
+            Self::Indonesian => "🟢 Streaming audio aktif; tidur sistem dinonaktifkan sementara (layar dapat tidur).",
+            Self::Vietnamese => "🟢 Đang truyền phát âm thanh; tạm dừng chế độ ngủ hệ thống (màn hình vẫn có thể ngủ).",
             Self::Russian => "🟢 Трансляция активна; спящий режим временно заблокирован.",
             Self::Spanish => "🟢 Transmisión de audio activa; suspensión del sistema bloqueada temporalmente.",
         }
@@ -1758,6 +2217,9 @@ impl Language {
             Self::Japanese => "⚪ 30秒以上無音のため、スリープ抑止を解除しました。",
             Self::Korean => "⚪ 30초 이상 오디오 신호 없음: 절전 차단 해제됨.",
             Self::PortugueseBrazil => "⚪ Sem sinal de áudio há 30s; bloqueio de suspensão liberado.",
+            Self::PortuguesePortugal => "⚪ Sem sinal de áudio há 30s; bloqueio de suspensão libertado para permitir a suspensão do PC.",
+            Self::Indonesian => "⚪ Tidak ada sinyal audio selama 30 detik; kunci tidur dilepas untuk memungkinkan PC tidur.",
+            Self::Vietnamese => "⚪ Không có tín hiệu âm thanh trong 30 giây; đã giải phóng khóa ngủ để máy tính có thể ngủ bình thường.",
             Self::Russian => "⚪ Нет звука более 30 сек; блокировка сна снята.",
             Self::Spanish => "⚪ Sin señal de audio durante 30s; bloqueo de suspensión liberado.",
         }
@@ -1774,6 +2236,9 @@ impl Language {
             Self::Japanese => "⚪ 消音中のため、スリープ抑止を解除しました。",
             Self::Korean => "⚪ 음소거 상태: 절전 차단 해제됨.",
             Self::PortugueseBrazil => "⚪ Áudio silenciado; bloqueio de suspensão liberado.",
+            Self::PortuguesePortugal => "⚪ Áudio sem som; bloqueio de suspensão libertado para permitir a suspensão do PC.",
+            Self::Indonesian => "⚪ Audio dibisukan; kunci tidur dilepas untuk memungkinkan PC tidur.",
+            Self::Vietnamese => "⚪ Âm thanh đã tắt tiếng; đã giải phóng khóa ngủ để máy tính có thể ngủ.",
             Self::Russian => "⚪ Звук выключен; блокировка сна снята.",
             Self::Spanish => "⚪ Audio silenciado; bloqueo de suspensión liberado.",
         }
@@ -1790,6 +2255,9 @@ impl Language {
             Self::Japanese => "💡 再生中はスリープを防止、無音が続くと自動でスリープを許可します。",
             Self::Korean => "💡 재생 중 절전 방지, 무음 시 자동으로 절전 허용.",
             Self::PortugueseBrazil => "💡 Suprime a suspensão durante a reprodução; permite suspensão quando inativo.",
+            Self::PortuguesePortugal => "💡 Suprime a suspensão durante a reprodução; permite a suspensão quando inativo.",
+            Self::Indonesian => "💡 Menekan tidur selama pemutaran; memungkinkan tidur saat audio menganggur.",
+            Self::Vietnamese => "💡 Ngăn máy tính ngủ khi đang phát; cho phép ngủ bình thường khi không có âm thanh.",
             Self::Russian => "💡 Блокирует сон при воспроизведении; разрешает при отсутствии звука.",
             Self::Spanish => "💡 Bloquea la suspensión al reproducir; la permite cuando no hay audio.",
         }
@@ -1806,6 +2274,9 @@ impl Language {
             Self::Japanese => "⚠ アイドル時間が設定に達するとPCがスリープし、配信が中断されます。",
             Self::Korean => "⚠ 유휴 시간 초과 시 PC가 절전 모드로 전환되어 스트리밍이 일시 정지됩니다.",
             Self::PortugueseBrazil => "⚠ O PC suspenderá após tempo ocioso, pausando a transmissão.",
+            Self::PortuguesePortugal => "⚠ O PC suspenderá após o tempo de inatividade, pausando a transmissão de áudio.",
+            Self::Indonesian => "⚠ PC akan tidur setelah batas waktu menganggur, menjeda streaming audio.",
+            Self::Vietnamese => "⚠ Máy tính sẽ ngủ sau khi hết thời gian chờ, làm tạm dừng luồng âm thanh.",
             Self::Russian => "⚠ ПК перейдет в спящий режим по таймеру, прервав трансляцию.",
             Self::Spanish => "⚠ El PC se suspenderá tras el tiempo de inactividad, pausando el streaming.",
         }
@@ -1823,6 +2294,9 @@ impl Language {
             Self::Japanese => "⚡ 低遅延モード (動画視聴・音ズレ軽減推奨)",
             Self::Korean => "⚡ 저지연 모드 (동영상 시청 / 싱크 맞춤 추천)",
             Self::PortugueseBrazil => "⚡ Modo de Baixa Latência (Recomendado para vídeo e sincronia)",
+            Self::PortuguesePortugal => "⚡ Modo de Baixa Latência (Recomendado para vídeo e sincronização A/V)",
+            Self::Indonesian => "⚡ Mode Latensi Rendah (Disarankan untuk video & sinkronisasi A/V)",
+            Self::Vietnamese => "⚡ Chế độ độ trễ thấp (Khuyên dùng cho video & đồng bộ âm thanh/hình ảnh)",
             Self::Russian => "⚡ Режим низкой задержки (Для видео и синхронизации)",
             Self::Spanish => "⚡ Modo de baja latencia (Recomendado para vídeo y sincronización)",
         }
@@ -1839,6 +2313,9 @@ impl Language {
             Self::Japanese => "ON：遅延を約250〜350msに短縮し動画の口ズレを大幅改善。\nOFF：約700〜800msバッファ、不安定なWiFi環境向け。",
             Self::Korean => "켜짐: 지연 시간이 약 250~350ms로 줄어 영상 싱크 대폭 개선.\n꺼짐: 약 700~800ms 버퍼, 불안정한 Wi-Fi 환경에 적합.",
             Self::PortugueseBrazil => "Ligado: Latência reduzida para ~250-350ms para melhor sincronia de vídeo.\nDesligado: Buffer de ~700-800ms para Wi-Fi instável.",
+            Self::PortuguesePortugal => "Ligado: Latência reduzida para ~250-350ms, melhorando significativamente a sincronia labial em vídeos.\nDesligado: Buffer de ~700-800ms, ideal para redes Wi-Fi fracas ou instáveis.",
+            Self::Indonesian => "Aktif: Latensi berkurang menjadi ~250-350ms, sangat meningkatkan sinkronisasi bibir video.\nNonaktif: Buffer ~700-800ms, terbaik untuk Wi-Fi lemah atau tidak stabil.",
+            Self::Vietnamese => "Bật: Độ trễ giảm xuống ~250-350ms, cải thiện đáng kể độ khớp hình tiếng cho video.\nTắt: Bộ đệm ~700-800ms, tối ưu cho mạng Wi-Fi yếu hoặc không ổn định.",
             Self::Russian => "Вкл: Задержка ~250-350мс, улучшает синхронизацию видео и звука.\nВыкл: Буфер ~700-800мс для слабого Wi-Fi.",
             Self::Spanish => "Activado: Reduce la latencia a ~250-350ms, mejorando la sincronía labial.\nDesactivado: Búfer de ~700-800ms para Wi-Fi inestable.",
         }
@@ -1855,6 +2332,9 @@ impl Language {
             Self::Japanese => "💡 バッファを最小化中。Wi-Fi不安定でノイズが出る場合は通常モードに切り替えてください。",
             Self::Korean => "💡 버퍼 최소화됨. Wi-Fi 불안정으로 잡음 발생 시 일반 모드로 전환하세요.",
             Self::PortugueseBrazil => "💡 Buffer minimizado; volte ao modo padrão se houver estalos no áudio.",
+            Self::PortuguesePortugal => "💡 Buffer minimizado; mude para o modo normal se ocorrerem estalidos no áudio.",
+            Self::Indonesian => "💡 Buffer diminimalkan; beralih ke mode standar jika terjadi kresek audio.",
+            Self::Vietnamese => "💡 Đã tối thiểu hóa bộ đệm; hãy chuyển sang chế độ tiêu chuẩn nếu âm thanh bị rè/giật.",
             Self::Russian => "💡 Буфер минимален; при щелчках звука переключитесь в обычный режим.",
             Self::Spanish => "💡 Búfer minimizado; cambia al modo estándar si se producen chasquidos de audio.",
         }
@@ -1871,6 +2351,9 @@ impl Language {
             Self::Japanese => "🛡 耐干渉モード：音楽鑑賞やルーターから離れた場所での使用に最適。",
             Self::Korean => "🛡 높은 안정성 모드: 음악 감상 또는 신호가 약한 Wi-Fi 환경에 적합.",
             Self::PortugueseBrazil => "🛡 Modo de alta estabilidade; recomendado para música ou Wi-Fi distante.",
+            Self::PortuguesePortugal => "🛡 Modo de alta estabilidade; recomendado para ouvir música ou com Wi-Fi distante.",
+            Self::Indonesian => "🛡 Mode stabilitas tinggi; disarankan untuk mendengarkan musik atau Wi-Fi yang jauh.",
+            Self::Vietnamese => "🛡 Chế độ ổn định cao; khuyên dùng khi nghe nhạc hoặc kết nối Wi-Fi ở xa.",
             Self::Russian => "🛡 Режим повышенной стабильности; подходит для музыки и дальнего Wi-Fi.",
             Self::Spanish => "🛡 Modo de alta estabilidad; recomendado para música o Wi-Fi distante.",
         }
@@ -1887,6 +2370,9 @@ impl Language {
             Self::Japanese => "🚀 起動時に前回再生したスピーカーへ自動接続",
             Self::Korean => "🚀 시작 시 마지막으로 재생한 스피커 자동 연결",
             Self::PortugueseBrazil => "🚀 Conectar automaticamente ao iniciar",
+            Self::PortuguesePortugal => "🚀 Ligar automaticamente ao último altifalante reproduzido ao iniciar",
+            Self::Indonesian => "🚀 Hubungkan otomatis ke speaker terakhir yang diputar saat peluncuran",
+            Self::Vietnamese => "🚀 Tự động kết nối tới loa phát gần nhất khi khởi động",
             Self::Russian => "🚀 Автоподключение к последней колонке при запуске",
             Self::Spanish => "🚀 Conectar automáticamente al iniciar",
         }
@@ -1903,6 +2389,9 @@ impl Language {
             Self::Japanese => "ON：起動時に前回再生した音路（HomePodまたはローカルスピーカー）を自動復元。\nOFF：待機状態で起動し手動選択を待ちます。",
             Self::Korean => "켜짐: 프로그램 시작 시 마지막 오디오 경로(HomePod 또는 로컬 스피커) 자동 복원.\n꺼짐: 대기 상태로 시작하여 수동 연결 대기.",
             Self::PortugueseBrazil => "Ligado: Restaura automaticamente a última rota de áudio na inicialização (HomePod ou alto-falante local).\nDesligado: Inicia em espera.",
+            Self::PortuguesePortugal => "Ligado: Restaura automaticamente a última rota de áudio ativa no arranque (HomePod ou altifalante local).\nDesligado: Inicia em estado de espera.",
+            Self::Indonesian => "Aktif: Memulihkan rute audio aktif terakhir saat startup otomatis (HomePod atau speaker lokal).\nNonaktif: Mulai dalam keadaan siaga.",
+            Self::Vietnamese => "Bật: Tự động khôi phục tuyến âm thanh hoạt động gần nhất khi khởi động (HomePod hoặc loa cục bộ).\nTắt: Khởi động ở trạng thái chờ.",
             Self::Russian => "Вкл: Автоматически восстанавливает последний аудиовыход при старте (HomePod или локальный динамик).\nВыкл: Запуск в режиме ожидания.",
             Self::Spanish => "Activado: Restaura automáticamente la última ruta de audio al iniciar (HomePod o altavoz local).\nDesactivado: Inicia en espera.",
         }
@@ -1919,6 +2408,9 @@ impl Language {
             Self::Japanese => format!("📌 記憶された対象：{name}"),
             Self::Korean => format!("📌 저장된 대상: {name}"),
             Self::PortugueseBrazil => format!("📌 Destino salvo: {name}"),
+            Self::PortuguesePortugal => format!("📌 Destino guardado: {name}"),
+            Self::Indonesian => format!("📌 Target Tersimpan: {name}"),
+            Self::Vietnamese => format!("📌 Mục tiêu đã lưu: {name}"),
             Self::Russian => format!("📌 Запомненная колонка: {name}"),
             Self::Spanish => format!("📌 Objetivo guardado: {name}"),
         }
@@ -1935,6 +2427,9 @@ impl Language {
             Self::Japanese => "💡 起動時自動接続：初回は手動で一度接続して対象を記憶させてください。",
             Self::Korean => "💡 자동 연결 켜짐: 대상을 기억하기 위해 먼저 한 번 수동 연결해 주세요.",
             Self::PortugueseBrazil => "💡 Conexão auto ativa; conecte uma vez manualmente para salvar o destino.",
+            Self::PortuguesePortugal => "💡 Ligação automática ativa; ligue manualmente uma vez para definir o destino.",
+            Self::Indonesian => "💡 Sambung otomatis aktif; silakan hubungkan sekali secara manual untuk menetapkan target.",
+            Self::Vietnamese => "💡 Tự động kết nối đang bật; vui lòng kết nối thủ công một lần để ghi nhớ mục tiêu.",
             Self::Russian => "💡 Автоподключение активно; подключитесь один раз вручную для сохранения цели.",
             Self::Spanish => "💡 Conexión auto activa; conéctate una vez manualmente para guardar el altavoz.",
         }
@@ -1951,6 +2446,9 @@ impl Language {
             Self::Japanese => "⚪ 起動時は待機状態です。スピーカーをクリックして接続してください。",
             Self::Korean => "⚪ 시작 시 대기 상태 유지, 수동으로 스피커를 선택해야 합니다.",
             Self::PortugueseBrazil => "⚪ Permanece em espera ao iniciar; conexão manual necessária.",
+            Self::PortuguesePortugal => "⚪ Permanece em espera ao iniciar; é necessária ligação manual.",
+            Self::Indonesian => "⚪ Tetap siaga saat peluncuran; koneksi manual diperlukan.",
+            Self::Vietnamese => "⚪ Giữ ở chế độ chờ khi mở ứng dụng; cần kết nối thủ công.",
             Self::Russian => "⚪ Запуск в ожидании; требуется подключение вручную.",
             Self::Spanish => "⚪ Permanece en espera al iniciar; conexión manual requerida.",
         }
@@ -1967,6 +2465,9 @@ impl Language {
             Self::Japanese => "💻 Windows 起動時に自動実行",
             Self::Korean => "💻 Windows 시작 시 자동 실행",
             Self::PortugueseBrazil => "💻 Iniciar com o Windows",
+            Self::PortuguesePortugal => "💻 Iniciar com o Windows",
+            Self::Indonesian => "💻 Jalankan saat startup Windows",
+            Self::Vietnamese => "💻 Khởi động cùng Windows",
             Self::Russian => "💻 Запускать при загрузке Windows",
             Self::Spanish => "💻 Iniciar al arrancar Windows",
         }
@@ -1983,6 +2484,9 @@ impl Language {
             Self::Japanese => "ON：Windows ログイン時に自動でシステムトレイに常駐起動します。\nOFF：手動実行時のみ起動します。",
             Self::Korean => "켜짐: Windows 로그인 시 백그라운드 시스템 트레이로 자동 실행됩니다.\n꺼짐: 수동 실행 시에만 시작됩니다.",
             Self::PortugueseBrazil => "Ligado: Inicia automaticamente o Win2Pod Bridge na bandeja ao fazer login no Windows.\nDesligado: Inicia apenas manualmente.",
+            Self::PortuguesePortugal => "Ligado: Inicia automaticamente o Win2Pod Bridge minimizado na área de notificação ao iniciar o Windows.\nDesligado: Inicia apenas quando aberto manualmente.",
+            Self::Indonesian => "Aktif: Meluncurkan Win2Pod Bridge otomatis diminimalkan ke baki sistem saat startup Windows.\nNonaktif: Hanya mulai saat dibuka secara manual.",
+            Self::Vietnamese => "Bật: Tự động khởi chạy Win2Pod Bridge thu nhỏ dưới khay hệ thống khi khởi động Windows.\nTắt: Chỉ chạy khi mở thủ công.",
             Self::Russian => "Вкл: Автоматический запуск Win2Pod Bridge в системном трее при входе в Windows.\nВыкл: Только ручной запуск.",
             Self::Spanish => "Activado: Inicia automáticamente Win2Pod Bridge en la bandeja al iniciar Windows.\nDesactivado: Inicio manual únicamente.",
         }
@@ -1999,6 +2503,9 @@ impl Language {
             Self::Japanese => "💡 Windows ログイン時に自動でトレイに常駐起動します。",
             Self::Korean => "💡 Windows 로그인 시 시스템 트레이로 자동 실행됩니다.",
             Self::PortugueseBrazil => "💡 Inicia automaticamente na bandeja do sistema ao fazer login.",
+            Self::PortuguesePortugal => "💡 Inicia automaticamente na área de notificação ao iniciar sessão no Windows.",
+            Self::Indonesian => "💡 Secara otomatis dimulai di baki sistem saat masuk Windows.",
+            Self::Vietnamese => "💡 Tự động khởi chạy dưới khay hệ thống khi đăng nhập Windows.",
             Self::Russian => "💡 Автоматически запускается в системном трее при входе в Windows.",
             Self::Spanish => "💡 Se inicia automáticamente en la bandeja del sistema al iniciar sesión.",
         }
@@ -2015,6 +2522,9 @@ impl Language {
             Self::Japanese => "⚪ 自動起動は無効です。手動で起動してください。",
             Self::Korean => "⚪ 부팅 시 자동 실행되지 않으며, 수동 실행이 필요합니다.",
             Self::PortugueseBrazil => "⚪ Não inicia com o Windows; início manual necessário.",
+            Self::PortuguesePortugal => "⚪ Não inicia no arranque; é necessária abertura manual.",
+            Self::Indonesian => "⚪ Tidak dimulai saat boot; peluncuran manual diperlukan.",
+            Self::Vietnamese => "⚪ Không khởi động cùng máy tính; cần mở ứng dụng thủ công.",
             Self::Russian => "⚪ Автозапуск отключен; требуется ручной запуск.",
             Self::Spanish => "⚪ No se inicia al arrancar; inicio manual requerido.",
         }
@@ -2031,6 +2541,9 @@ impl Language {
             Self::Japanese => "⌨ パネル表示グローバルショートカット：",
             Self::Korean => "⌨ 전역 패널 단축키:",
             Self::PortugueseBrazil => "⌨ Atalho global do painel:",
+            Self::PortuguesePortugal => "⌨ Atalho global do painel:",
+            Self::Indonesian => "⌨ Tombol Pintas Panel Global:",
+            Self::Vietnamese => "⌨ Phím tắt toàn cục mở bảng điều khiển:",
             Self::Russian => "⌨ Глобальная горячая клавиша:",
             Self::Spanish => "⌨ Atajo global del panel:",
         }
@@ -2047,6 +2560,9 @@ impl Language {
             Self::Japanese => "💡 任意のアプリやゲームでショートカットを押すとパネルを開閉できます (Escキーで閉じる)。",
             Self::Korean => "💡 프로그램이나 게임 중 단축키를 눌러 패널을 열거나 닫을 수 있습니다 (Esc 키로 닫기 지원).",
             Self::PortugueseBrazil => "💡 Pressione o atalho em qualquer aplicativo para abrir/fechar o painel (Esc fecha).",
+            Self::PortuguesePortugal => "💡 Prima o atalho em qualquer aplicação ou jogo para abrir/fechar o painel (Esc fecha).",
+            Self::Indonesian => "💡 Tekan tombol pintas di aplikasi atau game apa pun untuk beralih panel (Esc untuk menutup).",
+            Self::Vietnamese => "💡 Nhấn phím tắt trong bất kỳ ứng dụng hoặc trò chơi nào để bật/tắt bảng điều khiển (Esc để ẩn).",
             Self::Russian => "💡 Нажмите горячую клавишу в любой игре или приложении для открытия панели (Esc закрывает).",
             Self::Spanish => "💡 Pulsa el atajo en cualquier aplicación o juego para abrir o cerrar el panel (Esc cierra).",
         }
@@ -2063,6 +2579,9 @@ impl Language {
             Self::Japanese => "(デフォルト)",
             Self::Korean => "(기본값)",
             Self::PortugueseBrazil => "(Padrão)",
+            Self::PortuguesePortugal => "(Predefinido)",
+            Self::Indonesian => "(Default)",
+            Self::Vietnamese => "(Mặc định)",
             Self::Russian => "(По умолч.)",
             Self::Spanish => "(Por defecto)",
         }
@@ -2079,6 +2598,9 @@ impl Language {
             Self::Japanese => "無効 (なし)",
             Self::Korean => "단축키 끄기 (없음)",
             Self::PortugueseBrazil => "Desativado (Nenhum)",
+            Self::PortuguesePortugal => "Desativado (Nenhum)",
+            Self::Indonesian => "Dinonaktifkan (Tidak Ada)",
+            Self::Vietnamese => "Đã tắt (Không dùng)",
             Self::Russian => "Отключено (Нет)",
             Self::Spanish => "Desactivado (Ninguno)",
         }
@@ -2095,6 +2617,9 @@ impl Language {
             Self::Japanese => "カスタムショートカット",
             Self::Korean => "사용자 지정 단축키",
             Self::PortugueseBrazil => "Atalho personalizado",
+            Self::PortuguesePortugal => "Atalho personalizado",
+            Self::Indonesian => "Pintasan Kustom",
+            Self::Vietnamese => "Phím tắt tùy chỉnh",
             Self::Russian => "Своя клавиша",
             Self::Spanish => "Atajo personalizado",
         }
@@ -2111,6 +2636,9 @@ impl Language {
             Self::Japanese => "🌐 表示言語 / Language：",
             Self::Korean => "🌐 인터페이스 언어 / Language:",
             Self::PortugueseBrazil => "🌐 Idioma da interface:",
+            Self::PortuguesePortugal => "🌐 Idioma da interface:",
+            Self::Indonesian => "🌐 Bahasa Antarmuka:",
+            Self::Vietnamese => "🌐 Ngôn ngữ giao diện:",
             Self::Russian => "🌐 Язык интерфейса:",
             Self::Spanish => "🌐 Idioma de la interfaz:",
         }
@@ -2127,6 +2655,9 @@ impl Language {
             Self::Japanese => "ソフトウェア情報",
             Self::Korean => "소프트웨어 정보",
             Self::PortugueseBrazil => "Informações do software",
+            Self::PortuguesePortugal => "Informações do software",
+            Self::Indonesian => "Informasi Perangkat Lunak",
+            Self::Vietnamese => "Thông tin phần mềm",
             Self::Russian => "Информация о программе",
             Self::Spanish => "Información del software",
         }
@@ -2143,6 +2674,9 @@ impl Language {
             Self::Japanese => "ソフトウェア情報",
             Self::Korean => "소프트웨어 정보",
             Self::PortugueseBrazil => "Informações do software",
+            Self::PortuguesePortugal => "Informações do software",
+            Self::Indonesian => "Informasi Perangkat Lunak",
+            Self::Vietnamese => "Thông tin phần mềm",
             Self::Russian => "Информация о программе",
             Self::Spanish => "Información del software",
         }
@@ -2159,6 +2693,9 @@ impl Language {
             Self::Japanese => "Win2Pod について",
             Self::Korean => "Win2Pod 정보",
             Self::PortugueseBrazil => "Sobre o Win2Pod",
+            Self::PortuguesePortugal => "Sobre o Win2Pod",
+            Self::Indonesian => "Tentang Win2Pod",
+            Self::Vietnamese => "Giới thiệu về Win2Pod",
             Self::Russian => "О программе Win2Pod",
             Self::Spanish => "Acerca de Win2Pod",
         }
@@ -2175,6 +2712,9 @@ impl Language {
             Self::Japanese => "Windows 向けオープンソース Pure-Rust AirPlay 2 オーディオストリーミングツール",
             Self::Korean => "Windows용 오픈 소스 순수 Rust AirPlay 2 오디오 스트리밍 브리지",
             Self::PortugueseBrazil => "Ponte de streaming de áudio AirPlay 2 em Rust puro e código aberto para Windows",
+            Self::PortuguesePortugal => "Ponte de transmissão de áudio AirPlay 2 em Rust puro e código aberto para Windows",
+            Self::Indonesian => "Jembatan streaming audio AirPlay 2 murni Rust sumber terbuka untuk Windows",
+            Self::Vietnamese => "Cầu nối truyền phát âm thanh AirPlay 2 mã nguồn mở thuần Rust cho Windows",
             Self::Russian => "AirPlay 2 аудиотранслятор для Windows с открытым исходным кодом на чистом Rust",
             Self::Spanish => "Puente de transmisión de audio AirPlay 2 de código abierto en Rust puro para Windows",
         }
@@ -2191,6 +2731,9 @@ impl Language {
             Self::Japanese => "バージョン：",
             Self::Korean => "버전:",
             Self::PortugueseBrazil => "Versão:",
+            Self::PortuguesePortugal => "Versão:",
+            Self::Indonesian => "Versi:",
+            Self::Vietnamese => "Phiên bản:",
             Self::Russian => "Версия:",
             Self::Spanish => "Versión:",
         }
@@ -2207,6 +2750,9 @@ impl Language {
             Self::Japanese => "開発者：",
             Self::Korean => "작성자:",
             Self::PortugueseBrazil => "Autor:",
+            Self::PortuguesePortugal => "Autor:",
+            Self::Indonesian => "Penulis:",
+            Self::Vietnamese => "Tác giả:",
             Self::Russian => "Автор:",
             Self::Spanish => "Autor:",
         }
@@ -2227,6 +2773,9 @@ impl Language {
             Self::Japanese => "ライセンス：",
             Self::Korean => "라이선스:",
             Self::PortugueseBrazil => "Licença:",
+            Self::PortuguesePortugal => "Licença:",
+            Self::Indonesian => "Lisensi:",
+            Self::Vietnamese => "Giấy phép:",
             Self::Russian => "Лицензия:",
             Self::Spanish => "Licencia:",
         }
@@ -2243,6 +2792,9 @@ impl Language {
             Self::Japanese => "著作権表記：Copyright © 2024-2026 mesmerli。本ソフトウェアは GNU General Public License v3.0 以降 (GPL-3.0-or-later) の下で配布されるフリーソフトウェアです。",
             Self::Korean => "저작권 고지: Copyright © 2024-2026 mesmerli. 본 소프트웨어는 GNU General Public License v3.0 이상 (GPL-3.0-or-later)에 따라 배포되는 자유 소프트웨어입니다.",
             Self::PortugueseBrazil => "Aviso de direitos autorais: Copyright © 2024-2026 mesmerli. Software livre distribuído sob a GNU General Public License v3.0 ou posterior (GPL-3.0-or-later).",
+            Self::PortuguesePortugal => "Aviso de direitos de autor: Copyright © 2024-2026 mesmerli. Software livre distribuído sob a Licença Pública Geral GNU v3.0 ou posterior (GPL-3.0-or-later).",
+            Self::Indonesian => "Pemberitahuan Hak Cipta: Hak Cipta © 2024-2026 mesmerli. Perangkat lunak gratis yang dirilis di bawah GNU General Public License v3.0 atau yang lebih baru (GPL-3.0-or-later).",
+            Self::Vietnamese => "Thông báo bản quyền: Bản quyền © 2024-2026 mesmerli. Phần mềm miễn phí phát hành theo Giấy phép Công cộng GNU v3.0 trở lên (GPL-3.0-or-later).",
             Self::Russian => "Уведомление об авторских правах: Copyright © 2024-2026 mesmerli. Свободное ПО, распространяемое под лицензией GNU General Public License v3.0 или более поздней (GPL-3.0-or-later).",
             Self::Spanish => "Aviso de copyright: Copyright © 2024-2026 mesmerli. Software libre distribuido bajo la GNU General Public License v3.0 o posterior (GPL-3.0-or-later).",
         }
@@ -2259,6 +2811,9 @@ impl Language {
             Self::Japanese => "AirPlay 2 ストリーミングプロトコルエンジン、RTSPセッション、PTP/NTPクロック同期",
             Self::Korean => "AirPlay 2 스트리밍 프로토콜 엔진, RTSP 세션 및 PTP/NTP 클럭 동기화",
             Self::PortugueseBrazil => "Motor de protocolo AirPlay 2, sessões RTSP e sincronização de relógio PTP/NTP",
+            Self::PortuguesePortugal => "Motor de protocolo de transmissão AirPlay 2, sessões RTSP e sincronização de relógio PTP/NTP",
+            Self::Indonesian => "Mesin protokol streaming AirPlay 2, sesi RTSP & sinkronisasi jam PTP/NTP",
+            Self::Vietnamese => "Công cụ giao thức truyền phát AirPlay 2, phiên RTSP & đồng bộ xung nhịp PTP/NTP",
             Self::Russian => "Движок протокола AirPlay 2, сессии RTSP и синхронизация часов PTP/NTP",
             Self::Spanish => "Motor de protocolo AirPlay 2, sesiones RTSP y sincronización de reloj PTP/NTP",
         }
@@ -2275,8 +2830,30 @@ impl Language {
             Self::Japanese => "Windows AirPlay ストリーミングプロトタイプとアップストリーム移植プロジェクト",
             Self::Korean => "Windows AirPlay 스트리밍 프로토타입 및 업스트림 포팅 프로젝트",
             Self::PortugueseBrazil => "Protótipo de streaming Windows AirPlay e projeto de portabilidade upstream",
+            Self::PortuguesePortugal => "Protótipo de transmissão Windows AirPlay e projeto de portabilidade upstream",
+            Self::Indonesian => "Prototipe streaming Windows AirPlay & proyek port hulu",
+            Self::Vietnamese => "Nguyên mẫu truyền phát Windows AirPlay & dự án chuyển đổi mã nguồn phía trên",
             Self::Russian => "Прототип стриминга Windows AirPlay и апстрим-проект",
             Self::Spanish => "Prototipo de transmisión Windows AirPlay y proyecto portado upstream",
+        }
+    }
+
+    pub fn pkg_uxplay_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "開源 AirPlay 接收端伺服器 (RAOP / RTSP 協定實作與 DACP 遠端控制參考)",
+            Self::SimplifiedChinese => "开源 AirPlay 接收端服务器 (RAOP / RTSP 协议实现与 DACP 远程控制参考)",
+            Self::English => "Open-source AirPlay receiver server (RAOP / RTSP protocol implementation & DACP remote control reference)",
+            Self::French => "Serveur récepteur AirPlay open-source (implémentation des protocoles RAOP / RTSP et contrôle DACP)",
+            Self::German => "Open-Source-AirPlay-Empfängerserver (RAOP / RTSP-Protokollimplementierung & DACP-Fernbedienungsreferenz)",
+            Self::Italian => "Server ricevitore AirPlay open source (implementazione dei protocolli RAOP / RTSP e controllo remoto DACP)",
+            Self::Japanese => "オープンソース AirPlay レシーバーサーバー (RAOP / RTSP プロトコル実装および DACP リモートコントロールリファレンス)",
+            Self::Korean => "오픈 소스 AirPlay 수신기 서버 (RAOP / RTSP 프로토콜 구현 및 DACP 원격 제어 참조)",
+            Self::PortugueseBrazil => "Servidor receptor AirPlay de código aberto (implementação dos protocolos RAOP / RTSP e controle remoto DACP)",
+            Self::PortuguesePortugal => "Servidor recetor AirPlay de código aberto (implementação dos protocolos RAOP / RTSP e referência de controlo remoto DACP)",
+            Self::Indonesian => "Server penerima AirPlay sumber terbuka (implementasi protokol RAOP / RTSP & referensi kendali jarak jauh DACP)",
+            Self::Vietnamese => "Máy chủ nhận AirPlay mã nguồn mở (triển khai giao thức RAOP / RTSP & tham chiếu điều khiển từ xa DACP)",
+            Self::Russian => "Сервер-приемник AirPlay с открытым исходным кодом (реализация протоколов RAOP / RTSP и управление DACP)",
+            Self::Spanish => "Servidor receptor AirPlay de código abierto (implementación de protocolos RAOP / RTSP y control remoto DACP)",
         }
     }
 
@@ -2291,6 +2868,9 @@ impl Language {
             Self::Japanese => "Apple Continuity BLE プロトコルの解析および AirPods 装着・バッテリー状態検出リファレンス",
             Self::Korean => "Apple Continuity BLE 프로토콜 리버스 엔지니어링 및 AirPods 착용/배터리 감지 참조",
             Self::PortugueseBrazil => "Engenharia reversa do protocolo Apple Continuity BLE e detecção intra-auricular do AirPods",
+            Self::PortuguesePortugal => "Engenharia inversa do protocolo Apple Continuity BLE e referência de deteção intra-auricular dos AirPods",
+            Self::Indonesian => "Rekayasa balik protokol Apple Continuity BLE & referensi deteksi dalam telinga AirPods",
+            Self::Vietnamese => "Kỹ thuật dịch ngược giao thức Apple Continuity BLE & tham chiếu phát hiện đeo tai nghe AirPods",
             Self::Russian => "Обратная разработка протокола Apple Continuity BLE и обнаружение ношения AirPods",
             Self::Spanish => "Ingeniería inversa del protocolo Apple Continuity BLE y detección de uso de AirPods",
         }
@@ -2307,6 +2887,9 @@ impl Language {
             Self::Japanese => "オープンソース謝辞とライセンス",
             Self::Korean => "오픈 소스 감사 및 라이선스",
             Self::PortugueseBrazil => "Créditos e licenças de código aberto",
+            Self::PortuguesePortugal => "Créditos e licenças de código aberto",
+            Self::Indonesian => "Kredit & Lisensi Sumber Terbuka",
+            Self::Vietnamese => "Ghi công & Giấy phép mã nguồn mở",
             Self::Russian => "Благодарности Open Source и лицензии",
             Self::Spanish => "Agradecimientos de código abierto y licencias",
         }
@@ -2323,6 +2906,9 @@ impl Language {
             Self::Japanese => "イミディエイトモード ネイティブGUIフレームワーク",
             Self::Korean => "즉시 모드 네이티브 GUI 프레임워크",
             Self::PortugueseBrazil => "Framework de interface gráfica nativa em modo imediato",
+            Self::PortuguesePortugal => "Framework de interface gráfica nativa em modo imediato",
+            Self::Indonesian => "Kerangka kerja GUI asli mode langsung",
+            Self::Vietnamese => "Framework giao diện người dùng trực tiếp thuần Rust",
             Self::Russian => "Фреймворк нативного графического интерфейса",
             Self::Spanish => "Framework de interfaz gráfica nativa en modo inmediato",
         }
@@ -2339,6 +2925,9 @@ impl Language {
             Self::Japanese => "オーディオループバック録音ライブラリ",
             Self::Korean => "오디오 루프백 캡처 라이브러리",
             Self::PortugueseBrazil => "Biblioteca de captura de áudio em loopback",
+            Self::PortuguesePortugal => "Biblioteca de captura de áudio em loopback para o Windows",
+            Self::Indonesian => "Pustaka tangkapan loopback audio untuk Windows",
+            Self::Vietnamese => "Thư viện thu nhận âm thanh lặp lại (loopback) cho Windows",
             Self::Russian => "Библиотека захвата системного аудио",
             Self::Spanish => "Biblioteca de captura de audio en bucle",
         }
@@ -2355,6 +2944,9 @@ impl Language {
             Self::Japanese => "Apple Lossless Audio Codec (ALAC) エンコーダー",
             Self::Korean => "Apple Lossless Audio Codec (ALAC) 인코더",
             Self::PortugueseBrazil => "Codificador Apple Lossless Audio Codec (ALAC)",
+            Self::PortuguesePortugal => "Codificador Apple Lossless Audio Codec (ALAC)",
+            Self::Indonesian => "Pembuat enkode Apple Lossless Audio Codec (ALAC)",
+            Self::Vietnamese => "Bộ mã hóa Apple Lossless Audio Codec (ALAC)",
             Self::Russian => "Кодировщик Apple Lossless Audio Codec (ALAC)",
             Self::Spanish => "Codificador Apple Lossless Audio Codec (ALAC)",
         }
@@ -2371,6 +2963,9 @@ impl Language {
             Self::Japanese => "高品質非同期オーディオリサンプラー",
             Self::Korean => "고품질 비동기 오디오 리샘플러",
             Self::PortugueseBrazil => "Reamostrador de áudio assíncrono de alta qualidade",
+            Self::PortuguesePortugal => "Reamostrador de áudio assíncrono de alta qualidade",
+            Self::Indonesian => "Pengambil sampel ulang audio asinkron berkualitas tinggi",
+            Self::Vietnamese => "Bộ tái lấy mẫu âm thanh bất đồng bộ chất lượng cao",
             Self::Russian => "Высококачественный асинхронный аудио-ресемплер",
             Self::Spanish => "Remuestreador de audio asíncrono de alta calidad",
         }
@@ -2387,6 +2982,9 @@ impl Language {
             Self::Japanese => "Pure-Rust マルチフォーマット音声デコード・プローブライブラリ",
             Self::Korean => "순수 Rust 멀티 포맷 오디오 디코딩 및 미디어 분석 라이브러리",
             Self::PortugueseBrazil => "Biblioteca de decodificação de áudio e análise de mídia em Rust puro",
+            Self::PortuguesePortugal => "Biblioteca de descodificação de áudio e análise de multimédia em Rust puro",
+            Self::Indonesian => "Pustaka decoding audio dan probing media murni Rust",
+            Self::Vietnamese => "Thư viện giải mã âm thanh và kiểm tra đa phương tiện thuần Rust",
             Self::Russian => "Библиотека декодирования аудио и анализа медиа на чистом Rust",
             Self::Spanish => "Biblioteca de decodificación de audio y análisis multimedia en Rust puro",
         }
@@ -2403,6 +3001,9 @@ impl Language {
             Self::Japanese => "高性能非同期マルチスレッド ネットワークランタイム",
             Self::Korean => "고성능 비동기 멀티스레드 네트워크 런타임",
             Self::PortugueseBrazil => "Ambiente de execução de rede assíncrono multithread de alta performance",
+            Self::PortuguesePortugal => "Ambiente de execução de rede assíncrono multithread de alto desempenho",
+            Self::Indonesian => "Runtime multi-threaded asinkron berkinerja tinggi",
+            Self::Vietnamese => "Môi trường thực thi bất đồng bộ đa luồng hiệu năng cao",
             Self::Russian => "Высокопроизводительная асинхронная многопоточная среда выполнения",
             Self::Spanish => "Entorno de ejecución de red asíncrono y multihilo de alto rendimiento",
         }
@@ -2419,6 +3020,9 @@ impl Language {
             Self::Japanese => "ゼロコンフィグレーション mDNS/DNS-SD サービス自動検出",
             Self::Korean => "무설정 mDNS/DNS-SD 로컬 네트워크 서비스 자동 검색",
             Self::PortugueseBrazil => "Descoberta de serviços sem configuração via mDNS/DNS-SD",
+            Self::PortuguesePortugal => "Deteção de serviços sem configuração através de mDNS/DNS-SD",
+            Self::Indonesian => "Penemuan layanan multicast DNS tanpa konfigurasi (mDNS/DNS-SD)",
+            Self::Vietnamese => "Tự động phát hiện dịch vụ DNS phát đa hướng không cần cấu hình (mDNS/DNS-SD)",
             Self::Russian => "Автоматическое обнаружение сервисов в сети (mDNS/DNS-SD)",
             Self::Spanish => "Detección de servicios de red sin configuración (mDNS/DNS-SD)",
         }
@@ -2435,6 +3039,9 @@ impl Language {
             Self::Japanese => "クロスプラットフォーム低レベルソケットネットワーク制御",
             Self::Korean => "크로스 플랫폼 저수준 소켓 네트워크 구성 라이브러리",
             Self::PortugueseBrazil => "Configuração de sockets de rede de baixo nível multiplataforma",
+            Self::PortuguesePortugal => "Configuração de sockets de rede de baixo nível multiplataforma",
+            Self::Indonesian => "Konfigurasi jaringan soket tingkat rendah lintas platform",
+            Self::Vietnamese => "Cấu hình mạng socket cấp thấp đa nền tảng",
             Self::Russian => "Низкоуровневая кроссплатформенная работа с сетевыми сокетами",
             Self::Spanish => "Configuración y control de sockets de red de bajo nivel multiplataforma",
         }
@@ -2451,6 +3058,9 @@ impl Language {
             Self::Japanese => "ChaCha20-Poly1305 認証付き暗号アルゴリズム (AEAD)",
             Self::Korean => "ChaCha20-Poly1305 인증 암호화 알고리즘 (AEAD)",
             Self::PortugueseBrazil => "Cifra de criptografia autenticada ChaCha20-Poly1305 (AEAD)",
+            Self::PortuguesePortugal => "Cifra de encriptação autenticada ChaCha20-Poly1305 (AEAD)",
+            Self::Indonesian => "Sandi enkripsi terautentikasi ChaCha20-Poly1305 (AEAD)",
+            Self::Vietnamese => "Mật mã mã hóa xác thực ChaCha20-Poly1305 (AEAD)",
             Self::Russian => "Аутентифицированное шифрование ChaCha20-Poly1305 (AEAD)",
             Self::Spanish => "Cifrado autenticado ChaCha20-Poly1305 (AEAD)",
         }
@@ -2467,6 +3077,9 @@ impl Language {
             Self::Japanese => "AES-GCM / CBC / CTR 高速対称ブロック暗号",
             Self::Korean => "AES-GCM, CBC 및 CTR 대칭 블록 암호",
             Self::PortugueseBrazil => "Cifras de bloco simétricas AES-GCM, CBC e CTR",
+            Self::PortuguesePortugal => "Cifras de bloco simétricas AES-GCM, CBC e CTR",
+            Self::Indonesian => "Sandi blok simetris AES-GCM, CBC, dan CTR",
+            Self::Vietnamese => "Các mật mã khối đối xứng AES-GCM, CBC và CTR",
             Self::Russian => "Симметричные блочные шифры AES-GCM, CBC и CTR",
             Self::Spanish => "Cifrados de bloque simétricos AES-GCM, CBC y CTR",
         }
@@ -2483,6 +3096,9 @@ impl Language {
             Self::Japanese => "Curve25519 / Ed25519 署名および X25519 鍵交換",
             Self::Korean => "Curve25519 / Ed25519 전자 서명 및 X25519 키 교환",
             Self::PortugueseBrazil => "Assinaturas Curve25519 / Ed25519 e troca de chaves X25519",
+            Self::PortuguesePortugal => "Assinaturas Curve25519 / Ed25519 e troca de chaves X25519",
+            Self::Indonesian => "Tanda tangan Curve25519 / Ed25519 dan pertukaran kunci X25519",
+            Self::Vietnamese => "Chữ ký Curve25519 / Ed25519 và trao đổi khóa X25519",
             Self::Russian => "Цифровые подписи Curve25519 / Ed25519 и обмен ключами X25519",
             Self::Spanish => "Firmas Curve25519 / Ed25519 e intercambio de claves X25519",
         }
@@ -2499,6 +3115,9 @@ impl Language {
             Self::Japanese => "Pure-Rust RSA 公開鍵暗号化および鍵カプセル化",
             Self::Korean => "순수 Rust RSA 공개키 암호화 및 키 캡슐화 알고리즘",
             Self::PortugueseBrazil => "Criptografia de chave pública RSA em Rust puro",
+            Self::PortuguesePortugal => "Encriptação de chave pública RSA em Rust puro e encapsulamento de chaves",
+            Self::Indonesian => "Enkripsi kunci publik RSA dan enkapsulasi kunci murni Rust",
+            Self::Vietnamese => "Mã hóa khóa công khai RSA và đóng gói khóa thuần Rust",
             Self::Russian => "Криптосистема с открытым ключом RSA на чистом Rust",
             Self::Spanish => "Criptografía de clave pública RSA en Rust puro",
         }
@@ -2515,6 +3134,9 @@ impl Language {
             Self::Japanese => "Apple Property List (PList) バイナリおよびXMLエンコーダー",
             Self::Korean => "Apple Property List (PList) 바이너리 및 XML 인코더/디코더",
             Self::PortugueseBrazil => "Serializador binário e XML de listas de propriedades da Apple (PList)",
+            Self::PortuguesePortugal => "Serializador binário e XML de listas de propriedades da Apple (PList)",
+            Self::Indonesian => "Serializer biner dan XML Apple Property List (PList)",
+            Self::Vietnamese => "Bộ tuần tự hóa nhị phân và XML cho Apple Property List (PList)",
             Self::Russian => "Парсер бинарных и XML файлов Apple Property List (PList)",
             Self::Spanish => "Serializador binario y XML de listas de propiedades de Apple (PList)",
         }
@@ -2531,6 +3153,9 @@ impl Language {
             Self::Japanese => "Rust 標準汎用データシリアライズ・デシリアライズフレームワーク",
             Self::Korean => "Rust 표준 데이터 직렬화 및 역직렬화 프레임워크",
             Self::PortugueseBrazil => "Framework padrão de serialização e desserialização de dados",
+            Self::PortuguesePortugal => "Framework padrão de serialização e desserialização de dados",
+            Self::Indonesian => "Kerangka kerja serialisasi dan deserialisasi data standar",
+            Self::Vietnamese => "Framework tiêu chuẩn để tuần tự hóa và giải tuần tự hóa dữ liệu",
             Self::Russian => "Стандартный фреймворк сериализации и десериализации данных",
             Self::Spanish => "Framework estándar de serialización y deserialización de datos",
         }
@@ -2547,6 +3172,9 @@ impl Language {
             Self::Japanese => "RFC 4122 汎用一意識別子 (UUIDv4) 生成および解析",
             Self::Korean => "RFC 4122 범용 고유 식별자 (UUIDv4) 생성 및 파서",
             Self::PortugueseBrazil => "Gerador e analisador de identificadores universais exclusivos (UUIDv4)",
+            Self::PortuguesePortugal => "Gerador e analisador de identificadores universais exclusivos (UUIDv4) RFC 4122",
+            Self::Indonesian => "Pembuat Pengenal Unik Universal RFC 4122 (UUIDv4)",
+            Self::Vietnamese => "Bộ tạo và phân tích mã định danh duy nhất toàn cầu RFC 4122 (UUIDv4)",
             Self::Russian => "Генератор универсальных уникальных идентификаторов (UUIDv4)",
             Self::Spanish => "Generador y analizador de identificadores únicos universales (UUIDv4)",
         }
@@ -2563,6 +3191,9 @@ impl Language {
             Self::Japanese => "システムトレイ常駐アイコンおよびネイティブメニュー統合",
             Self::Korean => "시스템 트레이 상주 아이콘 및 네이티브 메뉴 통합",
             Self::PortugueseBrazil => "Ícone na bandeja do sistema e menu de contexto nativo",
+            Self::PortuguesePortugal => "Ícone na área de notificação do sistema e integração de menu de contexto nativo",
+            Self::Indonesian => "Ikon baki sistem dan integrasi menu konteks asli",
+            Self::Vietnamese => "Tích hợp biểu tượng khay hệ thống và menu ngữ cảnh gốc",
             Self::Russian => "Значок в системном трее и нативное контекстное меню",
             Self::Spanish => "Icono en la bandeja del sistema y menú contextual nativo",
         }
@@ -2579,6 +3210,9 @@ impl Language {
             Self::Japanese => "非同期アプリケーション向け構造化イベント診断・トレース",
             Self::Korean => "비동기 애플리케이션 구조화된 이벤트 진단 및 추적 로그",
             Self::PortugueseBrazil => "Diagnóstico estruturado e rastreamento de eventos assíncronos",
+            Self::PortuguesePortugal => "Diagnóstico estruturado e rastreio de eventos ao nível da aplicação",
+            Self::Indonesian => "Pelacakan tingkat aplikasi dan diagnostik terstruktur",
+            Self::Vietnamese => "Ghi vết mức ứng dụng và chẩn đoán có cấu trúc",
             Self::Russian => "Структурированная диагностика и трассировка асинхронных событий",
             Self::Spanish => "Diagnóstico estructurado y rastreo de eventos asíncronos",
         }
@@ -2595,6 +3229,9 @@ impl Language {
             Self::Japanese => "型安全かつ柔軟なエラーハンドリングライブラリ (Anyhow / Thiserror)",
             Self::Korean => "타입 안정성 및 유연한 오류 처리 라이브러리 (Anyhow / Thiserror)",
             Self::PortugueseBrazil => "Tratamento de erros tipificado e flexível (Anyhow / Thiserror)",
+            Self::PortuguesePortugal => "Tratamento de erros tipificado e flexível (Anyhow / Thiserror)",
+            Self::Indonesian => "Pustaka penanganan kesalahan yang fleksibel dan berjenis (Anyhow / Thiserror)",
+            Self::Vietnamese => "Thư viện xử lý lỗi linh hoạt và có định kiểu (Anyhow / Thiserror)",
             Self::Russian => "Гибкая и типизированная обработка ошибок (Anyhow / Thiserror)",
             Self::Spanish => "Gestión de errores flexible y tipificada (Anyhow / Thiserror)",
         }
@@ -2611,6 +3248,9 @@ impl Language {
             Self::Japanese => "画像フォーマットのデコードと処理ライブラリ",
             Self::Korean => "이미지 포맷 디코딩 및 처리 라이브러리",
             Self::PortugueseBrazil => "Biblioteca de decodificação e processamento de imagem",
+            Self::PortuguesePortugal => "Biblioteca de descodificação e processamento de formatos de imagem",
+            Self::Indonesian => "Pustaka decoding dan pemrosesan format gambar",
+            Self::Vietnamese => "Thư viện giải mã và xử lý định dạng hình ảnh",
             Self::Russian => "Библиотека декодирования и обработки изображений",
             Self::Spanish => "Biblioteca de decodificación y procesamiento de imágenes",
         }
@@ -2627,6 +3267,9 @@ impl Language {
             Self::Japanese => "10バンドEQおよび暖かみ補正用 Biquad IIR フィルター",
             Self::Korean => "10밴드 EQ 및 아날로그 웜스를 위한 Biquad IIR 오디오 필터",
             Self::PortugueseBrazil => "Filtros de áudio biquad IIR para equalizador e calor analógico",
+            Self::PortuguesePortugal => "Filtros de áudio biquad IIR para equalizador de 10 bandas e calor analógico",
+            Self::Indonesian => "Filter audio IIR biquad untuk EQ 10-band dan peningkatan kehangatan",
+            Self::Vietnamese => "Bộ lọc âm thanh biquad IIR cho EQ 10 băng tần và tăng độ ấm âm thanh",
             Self::Russian => "Биквадратные IIR-фильтры для эквалайзера и теплоты",
             Self::Spanish => "Filtros de audio IIR biquad para ecualizador y calidez de vinilo",
         }
@@ -2643,6 +3286,9 @@ impl Language {
             Self::Japanese => "ハーモニック・エキサイターおよびアナログ効果用 DSP エンジン",
             Self::Korean => "하모닉 익サイ터 및 아날로그 효과를 위한 오디오 DSP 엔진",
             Self::PortugueseBrazil => "Motor de efeitos DSP de áudio para excitação harmônica e calor",
+            Self::PortuguesePortugal => "Motor de efeitos DSP de áudio para excitação harmónica e calor analógico",
+            Self::Indonesian => "Mesin efek DSP audio untuk eksitasi harmonik dan kehangatan analog",
+            Self::Vietnamese => "Công cụ hiệu ứng âm thanh DSP cho kích thích họa âm và độ ấm analog",
             Self::Russian => "DSP-движок аудиоэффектов для гармонического экситера",
             Self::Spanish => "Motor de efectos de audio DSP para excitación armónica y calidez",
         }
@@ -2659,6 +3305,9 @@ impl Language {
             Self::Japanese => "16バンド・リアルタイム音響スペクトラム解析用 高速FFTライブラリ",
             Self::Korean => "16밴드 실시간 오디오 스펙트럼 분석을 위한 초고속 FFT 라이브러리",
             Self::PortugueseBrazil => "Aceleração FFT para analisador de espectro de áudio em tempo real",
+            Self::PortuguesePortugal => "Aceleração FFT para analisador de espetro de áudio em tempo real",
+            Self::Indonesian => "Akselerasi FFT nyata-ke-kompleks untuk spektrum audio waktu nyata",
+            Self::Vietnamese => "Tăng tốc biến đổi FFT thực sang phức cho phổ âm thanh thời gian thực",
             Self::Russian => "Быстрое преобразование Фурье (FFT) для спектроанализатора",
             Self::Spanish => "Aceleración FFT para analizador de espectro de audio en tiempo real",
         }
@@ -2675,6 +3324,9 @@ impl Language {
             Self::Japanese => "Windows グローバルメディアコントロール (GSMTC) および Win32 API",
             Self::Korean => "Windows 전역 미디어 제어 (GSMTC) 및 Win32 시스템 API",
             Self::PortugueseBrazil => "Controles de mídia do sistema Windows (GSMTC) e APIs Win32",
+            Self::PortuguesePortugal => "Controlos de multimédia do sistema Windows (GSMTC) e APIs Win32",
+            Self::Indonesian => "Kontrol Transportasi Media Sistem Windows (GSMTC) & API Win32",
+            Self::Vietnamese => "Điều khiển truyền phát đa phương tiện hệ thống Windows (GSMTC) & API Win32",
             Self::Russian => "Системные элементы управления мультимедиа Windows (GSMTC) и Win32 API",
             Self::Spanish => "Controles multimedia del sistema Windows (GSMTC) y APIs Win32",
         }
@@ -2691,6 +3343,9 @@ impl Language {
             Self::Japanese => "クロスプラットフォームネイティブ WebView2 レンダリングおよびプロトコル統合ライブラリ",
             Self::Korean => "크로스 플랫폼 네이티브 WebView2 렌더링 및 프로토콜 통합 라이브러리",
             Self::PortugueseBrazil => "Biblioteca de renderização nativa WebView2 multiplataforma e protocolos personalizados",
+            Self::PortuguesePortugal => "Biblioteca de renderização nativa WebView2 multiplataforma e protocolos personalizados",
+            Self::Indonesian => "Rendering WebView2 asli lintas platform dan pustaka protokol kustom",
+            Self::Vietnamese => "Thư viện giao thức tùy chỉnh và kết xuất WebView2 gốc đa nền tảng",
             Self::Russian => "Кроссплатформенная библиотека рендеринга нативного WebView2",
             Self::Spanish => "Biblioteca de renderizado nativo WebView2 multiplataforma y protocolos personalizados",
         }
@@ -2707,6 +3362,9 @@ impl Language {
             Self::Japanese => "WebGL 3D シーン描画、カメラ制御およびシェーダーライブラリ (Three.js)",
             Self::Korean => "WebGL 3D 씬 렌더링, 카메라 제어 및 셰이더 라이브러리 (Three.js)",
             Self::PortugueseBrazil => "Renderização de cena 3D WebGL, controles de câmera e biblioteca de shaders",
+            Self::PortuguesePortugal => "Renderização de cenas 3D WebGL, controlos de câmara e biblioteca de shaders",
+            Self::Indonesian => "Rendering pemandangan 3D WebGL, kontrol kamera, dan pustaka shader",
+            Self::Vietnamese => "Kết xuất hoạt cảnh 3D WebGL, điều khiển camera và thư viện đổ bóng shader",
             Self::Russian => "Рендеринг 3D-сцен WebGL, управление камерой и библиотека шейдеров",
             Self::Spanish => "Renderizado de escenas 3D WebGL, controles de cámara y biblioteca de shaders",
         }
@@ -2723,6 +3381,9 @@ impl Language {
             Self::Japanese => "Three.js 印象派油彩筆致シェーダーおよびポストプロセスパイプライン (PainterlyPass)",
             Self::Korean => "Three.js 유화풍 인상파 붓터치 셰이더 및 후처리 파이프라인 (PainterlyPass)",
             Self::PortugueseBrazil => "Pipeline de pós-processamento de pinceladas impressionistas Three.js (PainterlyPass)",
+            Self::PortuguesePortugal => "Pipeline de pós-processamento de pinceladas impressionistas Three.js (PainterlyPass)",
+            Self::Indonesian => "Saluran pasca-pemrosesan goresan kuas pelukis impresionis Three.js (PainterlyPass)",
+            Self::Vietnamese => "Quy trình hậu xử lý nét cọ hội họa trường phái ấn tượng Three.js (PainterlyPass)",
             Self::Russian => "Пост-процессинг живописных мазков кисти для Three.js (PainterlyPass)",
             Self::Spanish => "Canal de posprocesamiento de pinceladas impresionistas Three.js (PainterlyPass)",
         }
@@ -2739,6 +3400,9 @@ impl Language {
             Self::Japanese => "GPU事前計算による粒子衝突・爆発音響拡散シミュレーション (BakedDebris)",
             Self::Korean => "GPU 가속 파티클 충돌 폭발 및 오디오 리듬 분산 시뮬레이션 (BakedDebris)",
             Self::PortugueseBrazil => "Simulação de colisão de detritos de partículas acelerada por GPU (BakedDebris)",
+            Self::PortuguesePortugal => "Simulação de colisão de detritos de partículas acelerada por GPU (BakedDebris)",
+            Self::Indonesian => "Simulasi serpihan tabrakan partikel dan hamburan gerak audio yang dibakar GPU (BakedDebris)",
+            Self::Vietnamese => "Mô phỏng mảnh vụn va chạm hạt nướng qua GPU & tán xạ chuyển động âm thanh (BakedDebris)",
             Self::Russian => "GPU-симуляция столкновения и разлета частиц под ритм звука (BakedDebris)",
             Self::Spanish => "Simulación de colisión de partículas acelerada por GPU (BakedDebris)",
         }
@@ -2755,6 +3419,9 @@ impl Language {
             Self::Japanese => "Win32 ネイティブウィンドウハンドル相互運用標準インターフェース",
             Self::Korean => "Win32 네이티브 윈도우 핸들 상호 운용 표준 인터페이스",
             Self::PortugueseBrazil => "Padrão de interoperabilidade de identificadores de janela nativos Win32",
+            Self::PortuguesePortugal => "Padrão de interoperabilidade de identificadores de janela nativos Win32",
+            Self::Indonesian => "Standar interoperabilitas pegangan jendela asli Win32",
+            Self::Vietnamese => "Tiêu chuẩn tương tác tay cầm cửa sổ Win32 gốc",
             Self::Russian => "Стандарт взаимодействия с нативными дескрипторами окон Win32",
             Self::Spanish => "Estándar de interoperabilidad de identificadores de ventana nativos Win32",
         }
@@ -2771,6 +3438,9 @@ impl Language {
             Self::Japanese => "プロセス間通信(IPC)メッセージ用 高性能 JSON シリアライザー",
             Self::Korean => "프로세스 간 통신(IPC)을 위한 고성능 JSON 직렬화 라이브러리",
             Self::PortugueseBrazil => "Serialização JSON de alto desempenho para passagem de mensagens IPC",
+            Self::PortuguesePortugal => "Serialização JSON de alto desempenho para passagem de mensagens IPC",
+            Self::Indonesian => "Serialisasi JSON berkinerja tinggi untuk pengiriman pesan IPC",
+            Self::Vietnamese => "Tuần tự hóa JSON hiệu năng cao cho truyền thông điệp IPC",
             Self::Russian => "Высокопроизводительная сериализация JSON для сообщений IPC",
             Self::Spanish => "Serialización JSON de alto rendimiento para paso de mensajes IPC",
         }
@@ -2791,6 +3461,9 @@ impl Language {
             Self::Japanese => "コントロールパネルを開く",
             Self::Korean => "제어판 열기",
             Self::PortugueseBrazil => "Abrir painel de controle",
+            Self::PortuguesePortugal => "Abrir painel de controlo",
+            Self::Indonesian => "Buka Panel Kontrol",
+            Self::Vietnamese => "Mở bảng điều khiển",
             Self::Russian => "Открыть панель управления",
             Self::Spanish => "Abrir panel de control",
         }
@@ -2807,6 +3480,9 @@ impl Language {
             Self::Japanese => "ミュートモード (非ミュート)",
             Self::Korean => "음소거 모드 (음소거 해제됨)",
             Self::PortugueseBrazil => "Modo mudo (Não silenciado)",
+            Self::PortuguesePortugal => "Cortar som (Atualmente com som)",
+            Self::Indonesian => "Bisukan (Saat ini tidak dibisukan)",
+            Self::Vietnamese => "Tắt tiếng (Hiện đang bật tiếng)",
             Self::Russian => "Режим звука (Звук включен)",
             Self::Spanish => "Modo silencio (No silenciado)",
         }
@@ -2823,8 +3499,30 @@ impl Language {
             Self::Japanese => "✓ ミュートモード (ミュート中)",
             Self::Korean => "✓ 음소거 모드 (음소거됨)",
             Self::PortugueseBrazil => "✓ Modo mudo (Silenciado)",
+            Self::PortuguesePortugal => "✓ Cortar som (Atualmente sem som)",
+            Self::Indonesian => "✓ Bisu (Saat ini dibisukan)",
+            Self::Vietnamese => "✓ Tắt tiếng (Hiện đang tắt tiếng)",
             Self::Russian => "✓ Режим звука (Звук отключен)",
             Self::Spanish => "✓ Modo silencio (Silenciado)",
+        }
+    }
+
+    pub fn tray_reset_windows(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🖥 重設所有視窗至螢幕中央",
+            Self::SimplifiedChinese => "🖥 重设所有窗口至屏幕中央",
+            Self::English => "🖥 Reset all windows to screen center",
+            Self::French => "🖥 Réinitialiser toutes les fenêtres au centre",
+            Self::German => "🖥 Alle Fenster in Bildschirmmitte zentrieren",
+            Self::Italian => "🖥 Reimposta tutte le finestre al centro",
+            Self::Japanese => "🖥 すべてのウィンドウを画面中央にリセット",
+            Self::Korean => "🖥 모든 창을 화면 중앙으로 재설정",
+            Self::PortugueseBrazil => "🖥 Redefinir todas as janelas para o centro",
+            Self::PortuguesePortugal => "🖥 Repor todas as janelas no centro",
+            Self::Indonesian => "🖥 Atur ulang semua jendela ke tengah layar",
+            Self::Vietnamese => "🖥 Đặt lại tất cả cửa sổ về giữa màn hình",
+            Self::Russian => "🖥 Сбросить все окна в центр экрана",
+            Self::Spanish => "🖥 Restablecer todas las ventanas al centro",
         }
     }
 
@@ -2839,6 +3537,9 @@ impl Language {
             Self::Japanese => "Win2Pod Bridge を終了",
             Self::Korean => "Win2Pod Bridge 종료",
             Self::PortugueseBrazil => "Sair do Win2Pod Bridge",
+            Self::PortuguesePortugal => "Sair do Win2Pod Bridge",
+            Self::Indonesian => "Keluar dari Win2Pod Bridge",
+            Self::Vietnamese => "Thoát Win2Pod Bridge",
             Self::Russian => "Выйти из Win2Pod Bridge",
             Self::Spanish => "Salir de Win2Pod Bridge",
         }
@@ -2855,6 +3556,9 @@ impl Language {
             Self::Japanese => "Win2Pod Bridge - 待機中",
             Self::Korean => "Win2Pod Bridge - 대기 중",
             Self::PortugueseBrazil => "Win2Pod Bridge - Em espera",
+            Self::PortuguesePortugal => "Win2Pod Bridge - Em espera",
+            Self::Indonesian => "Win2Pod Bridge - Siaga",
+            Self::Vietnamese => "Win2Pod Bridge - Chờ",
             Self::Russian => "Win2Pod Bridge - Ожидание",
             Self::Spanish => "Win2Pod Bridge - En espera",
         }
@@ -2871,6 +3575,9 @@ impl Language {
             Self::Japanese => "消音",
             Self::Korean => "음소거",
             Self::PortugueseBrazil => "Mudo",
+            Self::PortuguesePortugal => "Sem som",
+            Self::Indonesian => "Dibisukan",
+            Self::Vietnamese => "Đã tắt tiếng",
             Self::Russian => "Без звука",
             Self::Spanish => "Silenciado",
         }
@@ -2887,6 +3594,9 @@ impl Language {
             Self::Japanese => format!("🔄 接続中：{name}"),
             Self::Korean => format!("🔄 연결 중: {name}"),
             Self::PortugueseBrazil => format!("🔄 Conectando: {name}"),
+            Self::PortuguesePortugal => format!("🔄 A ligar: {name}"),
+            Self::Indonesian => format!("🔄 Menghubungkan: {name}"),
+            Self::Vietnamese => format!("🔄 Đang kết nối: {name}"),
             Self::Russian => format!("🔄 Подключение: {name}"),
             Self::Spanish => format!("🔄 Conectando: {name}"),
         }
@@ -2909,6 +3619,9 @@ impl Language {
             Self::Japanese => format!("{icon} 再生中：{name} ({vol_str})"),
             Self::Korean => format!("{icon} 스트리밍 중: {name} ({vol_str})"),
             Self::PortugueseBrazil => format!("{icon} Transmitindo: {name} ({vol_str})"),
+            Self::PortuguesePortugal => format!("{icon} A transmitir: {name} ({vol_str})"),
+            Self::Indonesian => format!("{icon} Streaming: {name} ({vol_str})"),
+            Self::Vietnamese => format!("{icon} Đang truyền phát: {name} ({vol_str})"),
             Self::Russian => format!("{icon} Трансляция: {name} ({vol_str})"),
             Self::Spanish => format!("{icon} Reproduciendo: {name} ({vol_str})"),
         }
@@ -2940,6 +3653,9 @@ impl Language {
             Self::Japanese => format!("Win2Pod Bridge - エラー: {err}"),
             Self::Korean => format!("Win2Pod Bridge - 오류: {err}"),
             Self::PortugueseBrazil => format!("Win2Pod Bridge - Erro: {err}"),
+            Self::PortuguesePortugal => format!("Win2Pod Bridge - Erro: {err}"),
+            Self::Indonesian => format!("Win2Pod Bridge - Kesalahan: {err}"),
+            Self::Vietnamese => format!("Win2Pod Bridge - Lỗi: {err}"),
             Self::Russian => format!("Win2Pod Bridge - Ошибка: {err}"),
             Self::Spanish => format!("Win2Pod Bridge - Error: {err}"),
         }
@@ -2956,6 +3672,9 @@ impl Language {
             Self::Japanese => "イコライザー",
             Self::Korean => "이퀄라이저",
             Self::PortugueseBrazil => "Equalizador",
+            Self::PortuguesePortugal => "Equalizador",
+            Self::Indonesian => "Equalizer",
+            Self::Vietnamese => "Bộ cân bằng âm thanh",
             Self::Russian => "Эквалайзер",
             Self::Spanish => "Ecualizador",
         }
@@ -2972,6 +3691,9 @@ impl Language {
             Self::Japanese => "オーディオイコライザーとリアルタイムスペクトルを開く",
             Self::Korean => "오디오 이퀄라이저 및 실시간 스펙트럼 열기",
             Self::PortugueseBrazil => "Abrir equalizador de áudio e espectro em tempo real",
+            Self::PortuguesePortugal => "Abrir equalizador de áudio e espetro em tempo real",
+            Self::Indonesian => "Buka Equalizer Audio & Spektrum Waktu Nyata",
+            Self::Vietnamese => "Mở Bộ cân bằng âm thanh & Phổ tần số thời gian thực",
             Self::Russian => "Открыть эквалайзер и спектр реального времени",
             Self::Spanish => "Abrir ecualizador de audio y espectro en tiempo real",
         }
@@ -2988,6 +3710,9 @@ impl Language {
             Self::Japanese => "Win2Pod プレーヤー＆イコライザー",
             Self::Korean => "Win2Pod 플레이어 및 이퀄라이저",
             Self::PortugueseBrazil => "Player & Equalizador Win2Pod",
+            Self::PortuguesePortugal => "Leitor & Equalizador Win2Pod",
+            Self::Indonesian => "Pemutar & Equalizer Win2Pod",
+            Self::Vietnamese => "Trình phát & Bộ cân bằng Win2Pod",
             Self::Russian => "Win2Pod Плеер и Эквалайзер",
             Self::Spanish => "Reproductor & Ecualizador Win2Pod",
         }
@@ -3004,6 +3729,9 @@ impl Language {
             Self::Japanese => "常に最前面に表示",
             Self::Korean => "항상 위에 고정",
             Self::PortugueseBrazil => "Manter no topo",
+            Self::PortuguesePortugal => "Manter no topo",
+            Self::Indonesian => "Tetap di Atas",
+            Self::Vietnamese => "Ghim lên trên cùng",
             Self::Russian => "Поверх остальных окон",
             Self::Spanish => "Mantener en primer plano",
         }
@@ -3020,6 +3748,9 @@ impl Language {
             Self::Japanese => "最前面の固定を解除",
             Self::Korean => "항상 위 고정 해제",
             Self::PortugueseBrazil => "Desafixar do topo",
+            Self::PortuguesePortugal => "Desafixar do topo",
+            Self::Indonesian => "Lepas Pin dari Atas",
+            Self::Vietnamese => "Bỏ ghim khỏi trên cùng",
             Self::Russian => "Открепить от верха",
             Self::Spanish => "Desanclar del primer plano",
         }
@@ -3036,6 +3767,9 @@ impl Language {
             Self::Japanese => "3D 油彩オーディオビジュアライザーを開く (F11)",
             Self::Korean => "3D 유화 오디오 시각화 열기 (F11)",
             Self::PortugueseBrazil => "Abrir visualizador de áudio 3D Paint Pulse (F11)",
+            Self::PortuguesePortugal => "Abrir visualizador de áudio 3D Paint Pulse (F11)",
+            Self::Indonesian => "Buka Visualizer 3D Paint Pulse (F11)",
+            Self::Vietnamese => "Mở Trình hiển thị hình ảnh âm thanh 3D Paint Pulse (F11)",
             Self::Russian => "Открыть 3D визуализатор Paint Pulse (F11)",
             Self::Spanish => "Abrir visualizador 3D Paint Pulse (F11)",
         }
@@ -3052,6 +3786,9 @@ impl Language {
             Self::Japanese => "3D ビジュアライザーを閉じる",
             Self::Korean => "3D 시각화 닫기",
             Self::PortugueseBrazil => "Fechar visualizador 3D",
+            Self::PortuguesePortugal => "Fechar visualizador 3D",
+            Self::Indonesian => "Tutup Visualizer 3D",
+            Self::Vietnamese => "Đóng trình hiển thị 3D",
             Self::Russian => "Закрыть 3D визуализатор",
             Self::Spanish => "Cerrar visualizador 3D",
         }
@@ -3068,6 +3805,9 @@ impl Language {
             Self::Japanese => "再生中のメディアはありません",
             Self::Korean => "재생 중인 미디어 없음",
             Self::PortugueseBrazil => "Nenhuma mídia em reprodução",
+            Self::PortuguesePortugal => "Nenhum conteúdo multimédia em reprodução",
+            Self::Indonesian => "Tidak Ada Media yang Diputar",
+            Self::Vietnamese => "Không có phương tiện nào đang phát",
             Self::Russian => "Нет воспроизводимых медиа",
             Self::Spanish => "Sin reproducción de medios",
         }
@@ -3084,6 +3824,9 @@ impl Language {
             Self::Japanese => "不明なアーティスト",
             Self::Korean => "알 수 없는 아티스트",
             Self::PortugueseBrazil => "Artista Desconhecido",
+            Self::PortuguesePortugal => "Artista desconhecido",
+            Self::Indonesian => "Artis Tidak Dikenal",
+            Self::Vietnamese => "Nghệ sĩ chưa xác định",
             Self::Russian => "Неизвестный исполнитель",
             Self::Spanish => "Artista Desconocido",
         }
@@ -3100,6 +3843,9 @@ impl Language {
             Self::Japanese => "前の曲",
             Self::Korean => "이전 곡",
             Self::PortugueseBrazil => "Faixa Anterior",
+            Self::PortuguesePortugal => "Faixa anterior",
+            Self::Indonesian => "Trek Sebelumnya",
+            Self::Vietnamese => "Bản nhạc trước",
             Self::Russian => "Предыдущий трек",
             Self::Spanish => "Pista anterior",
         }
@@ -3116,6 +3862,9 @@ impl Language {
             Self::Japanese => "再生 / 一時停止",
             Self::Korean => "재생 / 일시정지",
             Self::PortugueseBrazil => "Reproduzir / Pausar",
+            Self::PortuguesePortugal => "Reproduzir / Pausar",
+            Self::Indonesian => "Putar / Jeda",
+            Self::Vietnamese => "Phát / Tạm dừng",
             Self::Russian => "Воспроизведение / Пауза",
             Self::Spanish => "Reproducir / Pausa",
         }
@@ -3132,6 +3881,9 @@ impl Language {
             Self::Japanese => "停止",
             Self::Korean => "정지",
             Self::PortugueseBrazil => "Parar",
+            Self::PortuguesePortugal => "Parar",
+            Self::Indonesian => "Berhenti",
+            Self::Vietnamese => "Dừng",
             Self::Russian => "Остановить",
             Self::Spanish => "Detener",
         }
@@ -3148,6 +3900,9 @@ impl Language {
             Self::Japanese => "次の曲",
             Self::Korean => "다음 곡",
             Self::PortugueseBrazil => "Próxima Faixa",
+            Self::PortuguesePortugal => "Faixa seguinte",
+            Self::Indonesian => "Trek Berikutnya",
+            Self::Vietnamese => "Bản nhạc tiếp theo",
             Self::Russian => "Следующий трек",
             Self::Spanish => "Pista siguiente",
         }
@@ -3164,6 +3919,9 @@ impl Language {
             Self::Japanese => "クリックして再生元アプリを表示",
             Self::Korean => "클릭하여 재생 앱 열기",
             Self::PortugueseBrazil => "Clique para abrir o reprodutor de mídia",
+            Self::PortuguesePortugal => "Clique para abrir o leitor de multimédia",
+            Self::Indonesian => "Klik untuk menampilkan pemutar media",
+            Self::Vietnamese => "Nhấp để đưa trình phát phương tiện lên trên",
             Self::Russian => "Нажмите, чтобы открыть медиаплеер",
             Self::Spanish => "Haga clic para abrir el reproductor",
         }
@@ -3180,6 +3938,9 @@ impl Language {
             Self::Japanese => "◄ 中央 ►",
             Self::Korean => "◄ 중앙 ►",
             Self::PortugueseBrazil => "◄ Centro ►",
+            Self::PortuguesePortugal => "◄ Centro ►",
+            Self::Indonesian => "◄ Tengah ►",
+            Self::Vietnamese => "◄ Giữa ►",
             Self::Russian => "◄ Центр ►",
             Self::Spanish => "◄ Centro ►",
         }
@@ -3196,6 +3957,9 @@ impl Language {
             Self::Japanese => format!("◄ 左 {pct}%"),
             Self::Korean => format!("◄ 좌 {pct}%"),
             Self::PortugueseBrazil => format!("◄ E {pct}%"),
+            Self::PortuguesePortugal => format!("◄ E {pct}%"),
+            Self::Indonesian => format!("◄ Kiri {pct}%"),
+            Self::Vietnamese => format!("◄ T {pct}%"),
             Self::Russian => format!("◄ Л {pct}%"),
             Self::Spanish => format!("◄ I {pct}%"),
         }
@@ -3212,6 +3976,9 @@ impl Language {
             Self::Japanese => format!("{pct}% 右 ►"),
             Self::Korean => format!("{pct}% 우 ►"),
             Self::PortugueseBrazil => format!("{pct}% D ►"),
+            Self::PortuguesePortugal => format!("{pct}% D ►"),
+            Self::Indonesian => format!("{pct}% Kanan ►"),
+            Self::Vietnamese => format!("{pct}% P ►"),
             Self::Russian => format!("{pct}% П ►"),
             Self::Spanish => format!("{pct}% D ►"),
         }
@@ -3228,6 +3995,9 @@ impl Language {
             Self::Japanese => "ステレオバランス（ダブルクリックで中央に戻す）",
             Self::Korean => "스테레오 밸런스 (더블 클릭하여 중앙으로 리셋)",
             Self::PortugueseBrazil => "Balanço estéreo (Clique duplo para centralizar)",
+            Self::PortuguesePortugal => "Balanço estéreo (Duplo clique para centrar)",
+            Self::Indonesian => "Keseimbangan Stereo (Klik dua kali untuk mengatur ulang ke tengah)",
+            Self::Vietnamese => "Cân bằng âm thanh nổi (Nhấp đúp để đặt lại về giữa)",
             Self::Russian => "Стерео баланс (Дважды щелкните для сброса по центру)",
             Self::Spanish => "Balance estéreo (Haga doble clic para centrar)",
         }
@@ -3245,6 +4015,9 @@ impl Language {
                 Self::Japanese => "♪ EQ:入",
                 Self::Korean => "♪ EQ:켜짐",
                 Self::PortugueseBrazil => "♪ EQ:LIG",
+                Self::PortuguesePortugal => "♪ EQ:LIG",
+                Self::Indonesian => "♪ EQ:AKTIF",
+                Self::Vietnamese => "♪ EQ:BẬT",
                 Self::Russian => "♪ EQ:ВКЛ",
                 Self::Spanish => "♪ EQ:ON",
             }
@@ -3255,17 +4028,20 @@ impl Language {
 
     pub fn eq_title(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "🎚 音訊等化器 (Equalizer)",
-            Self::SimplifiedChinese => "🎚 音频均衡器 (Equalizer)",
-            Self::English => "🎚 Audio Equalizer",
-            Self::French => "🎚 Égaliseur audio",
-            Self::German => "🎚 Audio-Equalizer",
-            Self::Italian => "🎚 Equalizzatore audio",
-            Self::Japanese => "🎚 オーディオイコライザー",
-            Self::Korean => "🎚 오디오 이퀄라이저",
-            Self::PortugueseBrazil => "🎚 Equalizador de Áudio",
-            Self::Russian => "🎚 Аудио эквалайзер",
-            Self::Spanish => "🎚 Ecualizador de Audio",
+            Self::TraditionalChinese => "音訊等化器 (Equalizer)",
+            Self::SimplifiedChinese => "音频均衡器 (Equalizer)",
+            Self::English => "Audio Equalizer",
+            Self::French => "Égaliseur audio",
+            Self::German => "Audio-Equalizer",
+            Self::Italian => "Equalizzatore audio",
+            Self::Japanese => "オーディオイコライザー",
+            Self::Korean => "오디오 이퀄라이저",
+            Self::PortugueseBrazil => "Equalizador de Áudio",
+            Self::PortuguesePortugal => "Equalizador de Áudio",
+            Self::Indonesian => "Equalizer Audio",
+            Self::Vietnamese => "Bộ cân bằng âm thanh",
+            Self::Russian => "Аудио эквалайзер",
+            Self::Spanish => "Ecualizador de Audio",
         }
     }
 
@@ -3280,6 +4056,9 @@ impl Language {
             Self::Japanese => "イコライザーを有効化",
             Self::Korean => "이퀄라이저 활성화",
             Self::PortugueseBrazil => "Ativar equalizador",
+            Self::PortuguesePortugal => "Ativar equalizador",
+            Self::Indonesian => "Aktifkan Equalizer",
+            Self::Vietnamese => "Bật bộ cân bằng",
             Self::Russian => "Включить эквалайзер",
             Self::Spanish => "Activar ecualizador",
         }
@@ -3296,6 +4075,9 @@ impl Language {
             Self::Japanese => "サウンドプリセット：",
             Self::Korean => "사운드 프리셋:",
             Self::PortugueseBrazil => "Predefinições de som:",
+            Self::PortuguesePortugal => "Predefinições de som:",
+            Self::Indonesian => "Preset Suara:",
+            Self::Vietnamese => "Cài đặt âm thanh trước:",
             Self::Russian => "Предустановки звука:",
             Self::Spanish => "Ajustes predefinidos de sonido:",
         }
@@ -3312,6 +4094,9 @@ impl Language {
             Self::Japanese => "↺ リセット",
             Self::Korean => "↺ 재설정",
             Self::PortugueseBrazil => "↺ Redefinir",
+            Self::PortuguesePortugal => "↺ Repor Plano",
+            Self::Indonesian => "↺ Atur Ulang Datar",
+            Self::Vietnamese => "↺ Đặt lại phẳng (Flat)",
             Self::Russian => "↺ Сброс",
             Self::Spanish => "↺ Restablecer",
         }
@@ -3328,6 +4113,9 @@ impl Language {
             Self::Japanese => "リアルタイムオーディオスペクトル",
             Self::Korean => "실시간 오디오 스펙트럼 반응",
             Self::PortugueseBrazil => "Resposta espectral em tempo real",
+            Self::PortuguesePortugal => "Resposta de espetro em tempo real",
+            Self::Indonesian => "Respons Spektrum Waktu Nyata",
+            Self::Vietnamese => "Đáp ứng phổ tần số thời gian thực",
             Self::Russian => "Спектральный отклик в реальном времени",
             Self::Spanish => "Respuesta de espectro en tiempo real",
         }
@@ -3346,6 +4134,9 @@ impl Language {
                 Self::Japanese => "ジャズ",
                 Self::Korean => "재즈",
                 Self::PortugueseBrazil => "Jazz",
+                Self::PortuguesePortugal => "Jazz",
+                Self::Indonesian => "Jazz",
+                Self::Vietnamese => "Jazz",
                 Self::Russian => "Джаз",
                 Self::Spanish => "Jazz",
             },
@@ -3359,6 +4150,9 @@ impl Language {
                 Self::Japanese => "カスタム",
                 Self::Korean => "사용자 지정",
                 Self::PortugueseBrazil => "Personalizado",
+                Self::PortuguesePortugal => "Personalizado",
+                Self::Indonesian => "Kustom",
+                Self::Vietnamese => "Tùy chỉnh",
                 Self::Russian => "Пользовательский",
                 Self::Spanish => "Personalizado",
             },
@@ -3372,6 +4166,9 @@ impl Language {
                 Self::Japanese => "低音ブースト",
                 Self::Korean => "저음 강화",
                 Self::PortugueseBrazil => "Reforço de graves",
+                Self::PortuguesePortugal => "Reforço de graves",
+                Self::Indonesian => "Penguat Bass",
+                Self::Vietnamese => "Tăng cường âm trầm (Bass)",
                 Self::Russian => "Усиление басов",
                 Self::Spanish => "Refuerzo de graves",
             },
@@ -3385,6 +4182,9 @@ impl Language {
                 Self::Japanese => "高音ブースト",
                 Self::Korean => "고음 강화",
                 Self::PortugueseBrazil => "Reforço de agudos",
+                Self::PortuguesePortugal => "Reforço de agudos",
+                Self::Indonesian => "Penguat Treble",
+                Self::Vietnamese => "Tăng cường âm bổng (Treble)",
                 Self::Russian => "Усиление высоких",
                 Self::Spanish => "Refuerzo de agudos",
             },
@@ -3398,6 +4198,9 @@ impl Language {
                 Self::Japanese => "ボーカル",
                 Self::Korean => "보컬",
                 Self::PortugueseBrazil => "Vocal",
+                Self::PortuguesePortugal => "Vocal",
+                Self::Indonesian => "Vokal",
+                Self::Vietnamese => "Giọng hát (Vocal)",
                 Self::Russian => "Вокал",
                 Self::Spanish => "Voz",
             },
@@ -3411,6 +4214,9 @@ impl Language {
                 Self::Japanese => "ポップ",
                 Self::Korean => "팝",
                 Self::PortugueseBrazil => "Pop",
+                Self::PortuguesePortugal => "Pop",
+                Self::Indonesian => "Pop",
+                Self::Vietnamese => "Pop",
                 Self::Russian => "Поп",
                 Self::Spanish => "Pop",
             },
@@ -3424,6 +4230,9 @@ impl Language {
                 Self::Japanese => "ロック",
                 Self::Korean => "록",
                 Self::PortugueseBrazil => "Rock",
+                Self::PortuguesePortugal => "Rock",
+                Self::Indonesian => "Rock",
+                Self::Vietnamese => "Rock",
                 Self::Russian => "Рок",
                 Self::Spanish => "Rock",
             },
@@ -3437,6 +4246,9 @@ impl Language {
                 Self::Japanese => "エレクトロ",
                 Self::Korean => "일렉트로닉",
                 Self::PortugueseBrazil => "Eletrônica",
+                Self::PortuguesePortugal => "Eletrónica",
+                Self::Indonesian => "Elektronik",
+                Self::Vietnamese => "Điện tử (Electronic)",
                 Self::Russian => "Электронная",
                 Self::Spanish => "Electrónica",
             },
@@ -3450,6 +4262,9 @@ impl Language {
                 Self::Japanese => "クラシック",
                 Self::Korean => "클래식",
                 Self::PortugueseBrazil => "Clássica",
+                Self::PortuguesePortugal => "Clássica",
+                Self::Indonesian => "Klasik",
+                Self::Vietnamese => "Cổ điển (Classical)",
                 Self::Russian => "Классика",
                 Self::Spanish => "Clásica",
             },
@@ -3467,6 +4282,9 @@ impl Language {
             Self::Japanese => "Win2Pod Bridge - 接続状態の変更",
             Self::Korean => "Win2Pod Bridge - 오디오 연결 상태 변경",
             Self::PortugueseBrazil => "Win2Pod Bridge - Mudança de status de áudio",
+            Self::PortuguesePortugal => "Win2Pod Bridge - Alteração de estado de áudio",
+            Self::Indonesian => "Win2Pod Bridge - Perubahan Status Audio",
+            Self::Vietnamese => "Win2Pod Bridge - Thay đổi trạng thái âm thanh",
             Self::Russian => "Win2Pod Bridge - Изменение состояния звука",
             Self::Spanish => "Win2Pod Bridge - Cambio de estado de audio",
         }
@@ -3482,6 +4300,9 @@ impl Language {
             Self::Japanese => "高調波エキサイター (HE)",
             Self::Korean => "하모닉 익사이터 (HE)",
             Self::PortugueseBrazil => "Exciter harmônico (HE)",
+            Self::PortuguesePortugal => "Excitador Harmónico (HE)",
+            Self::Indonesian => "Exciter Harmonik (HE)",
+            Self::Vietnamese => "Kích thích họa âm (HE)",
             Self::Russian => "Возбудитель HE",
             Self::Spanish => "Exciter armónico (HE)",
         }
@@ -3500,6 +4321,9 @@ impl Language {
                 Self::Japanese => "オフ",
                 Self::Korean => "끄기",
                 Self::PortugueseBrazil => "Off",
+                Self::PortuguesePortugal => "Desligado",
+                Self::Indonesian => "Mati",
+                Self::Vietnamese => "Tắt",
                 Self::Russian => "Выкл",
                 Self::Spanish => "Off",
             },
@@ -3513,6 +4337,9 @@ impl Language {
                 Self::Japanese => "ナチュラル",
                 Self::Korean => "자연스러운",
                 Self::PortugueseBrazil => "Natural",
+                Self::PortuguesePortugal => "Natural",
+                Self::Indonesian => "Alami",
+                Self::Vietnamese => "Tự nhiên",
                 Self::Russian => "Естественный",
                 Self::Spanish => "Natural",
             },
@@ -3526,6 +4353,9 @@ impl Language {
                 Self::Japanese => "ダイナミック",
                 Self::Korean => "다이내믹",
                 Self::PortugueseBrazil => "Dinâmico",
+                Self::PortuguesePortugal => "Dinâmico",
+                Self::Indonesian => "Dinamis",
+                Self::Vietnamese => "Năng động",
                 Self::Russian => "Динамичный",
                 Self::Spanish => "Dinámico",
             },
@@ -3539,6 +4369,9 @@ impl Language {
                 Self::Japanese => "ブリリアント",
                 Self::Korean => "브릴리언트",
                 Self::PortugueseBrazil => "Brilhante",
+                Self::PortuguesePortugal => "Brilhante",
+                Self::Indonesian => "Cemerlang",
+                Self::Vietnamese => "Rực rỡ",
                 Self::Russian => "Яркий",
                 Self::Spanish => "Brillante",
             },
@@ -3556,6 +4389,9 @@ impl Language {
             Self::Japanese => "高調波エキサイター (HE) により、不可逆圧縮で失われた超高音域の倍音と空気感を再構築します。",
             Self::Korean => "하모닉 익사이터(HE)를 통해 손실 압축으로 사라진 초고역 배음과 공기감을 복원합니다.",
             Self::PortugueseBrazil => "Reconstrói harmônicos de alta frequência perdidos na compressão com perdas (Harmonic Exciter, HE).",
+            Self::PortuguesePortugal => "Reconstrói harmónicos de alta frequência e clareza perdidos na compressão com perdas (como Spotify 160kbps) através do Excitador Harmónico (HE).",
+            Self::Indonesian => "Merekonstruksi harmonik frekuensi tinggi dan kejernihan yang hilang dalam kompresi lossy (seperti Spotify 160kbps) menggunakan Harmonic Exciter (HE).",
+            Self::Vietnamese => "Tái tạo họa âm tần số cao và độ thoáng đãng bị mất trong nén suy hao (như Spotify 160kbps) bằng Harmonic Exciter (HE).",
             Self::Russian => "Восстанавливает высокочастотные гармоники, потерянные при сжатии с потерями (Harmonic Exciter, HE).",
             Self::Spanish => "Reconstruye los armónicos de alta frecuencia perdidos en la compresión con pérdidas (Harmonic Exciter, HE).",
         }
@@ -3574,6 +4410,9 @@ impl Language {
                 Self::Japanese => "【オフ】バイパス。オリジナルの音声をそのまま出力します。ハイレゾ無損音源 (ALAC / FLAC) に最適。",
                 Self::Korean => "【끄기】바이패스. 원본 오디오를 그대로 유지하며 무손실 고해상도 음원 (ALAC / FLAC)에 적합합니다.",
                 Self::PortugueseBrazil => "[Desligado] Totalmente ignorado. Mantém o áudio original intocado, ideal para fontes Hi-Res sem perdas.",
+                Self::PortuguesePortugal => "[Desligado] Totalmente desativado. Mantém o áudio original intocado, ideal para fontes Hi-Res sem perdas (ALAC / FLAC).",
+                Self::Indonesian => "[Mati] Sepenuhnya dilewati. Mempertahankan audio asli yang tak tersentuh, ideal untuk sumber Hi-Res tanpa penurunan mutu (ALAC / FLAC).",
+                Self::Vietnamese => "[Tắt] Bỏ qua hoàn toàn. Giữ nguyên âm thanh gốc không đổi, lý tưởng cho nguồn Hi-Res không nén (ALAC / FLAC).",
                 Self::Russian => "[Выкл] Полный байпас. Сохраняет исходный звук без изменений, идеально для lossless Hi-Res (ALAC / FLAC).",
                 Self::Spanish => "[Desactivado] Totalmente bypass. Mantiene el audio original intacto, ideal para fuentes Hi-Res sin pérdidas.",
             },
@@ -3587,6 +4426,9 @@ impl Language {
                 Self::Japanese => "【ナチュラル】穏やかな復元（8kHz+ シェルフと繊細な倍音）。ポップス、ポッドキャスト、ラジオ、ボーカルに最適。",
                 Self::Korean => "【자연스러운】부드러운 복원 (8kHz+ 쉘프 및 은은한 배음). 팝 음악, 팟캐스트, 라디오 및 보컬에 적합합니다.",
                 Self::PortugueseBrazil => "[Natural] Restauração suave (filtro shelf 8kHz+ e harmônicos suaves). Ideal para música pop, podcasts e vocais.",
+                Self::PortuguesePortugal => "[Natural] Restauração suave (filtro shelf 8kHz+ e harmónicos suaves). Ideal para música pop, podcasts, rádio e vocais.",
+                Self::Indonesian => "[Alami] Pemulihan lembut (rak 8kHz+ & harmonik lembut). Ideal untuk musik pop, podcast, radio, dan vokal.",
+                Self::Vietnamese => "[Tự nhiên] Khôi phục nhẹ nhàng (bộ lọc tần số 8kHz+ & họa âm êm dịu). Thích hợp cho nhạc pop, podcast, radio và giọng hát.",
                 Self::Russian => "[Естественный] Мягкое восстановление (полка 8кГц+ и тонкие гармоники). Идеально для поп-музыки, подкастов и вокала.",
                 Self::Spanish => "[Natural] Restauración suave (filtro shelf 8kHz+ y armónicos suaves). Ideal para música pop, podcasts y voces.",
             },
@@ -3600,6 +4442,9 @@ impl Language {
                 Self::Japanese => "【ダイナミック】中程度の復元（7kHz+ シェルフと動的飽和）。Spotify Free (160k) や YouTube などの圧縮音源に空気感と透明感を蘇らせます。",
                 Self::Korean => "【다이내믹】중간 강도 복원 (7kHz+ 쉘프 및 동적 배음). Spotify Free(160k), YouTube 등의 손실 스트리밍에 공기감과 선명함을 불어넣습니다.",
                 Self::PortugueseBrazil => "[Dinâmico] Restauração moderada (shelf 7kHz+ e saturação dinâmica). Sob medida para Spotify Free e YouTube, revivendo o brilho.",
+                Self::PortuguesePortugal => "[Dinâmico] Restauração moderada (shelf 7kHz+ e saturação dinâmica). Especialmente concebido para Spotify Free 160k e YouTube, revivendo o brilho e nitidez.",
+                Self::Indonesian => "[Dinamis] Pemulihan sedang (rak 7kHz+ & saturasi dinamis). Disesuaikan untuk Spotify Gratis 160k dan YouTube, menghidupkan kembali kejernihan dan kerenyahan.",
+                Self::Vietnamese => "[Năng động] Khôi phục vừa phải (bộ lọc 7kHz+ & bão hòa động). Tối ưu hóa cho Spotify Free 160k và YouTube, làm sống lại độ sáng rõ và chi tiết.",
                 Self::Russian => "[Динамичный] Умеренное восстановление (полка 7кГц+ и динамические гармоники). Специально для Spotify Free (160k) и YouTube.",
                 Self::Spanish => "[Dinámico] Restauración moderada (shelf 7kHz+ y saturación dinámica). Creado para Spotify Free y YouTube, reviviendo el brillo.",
             },
@@ -3613,6 +4458,9 @@ impl Language {
                 Self::Japanese => "【ブリリアント】高度な復元（6kHz+ シェルフと豊かな高次倍音）。クラシック、アコギ、ジャズ、打楽器のきらびやかな高音域を引き出します。",
                 Self::Korean => "【브릴리언트】심층 복원 (6kHz+ 쉘프 및 풍부한 고차 배음). 클래식, 어쿠스틱 기타, 재즈 및 타악기의 화려한 고역 디테일에 이상적입니다.",
                 Self::PortugueseBrazil => "[Brilhante] Restauração profunda (shelf 6kHz+ e harmônicos ricos). Ideal para clássica, violão acústico, jazz e pratos.",
+                Self::PortuguesePortugal => "[Brilhante] Restauração profunda (shelf 6kHz+ e harmónicos superiores ricos). Ideal para música clássica, guitarra acústica, jazz e percussão com agudos cintilantes.",
+                Self::Indonesian => "[Cemerlang] Pemulihan mendalam (rak 6kHz+ & harmonik atas yang kaya). Ideal untuk klasik, gitar akustik, jazz, dan perkusi dengan nada tinggi berkilau.",
+                Self::Vietnamese => "[Rực rỡ] Khôi phục sâu sắc (bộ lọc 6kHz+ & họa âm cao phong phú). Tuyệt vời cho nhạc cổ điển, guitar mộc, jazz và bộ gõ với âm cao lung linh.",
                 Self::Russian => "[Яркий] Глубокое восстановление (полка 6кГц+ и богатые гармоники). Идеально для классики, акустической гитары, джаза и тарелок.",
                 Self::Spanish => "[Brillante] Restauración profunda (shelf 6kHz+ y ricos armónicos). Ideal para clásica, guitarra acústica, jazz y percusión.",
             },
@@ -3630,6 +4478,9 @@ impl Language {
             Self::Japanese => "ウォームス・エンハンサー (WE)",
             Self::Korean => "웜스 인핸서 (WE)",
             Self::PortugueseBrazil => "Calor analógico (WE)",
+            Self::PortuguesePortugal => "Acentuador de Calor (WE)",
+            Self::Indonesian => "Peningkat Kehangatan (WE)",
+            Self::Vietnamese => "Tăng cường độ ấm (WE)",
             Self::Russian => "Аналоговое тепло (WE)",
             Self::Spanish => "Calidez analógica (WE)",
         }
@@ -3648,6 +4499,9 @@ impl Language {
                 Self::Japanese => "オフ",
                 Self::Korean => "끄기",
                 Self::PortugueseBrazil => "Off",
+                Self::PortuguesePortugal => "Desligado",
+                Self::Indonesian => "Mati",
+                Self::Vietnamese => "Tắt",
                 Self::Russian => "Выкл",
                 Self::Spanish => "Off",
             },
@@ -3661,6 +4515,9 @@ impl Language {
                 Self::Japanese => "サトル",
                 Self::Korean => "미세 온기",
                 Self::PortugueseBrazil => "Sutil",
+                Self::PortuguesePortugal => "Subtil",
+                Self::Indonesian => "Halus",
+                Self::Vietnamese => "Tinh tế",
                 Self::Russian => "Мягкий",
                 Self::Spanish => "Sutil",
             },
@@ -3674,6 +4531,9 @@ impl Language {
                 Self::Japanese => "ウォーム",
                 Self::Korean => "클래식 바이닐",
                 Self::PortugueseBrazil => "Quente",
+                Self::PortuguesePortugal => "Quente",
+                Self::Indonesian => "Hangat",
+                Self::Vietnamese => "Ấm áp",
                 Self::Russian => "Тёплый",
                 Self::Spanish => "Cálido",
             },
@@ -3687,6 +4547,9 @@ impl Language {
                 Self::Japanese => "ビンテージ",
                 Self::Korean => "빈티지",
                 Self::PortugueseBrazil => "Vintage",
+                Self::PortuguesePortugal => "Vintage",
+                Self::Indonesian => "Klasik (Vintage)",
+                Self::Vietnamese => "Cổ kính (Vintage)",
                 Self::Russian => "Винтаж",
                 Self::Spanish => "Vintage",
             },
@@ -3704,6 +4567,9 @@ impl Language {
             Self::Japanese => "アナログレコードのトーンアーム共振（50〜100Hz ローシェルフ +1.5〜2dB）と真空管/テープ飽和（Drive 2%〜5%）を再現し、デジタルの硬さを和らげます。",
             Self::Korean => "LP 톤암 공진(50~100Hz 로우 쉘프 +1.5~2dB)과 진공관/테이프 채도(2%~5% 드라이브)를 시뮬레이션하여 디지털의 차가움을 없애고 아날로그 온기를 더합니다.",
             Self::PortugueseBrazil => "Simula a ressonância de toca-discos (50-100Hz +1.5-2dB) e a saturação valvulada/fita (2%-5%) para suavizar a frieza digital.",
+            Self::PortuguesePortugal => "Simula a ressonância do braço de gira-discos (50-100Hz low-shelf +1.5-2dB) e a saturação de válvulas/fita (2%-5% drive) para eliminar a frieza digital e adicionar calor de vinil vintage.",
+            Self::Indonesian => "Mensimulasikan resonansi lengan pemutar piringan hitam (low-shelf 50-100Hz +1,5-2dB) dan saturasi tabung/pita (drive 2%-5%) untuk menghilangkan kekakuan digital dan menambahkan kehangatan vinil klasik.",
+            Self::Vietnamese => "Mô phỏng cộng hưởng cần đĩa than analog (low-shelf 50-100Hz +1.5-2dB) và độ bão hòa bóng đèn/băng từ (drive 2%-5%) để loại bỏ cảm giác khô cứng kỹ thuật số và bổ sung độ ấm đĩa than cổ điển.",
             Self::Russian => "Имитирует резонанс тонарма винила (50-100 Гц +1.5-2 дБ) и ламповую/ленточную сатурацию (2%-5%), устраняя цифровую сухость.",
             Self::Spanish => "Simula la resonancia de tocadiscos (50-100Hz +1.5-2dB) y saturación a válvulas/cinta (2%-5%) para eliminar la frialdad digital.",
         }
@@ -3722,6 +4588,9 @@ impl Language {
                 Self::Japanese => "【オフ】バイパス。低域の着色やアナログ飽和を一切加えず、元の音声をそのまま出力します。",
                 Self::Korean => "【끄기】바이패스. 저역 착색이나 아날로그 채도 없이 원본 오디오를 그대로 유지합니다.",
                 Self::PortugueseBrazil => "[Desligado] Totalmente ignorado. Mantém o áudio original intocado sem coloração ou saturação.",
+                Self::PortuguesePortugal => "[Desligado] Totalmente desativado. Mantém o áudio original intocado sem coloração de baixas frequências ou saturação.",
+                Self::Indonesian => "[Mati] Sepenuhnya dilewati. Mempertahankan audio asli tanpa pewarnaan atau saturasi frekuensi rendah.",
+                Self::Vietnamese => "[Tắt] Bỏ qua hoàn toàn. Giữ nguyên âm thanh gốc không đổi mà không có màu âm trầm hoặc độ bão hòa.",
                 Self::Russian => "[Выкл] Полный байпас. Сохраняет исходный звук без окрашивания и сатурации.",
                 Self::Spanish => "[Desactivado] Totalmente bypass. Mantiene el audio original intacto sin coloración ni saturación.",
             },
@@ -3735,6 +4604,9 @@ impl Language {
                 Self::Japanese => "【サトル】微量の飽和（Drive 2.5%）と 60Hz (+1.5dB) ローシェルフ。デジタルの硬さを自然にほぐし、ポップスやボーカルに最適。",
                 Self::Korean => "【미세 온기】미세 채도 (2.5% 드라이브) 및 60Hz (+1.5dB) 로우 쉘프. 디지털의 날카로움을 부드럽게 완화하여 팝과 보컬에 적합합니다.",
                 Self::PortugueseBrazil => "[Sutil] Saturação sutil (drive 2,5%) e shelf grave 60Hz (+1,5dB). Suaviza a aspereza digital, ideal para pop e vocais.",
+                Self::PortuguesePortugal => "[Subtil] Saturação subtil (drive 2,5%) e shelf grave 60Hz (+1,5dB). Suaviza a aspereza digital, ideal para pop moderno, jazz e vocais.",
+                Self::Indonesian => "[Halus] Saturasi halus (drive 2,5%) dan low-shelf 60Hz (+1,5dB). Melembutkan kekasaran digital, ideal untuk pop modern, jazz, dan vokal.",
+                Self::Vietnamese => "[Tinh tế] Độ bão hòa nhẹ (drive 2.5%) và low-shelf 60Hz (+1.5dB). Làm dịu sự chói gắt kỹ thuật số, phù hợp cho nhạc pop hiện đại, jazz và giọng hát.",
                 Self::Russian => "[Мягкий] Тонкая сатурация (драйв 2,5%) и полка 60 Гц (+1,5 дБ). Смягчает цифровую резкость, отлично для поп-музыки и вокала.",
                 Self::Spanish => "[Sutil] Saturación sutil (drive 2,5%) y shelf grave 60Hz (+1,5dB). Suaviza la aspereza digital, ideal para pop y voces.",
             },
@@ -3748,6 +4620,9 @@ impl Language {
                 Self::Japanese => "【ウォーム】定番のアナログ感（Drive 3.8%）と 75Hz (+1.8dB) ローシェルフ。ターンテーブルの豊かな低域共鳴とテープの温かみを再現。",
                 Self::Korean => "【클래식 바이닐】표준 아날로그 온기 (3.8% 드라이브) 및 75Hz (+1.8dB) 로우 쉘프. 턴테이블 공진과 테이프의 포근함을 재현합니다.",
                 Self::PortugueseBrazil => "[Quente] Calor clássico do vinil (drive 3,8%) e 75Hz (+1,8dB). Emula a ressonância do prato e o calor da fita analógica.",
+                Self::PortuguesePortugal => "[Quente] Calor clássico do vinil (drive 3,8%) e 75Hz (+1,8dB) low-shelf. Emula a ressonância do gira-discos e o calor da fita, ideal para rock, pop e streaming.",
+                Self::Indonesian => "[Hangat] Kehangatan vinil klasik (drive 3,8%) dan low-shelf 75Hz (+1,8dB). Meniru resonansi piringan hitam dan kehangatan pita kaset, ideal untuk rock, pop, dan streaming.",
+                Self::Vietnamese => "[Ấm áp] Độ ấm đĩa than kinh điển (drive 3.8%) và low-shelf 75Hz (+1.8dB). Tái hiện độ cộng hưởng đĩa than và độ ấm băng từ, hoàn hảo cho rock, pop và phát trực tuyến.",
                 Self::Russian => "[Тёплый] Классическое виниловое тепло (драйв 3,8%) и полка 75 Гц (+1,8 дБ). Воссоздаёт резонанс вертушки и мягкость плёнки.",
                 Self::Spanish => "[Cálido] Calidez de vinilo clásica (drive 3,8%) y shelf 75Hz (+1,8dB). Emula la resonancia del tocadiscos y la calidez de la cinta.",
             },
@@ -3761,6 +4636,9 @@ impl Language {
                 Self::Japanese => "【ビンテージ】濃厚な真空管飽和（Drive 5.0%）と 90Hz (+2.0dB) ローシェルフ。重厚で包み込むような低音と豊かなアナログの余韻を創出。",
                 Self::Korean => "【빈티지】진한 진공관 채도 (5.0% 드라이브) 및 90Hz (+2.0dB) 로우 쉘프. 깊고 풍성한 저역 포만감과 풍부한 아날로그 배음으로 재즈와 명곡에 최적입니다.",
                 Self::PortugueseBrazil => "[Vintage] Saturação valvulada encorpada (drive 5,0%) e 90Hz (+2,0dB). Graves profundos e envolventes para clássicos retrô e jazz.",
+                Self::PortuguesePortugal => "[Vintage] Saturação rica de válvulas (drive 5,0%) e 90Hz (+2,0dB) low-shelf. Graves profundos e envolventes com rico calor analógico, ideal para clássicos vintage e jazz.",
+                Self::Indonesian => "[Klasik] Saturasi tabung kaya (drive 5,0%) dan low-shelf 90Hz (+2,0dB). Dekapan fisik nada rendah yang dalam dan kehangatan analog kaya, ideal untuk musik klasik vintage dan jazz.",
+                Self::Vietnamese => "[Cổ kính] Độ bão hòa bóng đèn ấm nồng (drive 5.0%) và low-shelf 90Hz (+2.0dB). Âm trầm dày dặn ôm trọn không gian cùng chất âm analog mộc mạc, lý tưởng cho nhạc cổ điển và jazz.",
                 Self::Russian => "[Винтаж] Плотная ламповая сатурация (драйв 5,0%) и полка 90 Гц (+2,0 дБ). Глубокий аналоговый бас и бархатные гармоники для классики и джаза.",
                 Self::Spanish => "[Vintage] Rica saturación a válvulas (drive 5,0%) y shelf 90Hz (+2,0dB). Graves profundos y envolventes con armónicos analógicos para jazz y clásicos.",
             },
@@ -3778,6 +4656,9 @@ impl Language {
             Self::Japanese => "ローカル強化を開始",
             Self::Korean => "로컬 오디오 향상 시작",
             Self::PortugueseBrazil => "Iniciar aprimoramento local",
+            Self::PortuguesePortugal => "Iniciar melhoramento local",
+            Self::Indonesian => "Mulai Peningkatan Lokal",
+            Self::Vietnamese => "Bắt đầu nâng cao âm thanh cục bộ",
             Self::Russian => "Включить локальную обработку",
             Self::Spanish => "Iniciar mejora local",
         }
@@ -3794,6 +4675,9 @@ impl Language {
             Self::Japanese => "ローカル強化を停止",
             Self::Korean => "로컬 오디오 향상 중지",
             Self::PortugueseBrazil => "Parar aprimoramento local",
+            Self::PortuguesePortugal => "Parar melhoramento local",
+            Self::Indonesian => "Hentikan Peningkatan Lokal",
+            Self::Vietnamese => "Dừng nâng cao âm thanh cục bộ",
             Self::Russian => "Остановить локальную обработку",
             Self::Spanish => "Detener mejora local",
         }
@@ -3810,6 +4694,9 @@ impl Language {
             Self::Japanese => "出力先デバイス",
             Self::Korean => "로컬 출력 장치",
             Self::PortugueseBrazil => "Dispositivo de saída",
+            Self::PortuguesePortugal => "Dispositivo de saída local",
+            Self::Indonesian => "Perangkat Output Lokal",
+            Self::Vietnamese => "Thiết bị đầu ra cục bộ",
             Self::Russian => "Устройство вывода",
             Self::Spanish => "Dispositivo de salida",
         }
@@ -3826,6 +4713,9 @@ impl Language {
             Self::Japanese => "AirPlay 未接続時にローカル音声強化を自動有効化",
             Self::Korean => "AirPlay 미연결 시 로컬 오디오 향상 자동 활성화",
             Self::PortugueseBrazil => "Ativar aprimoramento local automaticamente quando AirPlay estiver ocioso",
+            Self::PortuguesePortugal => "Ativar melhoramento de áudio local automaticamente quando o AirPlay estiver desligado",
+            Self::Indonesian => "Aktifkan peningkatan audio lokal otomatis saat AirPlay terputus",
+            Self::Vietnamese => "Tự động bật nâng cao âm thanh cục bộ khi AirPlay ngắt kết nối",
             Self::Russian => "Автоматически включать локальную обработку, когда AirPlay отключен",
             Self::Spanish => "Activar mejora de audio local automáticamente cuando AirPlay esté desconectado",
         }
@@ -3842,6 +4732,9 @@ impl Language {
             Self::Japanese => "● 稼働中",
             Self::Korean => "● 작동 중",
             Self::PortugueseBrazil => "● Ativo",
+            Self::PortuguesePortugal => "● A melhorar",
+            Self::Indonesian => "● Meningkatkan",
+            Self::Vietnamese => "● Đang nâng cao",
             Self::Russian => "● Активно",
             Self::Spanish => "● Activo",
         }
@@ -3858,6 +4751,9 @@ impl Language {
             Self::Japanese => "AirPods 設定",
             Self::Korean => "AirPods 설정",
             Self::PortugueseBrazil => "Configurações do AirPods",
+            Self::PortuguesePortugal => "Definições dos AirPods",
+            Self::Indonesian => "Pengaturan AirPods",
+            Self::Vietnamese => "Cài đặt AirPods",
             Self::Russian => "Настройки AirPods",
             Self::Spanish => "Ajustes de AirPods",
         }
@@ -3874,6 +4770,9 @@ impl Language {
             Self::Japanese => "AirPods 自動音声切り替え（装着時に引き継ぎ、ケース収納時に解除）",
             Self::Korean => "AirPods 자동 오디오 전환 (착용 시 연결, 케이스 수납 시 해제)",
             Self::PortugueseBrazil => "Roteamento de áudio auto AirPods (Conectar ao usar, liberar ao fechar estojo)",
+            Self::PortuguesePortugal => "Encaminhamento de áudio auto para AirPods (Ligar ao colocar, libertar ao fechar caixa)",
+            Self::Indonesian => "Perutean Audio Otomatis AirPods (Rute saat dipakai, lepaskan saat wadah ditutup)",
+            Self::Vietnamese => "Tự động định tuyến âm thanh AirPods (Định tuyến khi đeo, giải phóng khi đóng hộp)",
             Self::Russian => "Авто-маршрутизация AirPods (переключение при надевании, сброс при закрытии)",
             Self::Spanish => "Enrutamiento de audio auto AirPods (Conectar al usar, liberar al cerrar estuche)",
         }
@@ -3890,6 +4789,9 @@ impl Language {
             Self::Japanese => "音声ルーティングは Windows の Bluetooth デバイス名に基づいて一致判定を行います。イヤホンの名前を変更した場合は、名前に「AirPods」または「Pods」が含まれていることを確認してください。",
             Self::Korean => "오디오 전환은 Windows Bluetooth 재생 장치 이름을 기반으로 일치 항목을 찾습니다. 이어폰 이름을 변경한 경우 이름에 'AirPods' 또는 'Pods'가 포함되어 있는지 확인하세요.",
             Self::PortugueseBrazil => "A alternância de rota de áudio depende dos nomes dos dispositivos Bluetooth no Windows. Se você renomeou seus fones, certifique-se de que o nome contenha \"AirPods\" ou \"Pods\".",
+            Self::PortuguesePortugal => "A mudança de rota de áudio corresponde aos nomes dos dispositivos Bluetooth no Windows. Se renomeou os seus auriculares, certifique-se de que o nome contém \"AirPods\" ou \"Pods\".",
+            Self::Indonesian => "Peralihan rute audio cocok dengan nama perangkat pemutaran Bluetooth Windows. Jika Anda mengganti nama earbud, pastikan nama berisi \"AirPods\" atau \"Pods\".",
+            Self::Vietnamese => "Chuyển đổi luồng âm thanh khớp theo tên thiết bị phát Bluetooth của Windows. Nếu bạn đổi tên tai nghe, hãy đảm bảo tên vẫn giữ từ \"AirPods\" hoặc \"Pods\".",
             Self::Russian => "Переключение аудиомаршрута сопоставляется с именами Bluetooth-устройств в Windows. Если вы переименовали наушники, убедитесь, что имя содержит «AirPods» или «Pods».",
             Self::Spanish => "El enrutamiento de audio coincide con los nombres de dispositivos Bluetooth en Windows. Si ha cambiado el nombre de sus auriculares, asegúrese de que contenga \"AirPods\" o \"Pods\".",
         }
@@ -3906,6 +4808,9 @@ impl Language {
             Self::Japanese => "💡 ヒント：イヤホン名を変更した場合は、名前に「AirPods」または「Pods」を残してください",
             Self::Korean => "💡 팁: 이어폰 이름을 변경한 경우 자동 전환을 위해 'AirPods' 또는 'Pods'를 유지하세요",
             Self::PortugueseBrazil => "💡 Dica: mantenha \"AirPods\" ou \"Pods\" no nome para o roteamento automático",
+            Self::PortuguesePortugal => "💡 Dica: Se renomeou os seus auriculares, mantenha \"AirPods\" ou \"Pods\" no nome para o encaminhamento automático",
+            Self::Indonesian => "💡 Tips: Jika Anda mengganti nama earbud, pertahankan \"AirPods\" atau \"Pods\" dalam nama untuk perutean otomatis",
+            Self::Vietnamese => "💡 Mẹo: Nếu bạn đã đổi tên tai nghe, hãy giữ \"AirPods\" hoặc \"Pods\" trong tên để định tuyến tự động",
             Self::Russian => "💡 Совет: сохраните «AirPods» или «Pods» в названии для автопереключения",
             Self::Spanish => "💡 Consejo: mantenga \"AirPods\" o \"Pods\" en el nombre para el enrutamiento automático",
         }
@@ -3922,6 +4827,9 @@ impl Language {
             Self::Japanese => "AirPods スマート再生制御（取り外し時一時停止・ケース収納時引き継ぎ再生）",
             Self::Korean => "AirPods 스마트 재생 제어 (착용 해제 시 일시정지, 케이스 수납 시 이어듣기)",
             Self::PortugueseBrazil => "Controle inteligente dos AirPods (Pausar ao retirar, continuar ao fechar estojo)",
+            Self::PortuguesePortugal => "Controlo inteligente de reprodução dos AirPods (Pausar ao retirar, transferir ao fechar caixa)",
+            Self::Indonesian => "Kontrol Pemutaran Pintar AirPods (Jeda saat dilepas, serahkan saat wadah ditutup)",
+            Self::Vietnamese => "Điều khiển phát nhạc thông minh AirPods (Tạm dừng khi tháo ra, chuyển tiếp khi đóng hộp)",
             Self::Russian => "Умное воспроизведение AirPods (авто-пауза при снятии, передача при закрытии футляра)",
             Self::Spanish => "Control inteligente AirPods (Pausa al quitar, reanudar al cerrar estuche)",
         }
@@ -3938,6 +4846,9 @@ impl Language {
             Self::Japanese => "AirPods を外すと自動で一時停止します。60秒以内に再装着するか、30秒以内にケースに収納してスピーカーに切り替わると自動で再生を再開します。",
             Self::Korean => "AirPods를 빼면 자동으로 일시정지됩니다. 60초 이내에 다시 착용하거나 30초 이내에 케이스에 넣어 스피커로 전환되면 자동으로 재생을 이어갑니다.",
             Self::PortugueseBrazil => "Pausa automaticamente ao retirar os AirPods. Retoma a reprodução ao recolocar em até 60 s ou guardar no estojo em até 30 s.",
+            Self::PortuguesePortugal => "Pausa automaticamente ao retirar os AirPods. Retoma a reprodução se recolocados dentro de 60s ou guardados na caixa dentro de 30s para transferir para os altifalantes.",
+            Self::Indonesian => "Otomatis menjeda saat melepas AirPods. Otomatis melanjutkan pemutaran jika dimasukkan kembali dalam 60 detik atau disimpan dalam wadah dalam 30 detik untuk diserahkan ke speaker.",
+            Self::Vietnamese => "Tự động tạm dừng khi tháo AirPods. Tự động tiếp tục phát nếu đeo lại trong vòng 60 giây hoặc cất vào hộp trong 30 giây để chuyển tiếp âm thanh sang loa.",
             Self::Russian => "Автоматически приостанавливает при снятии AirPods. Возобновляет воспроизведение, если надеть их обратно в течение 60 с или убрать в футляр в течение 30 с.",
             Self::Spanish => "Pausa automáticamente al quitarse los AirPods. Reanuda la reproducción si se vuelven a poner en 60 s o se guardan en el estuche en 30 s.",
         }
@@ -3954,6 +4865,9 @@ impl Language {
             Self::Japanese => "🧲 ウィンドウ吸着",
             Self::Korean => "🧲 창 자석 맞춤",
             Self::PortugueseBrazil => "🧲 Janelas Magnéticas",
+            Self::PortuguesePortugal => "🧲 Janelas Magnéticas",
+            Self::Indonesian => "🧲 Penempelan Jendela",
+            Self::Vietnamese => "🧲 Hút dính cửa sổ",
             Self::Russian => "🧲 Магнитные окна",
             Self::Spanish => "🧲 Ventanas Magnéticas",
         }
@@ -3970,6 +4884,9 @@ impl Language {
             Self::Japanese => "画面の端や 3D ビジュアライザーの近くにドラッグした際にピタッと吸着 (吸着距離: 12px)",
             Self::Korean => "화면 가장자리나 3D 시각화 창 근처로 드래그 시 자석처럼 자동 맞춤 (맞춤 거리: 12px)",
             Self::PortugueseBrazil => "Encaixa automaticamente nas bordas da tela e no visualizador 3D (Distância: 12px)",
+            Self::PortuguesePortugal => "Encaixa automaticamente nas margens do ecrã e no visualizador 3D ao arrastar para perto (Distância: 12px)",
+            Self::Indonesian => "Secara otomatis menempel ke tepi layar dan Visualizer 3D saat menyeret di dekatnya (Jarak tempel: 12px)",
+            Self::Vietnamese => "Tự động hút dính vào các cạnh màn hình và Trình trực quan 3D khi kéo lại gần (Khoảng cách hút: 12px)",
             Self::Russian => "Автоматически примагничивает окна к краям экрана и окну 3D-визуализатора (Дистанция: 12px)",
             Self::Spanish => "Alinea automáticamente con los bordes de la pantalla y la ventana del visualizador 3D (Distancia: 12px)",
         }
@@ -3986,6 +4903,9 @@ impl Language {
             Self::Japanese => "🧲 吸着・連動移動が有効：メインウィンドウを動かすと吸着したウィンドウも連動します。",
             Self::Korean => "🧲 자석 맞춤 및 연동 이동 활성화: 메인 창 이동 시 결합된 창이 함께 이동합니다.",
             Self::PortugueseBrazil => "🧲 Encaixe e movimento vinculado ativado: mover a janela principal move as janelas fixadas.",
+            Self::PortuguesePortugal => "🧲 Encaixe e movimento vinculado ativo: arrastar a janela principal move as janelas anexadas em conjunto.",
+            Self::Indonesian => "🧲 Penempelan & pergerakan tertaut aktif: menyeret jendela utama memindahkan jendela yang terpasang bersama-sama.",
+            Self::Vietnamese => "🧲 Đang bật hút dính & di chuyển liên kết: kéo cửa sổ chính sẽ di chuyển các cửa sổ gắn liền cùng nhau.",
             Self::Russian => "🧲 Сцепка активна: перетаскивание главного окна перемещает прикрепленные окна.",
             Self::Spanish => "🧲 Alineación y movimiento vinculado activos: mover la ventana principal mueve las ventanas acopladas.",
         }
@@ -4002,6 +4922,9 @@ impl Language {
             Self::Japanese => "ウィンドウは磁石吸着や連動なしで自由に配置できます。",
             Self::Korean => "창이 자석 맞춤이나 연동 없이 자유롭게 이동합니다.",
             Self::PortugueseBrazil => "As janelas se movem livremente sem encaixe magnético ou movimento vinculado.",
+            Self::PortuguesePortugal => "As janelas movem-se livremente sem encaixe magnético ou movimento vinculado.",
+            Self::Indonesian => "Jendela bergerak bebas tanpa penempelan magnetik atau pergerakan tertaut.",
+            Self::Vietnamese => "Các cửa sổ di chuyển tự do mà không có hút dính từ tính hay liên kết chuyển động.",
             Self::Russian => "Окна перемещаются свободно без примагничивания и сцепки.",
             Self::Spanish => "Las ventanas se mueven libremente sin alineación magnética ni movimiento vinculado.",
         }
@@ -4018,6 +4941,9 @@ impl Language {
             Self::Japanese => "🎧 両耳装着中",
             Self::Korean => "🎧 양쪽 착용 중",
             Self::PortugueseBrazil => "🎧 Ambos no ouvido",
+            Self::PortuguesePortugal => "🎧 Ambos no ouvido",
+            Self::Indonesian => "🎧 Keduanya di Telinga",
+            Self::Vietnamese => "🎧 Cả hai tai đang đeo",
             Self::Russian => "🎧 Оба в ушах",
             Self::Spanish => "🎧 Ambos en el oído",
         }
@@ -4034,6 +4960,9 @@ impl Language {
             Self::Japanese => "🎧 左耳装着中",
             Self::Korean => "🎧 왼쪽 착용 중",
             Self::PortugueseBrazil => "🎧 Esquerdo no ouvido",
+            Self::PortuguesePortugal => "🎧 Esquerdo no ouvido",
+            Self::Indonesian => "🎧 Kiri di Telinga",
+            Self::Vietnamese => "🎧 Chỉ tai trái đang đeo",
             Self::Russian => "🎧 Левый в ухе",
             Self::Spanish => "🎧 Izquierdo en el oído",
         }
@@ -4050,6 +4979,9 @@ impl Language {
             Self::Japanese => "🎧 右耳装着中",
             Self::Korean => "🎧 오른쪽 착용 중",
             Self::PortugueseBrazil => "🎧 Direito no ouvido",
+            Self::PortuguesePortugal => "🎧 Direito no ouvido",
+            Self::Indonesian => "🎧 Kanan di Telinga",
+            Self::Vietnamese => "🎧 Chỉ tai phải đang đeo",
             Self::Russian => "🎧 Правый в ухе",
             Self::Spanish => "🎧 Derecho en el oído",
         }
@@ -4066,6 +4998,9 @@ impl Language {
             Self::Japanese => "🎧 装着中",
             Self::Korean => "🎧 착용 중",
             Self::PortugueseBrazil => "🎧 No ouvido",
+            Self::PortuguesePortugal => "🎧 No ouvido",
+            Self::Indonesian => "🎧 Di Telinga",
+            Self::Vietnamese => "🎧 Đang đeo",
             Self::Russian => "🎧 В ухе",
             Self::Spanish => "🎧 En el oído",
         }
@@ -4082,6 +5017,9 @@ impl Language {
             Self::Japanese => "🎧 未装着",
             Self::Korean => "🎧 미착용",
             Self::PortugueseBrazil => "🎧 Fora do ouvido",
+            Self::PortuguesePortugal => "🎧 Fora do ouvido",
+            Self::Indonesian => "🎧 Di Luar Telinga",
+            Self::Vietnamese => "🎧 Đã tháo ra",
             Self::Russian => "🎧 Не в ухе",
             Self::Spanish => "🎧 Fuera del oído",
         }
@@ -4098,6 +5036,9 @@ impl Language {
             Self::Japanese => "AirPods 接続中（リアルタイムバッテリー情報）",
             Self::Korean => "AirPods 연결됨 (실시간 배터리 정보)",
             Self::PortugueseBrazil => "AirPods conectados (dados de bateria em tempo real)",
+            Self::PortuguesePortugal => "AirPods ligados (dados de bateria em tempo real)",
+            Self::Indonesian => "AirPods terhubung (data baterai langsung)",
+            Self::Vietnamese => "AirPods đã kết nối (dữ liệu pin thời gian thực)",
             Self::Russian => "AirPods подключены (актуальный заряд)",
             Self::Spanish => "AirPods conectados (datos de batería en tiempo real)",
         }
@@ -4114,6 +5055,9 @@ impl Language {
             Self::Japanese => "AirPods 切断済み（前回接続時のキャッシュ情報）",
             Self::Korean => "AirPods 연결 끊김 (이전 연결 시 캐시된 정보)",
             Self::PortugueseBrazil => "AirPods desconectados (último nível de bateria registrado)",
+            Self::PortuguesePortugal => "AirPods desligados (último nível de bateria conhecido em cache)",
+            Self::Indonesian => "AirPods terputus (baterai terakhir yang diketahui dalam cache)",
+            Self::Vietnamese => "AirPods đã ngắt kết nối (bộ nhớ cache mức pin cuối cùng ghi nhận)",
             Self::Russian => "AirPods отключены (сохраненный уровень заряда)",
             Self::Spanish => "AirPods desconectados (último nivel de batería registrado)",
         }
@@ -4130,6 +5074,9 @@ impl Language {
             Self::Japanese => "接続中",
             Self::Korean => "연결됨",
             Self::PortugueseBrazil => "Conectado",
+            Self::PortuguesePortugal => "Ligado",
+            Self::Indonesian => "Terhubung",
+            Self::Vietnamese => "Đã kết nối",
             Self::Russian => "Подключено",
             Self::Spanish => "Conectado",
         }
@@ -4146,10 +5093,911 @@ impl Language {
             Self::Japanese => "切断",
             Self::Korean => "연결 끊김",
             Self::PortugueseBrazil => "Desconectado",
+            Self::PortuguesePortugal => "Desligado",
+            Self::Indonesian => "Terputus",
+            Self::Vietnamese => "Đã ngắt kết nối",
             Self::Russian => "Отключено",
             Self::Spanish => "Desconectado",
         }
     }
+
+    pub fn airplay_receiver_section(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "📡 接收端設定",
+            Self::SimplifiedChinese => "📡 接收端设置",
+            Self::English => "📡 Receiver Settings",
+            Self::French => "📡 Paramètres du récepteur",
+            Self::German => "📡 Empfängereinstellungen",
+            Self::Italian => "📡 Impostazioni ricevitore",
+            Self::Japanese => "📡 受信機設定",
+            Self::Korean => "📡 수신기 설정",
+            Self::PortugueseBrazil => "📡 Configurações do receptor",
+            Self::PortuguesePortugal => "📡 Definições do Recetor",
+            Self::Indonesian => "📡 Pengaturan Penerima",
+            Self::Vietnamese => "📡 Cài đặt Bộ nhận",
+            Self::Russian => "📡 Настройки приемника",
+            Self::Spanish => "📡 Configuración del receptor",
+        }
+    }
+
+    pub fn airplay_receiver_enable(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "啟用無線音訊接收端",
+            Self::SimplifiedChinese => "启用无线音频接收端",
+            Self::English => "Enable Wireless Audio Receiver",
+            Self::French => "Activer le récepteur audio sans fil",
+            Self::German => "Kabellosen Audioempfänger aktivieren",
+            Self::Italian => "Abilita ricevitore audio wireless",
+            Self::Japanese => "ワイヤレス音声受信を有効にする",
+            Self::Korean => "무선 오디오 수신기 활성화",
+            Self::PortugueseBrazil => "Ativar receptor de áudio sem fio",
+            Self::PortuguesePortugal => "Ativar Recetor de Áudio Sem Fios",
+            Self::Indonesian => "Aktifkan Penerima Audio Nirkabel",
+            Self::Vietnamese => "Bật Bộ nhận âm thanh không dây",
+            Self::Russian => "Включить беспроводной аудиоприемник",
+            Self::Spanish => "Habilitar receptor de audio inalámbrico",
+        }
+    }
+
+    pub fn airplay_receiver_name_label(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🏷️ 廣播名稱：",
+            Self::SimplifiedChinese => "🏷️ 广播名称：",
+            Self::English => "🏷️ Broadcast Name:",
+            Self::French => "🏷️ Nom de diffusion :",
+            Self::German => "🏷️ Broadcast-Name:",
+            Self::Italian => "🏷️ Nome di trasmissione:",
+            Self::Japanese => "🏷️ ブロードキャスト名：",
+            Self::Korean => "🏷️ 브로드캐스트 이름:",
+            Self::PortugueseBrazil => "🏷️ Nome de transmissão:",
+            Self::PortuguesePortugal => "🏷️ Nome de Transmissão:",
+            Self::Indonesian => "🏷️ Nama Siaran:",
+            Self::Vietnamese => "🏷️ Tên phát sóng:",
+            Self::Russian => "🏷️ Имя вещания:",
+            Self::Spanish => "🏷️ Nombre de difusión:",
+        }
+    }
+
+    pub fn airplay_receiver_status_idle(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "⚪ 等待 AirPlay 裝置投放音訊...",
+            Self::SimplifiedChinese => "⚪ 等待 AirPlay 设备投放音频...",
+            Self::English => "⚪ Waiting for AirPlay connection...",
+            Self::French => "⚪ En attente de connexion AirPlay...",
+            Self::German => "⚪ Warte auf AirPlay-Verbindung...",
+            Self::Italian => "⚪ In attesa di connessione AirPlay...",
+            Self::Japanese => "⚪ AirPlay 音声の受信を待機中...",
+            Self::Korean => "⚪ AirPlay 연결 대기 중...",
+            Self::PortugueseBrazil => "⚪ Aguardando conexão AirPlay...",
+            Self::PortuguesePortugal => "⚪ A aguardar ligação AirPlay...",
+            Self::Indonesian => "⚪ Menunggu koneksi AirPlay...",
+            Self::Vietnamese => "⚪ Đang chờ kết nối AirPlay...",
+            Self::Russian => "⚪ Ожидание подключения AirPlay...",
+            Self::Spanish => "⚪ Esperando conexión AirPlay...",
+        }
+    }
+
+    pub fn airplay_receiver_status_streaming(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🟢 正在接收並播放 iPhone / Mac 音訊",
+            Self::SimplifiedChinese => "🟢 正在接收并播放 iPhone / Mac 音频",
+            Self::English => "🟢 Receiving & playing AirPlay audio stream",
+            Self::French => "🟢 Réception et lecture du flux AirPlay en cours",
+            Self::German => "🟢 AirPlay-Audiostream wird empfangen und wiedergegeben",
+            Self::Italian => "🟢 Ricezione e riproduzione flusso AirPlay in corso",
+            Self::Japanese => "🟢 AirPlay 音声を受信・再生中",
+            Self::Korean => "🟢 AirPlay 오디오 스트림 수신 및 재생 중",
+            Self::PortugueseBrazil => "🟢 Recebendo e reproduzindo áudio AirPlay",
+            Self::PortuguesePortugal => "🟢 A receber e a reproduzir fluxo de áudio AirPlay",
+            Self::Indonesian => "🟢 Menerima & memutar streaming audio AirPlay",
+            Self::Vietnamese => "🟢 Đang nhận & phát luồng âm thanh AirPlay",
+            Self::Russian => "🟢 Приём и воспроизведение аудиопотока AirPlay",
+            Self::Spanish => "🟢 Recibiendo y reproduciendo audio AirPlay",
+        }
+    }
+
+    pub fn airplay_receiver_sync_label(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "⏱️ 影音同步補償：",
+            Self::SimplifiedChinese => "⏱️ 音画同步补偿：",
+            Self::English => "⏱️ A/V Sync Compensation:",
+            Self::French => "⏱️ Compensation synchro audio/vidéo :",
+            Self::German => "⏱️ Audio/Video-Synchronisationsausgleich:",
+            Self::Italian => "⏱️ Compensazione sincro audio/video:",
+            Self::Japanese => "⏱️ 音声・映像の同期補正：",
+            Self::Korean => "⏱️ 음성·영상 싱크 보정:",
+            Self::PortugueseBrazil => "⏱️ Compensação de sincronia A/V:",
+            Self::PortuguesePortugal => "⏱️ Compensação de Sincronização A/V:",
+            Self::Indonesian => "⏱️ Kompensasi Sinkronisasi A/V:",
+            Self::Vietnamese => "⏱️ Bù trừ đồng bộ âm thanh/hình ảnh (A/V):",
+            Self::Russian => "⏱️ Синхронизация звука и видео:",
+            Self::Spanish => "⏱️ Compensación de sincronización A/V:",
+        }
+    }
+
+    pub fn airplay_receiver_sync_none(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "無 (即時反應)",
+            Self::SimplifiedChinese => "无 (实时响应)",
+            Self::English => "None (Instant)",
+            Self::French => "Aucun (Instané)",
+            Self::German => "Keine (Sofort)",
+            Self::Italian => "Nessuna (Istantanea)",
+            Self::Japanese => "なし (リアルタイム)",
+            Self::Korean => "없음 (즉시 반응)",
+            Self::PortugueseBrazil => "Nenhuma (Instantânea)",
+            Self::PortuguesePortugal => "Nenhuma (Instantânea)",
+            Self::Indonesian => "Tidak Ada (Instan)",
+            Self::Vietnamese => "Không (Tức thì)",
+            Self::Russian => "Нет (мгновенно)",
+            Self::Spanish => "Ninguna (Instantánea)",
+        }
+    }
+
+    pub fn airplay_receiver_sync_standard(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "適中 (推薦)",
+            Self::SimplifiedChinese => "适中 (推荐)",
+            Self::English => "Medium (Recommended)",
+            Self::French => "Moyen (Recommandé)",
+            Self::German => "Mittel (Empfohlen)",
+            Self::Italian => "Medio (Consigliato)",
+            Self::Japanese => "標準 (おすすめ)",
+            Self::Korean => "표준 (권장)",
+            Self::PortugueseBrazil => "Médio (Recomendado)",
+            Self::PortuguesePortugal => "Média (Recomendada)",
+            Self::Indonesian => "Sedang (Disarankan)",
+            Self::Vietnamese => "Trung bình (Khuyên dùng)",
+            Self::Russian => "Средняя (рекомендуется)",
+            Self::Spanish => "Medio (Recomendado)",
+        }
+    }
+
+    pub fn airplay_receiver_sync_strong(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "較強",
+            Self::SimplifiedChinese => "较强",
+            Self::English => "Strong",
+            Self::French => "Fort",
+            Self::German => "Stark",
+            Self::Italian => "Forte",
+            Self::Japanese => "強め",
+            Self::Korean => "강하게",
+            Self::PortugueseBrazil => "Forte",
+            Self::PortuguesePortugal => "Forte",
+            Self::Indonesian => "Kuat",
+            Self::Vietnamese => "Mạnh",
+            Self::Russian => "Сильная",
+            Self::Spanish => "Fuerte",
+        }
+    }
+
+    pub fn airplay_receiver_sync_hint(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "💡 提示：看 YouTube 等影片若聲音跑在字幕前面，請選「適中」使聲音等待畫面；純聽音樂可選「無」獲得最即時反應。",
+            Self::SimplifiedChinese => "💡 提示：看 YouTube 等视频若声音跑在字幕前面，请选“适中”使声音等待画面；纯听音乐可选“无”获得最即时响应。",
+            Self::English => "💡 Tip: If audio leads subtitles on YouTube/videos, select 'Medium' to sync with video; select 'None' for instant response when playing music.",
+            Self::French => "💡 Astuce : Si le son précède les sous-titres sur YouTube/vidéos, choisissez 'Moyen' ; choisissez 'Aucun' pour écouter de la musique.",
+            Self::German => "💡 Tipp: Eilt der Ton auf YouTube/Videos den Untertiteln voraus, wählen Sie 'Mittel' ; für Musik wählen Sie 'Keine' für sofortige Reaktion.",
+            Self::Italian => "💡 Suggerimento: Se l'audio anticipa i sottotitoli su YouTube/video, scegli 'Medio' ; per la musica scegli 'Nessuna' per reazione immediata.",
+            Self::Japanese => "💡 ヒント：YouTube 等の動画で音声が字幕より早く進む場合は「標準」で映像に合わせます。音楽鑑賞時は「なし」で即時反応します。",
+            Self::Korean => "💡 팁: YouTube 등 영상 시청 시 소리가 자막보다 빠르면 '표준'으로 맞춥니다. 음악 감상 시에는 '없음'으로 즉시 반응합니다.",
+            Self::PortugueseBrazil => "💡 Dica: Se o áudio adiantar legendas no YouTube/vídeos, escolha 'Médio' ; para música, escolha 'Nenhuma' para resposta imediata.",
+            Self::PortuguesePortugal => "💡 Dica: Se o áudio adiantar legendas no YouTube/vídeos, selecione \"Média\" para sincronizar com o vídeo; selecione \"Nenhuma\" para resposta instantânea ao ouvir música.",
+            Self::Indonesian => "💡 Tips: Jika audio mendahului subtitle di YouTube/video, pilih \"Sedang\" untuk menyinkronkan dengan video; pilih \"Tidak Ada\" untuk respons instan saat memutar musik.",
+            Self::Vietnamese => "💡 Mẹo: Nếu âm thanh đi trước phụ đề trên YouTube/video, hãy chọn \"Trung bình\" để đồng bộ với video; chọn \"Không\" để phản hồi tức thì khi nghe nhạc.",
+            Self::Russian => "💡 Примечание: Если звук опережает субтитры на YouTube/видео, выберите «Средняя» ; для музыки выберите «Нет» для мгновенного отклика.",
+            Self::Spanish => "💡 Consejo: Si el audio se adelanta a los subtítulos en YouTube/vídeos, elija 'Medio' ; para música elija 'Ninguna' para respuesta inmediata.",
+        }
+    }
+
+    pub fn receiver_guide_header(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "💡 使用指南與疑難排解",
+            Self::SimplifiedChinese => "💡 使用指南与疑难解答",
+            Self::English => "💡 Guide & Troubleshooting",
+            Self::French => "💡 Guide et dépannage",
+            Self::German => "💡 Anleitung & Fehlerbehebung",
+            Self::Italian => "💡 Guida e risoluzione dei problemi",
+            Self::Japanese => "💡 使用ガイドとトラブルシューティング",
+            Self::Korean => "💡 사용 가이드 및 문제 해결",
+            Self::PortugueseBrazil => "💡 Guia e solução de problemas",
+            Self::PortuguesePortugal => "💡 Guia e Resolução de Problemas",
+            Self::Indonesian => "💡 Panduan & Pemecahan Masalah",
+            Self::Vietnamese => "💡 Hướng dẫn & Khắc phục sự cố",
+            Self::Russian => "💡 Руководство и устранение неполадок",
+            Self::Spanish => "💡 Guía y solución de problemas",
+        }
+    }
+
+    pub fn receiver_guide_basic_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "📱 基本連線：",
+            Self::SimplifiedChinese => "📱 基本连接：",
+            Self::English => "📱 Basic Connection:",
+            Self::French => "📱 Connexion de base :",
+            Self::German => "📱 Grundlegende Verbindung:",
+            Self::Italian => "📱 Connessione di base:",
+            Self::Japanese => "📱 基本接続：",
+            Self::Korean => "📱 기본 연결:",
+            Self::PortugueseBrazil => "📱 Conexão básica:",
+            Self::PortuguesePortugal => "📱 Ligação Básica:",
+            Self::Indonesian => "📱 Koneksi Dasar:",
+            Self::Vietnamese => "📱 Kết nối cơ bản:",
+            Self::Russian => "📱 Базовое подключение:",
+            Self::Spanish => "📱 Conexión básica:",
+        }
+    }
+
+    pub fn receiver_guide_basic_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "請將 iPhone / iPad 與本電腦連接至同一 Wi-Fi 網路。在 iOS「控制中心」點擊音訊播放卡片右上角的投播圖示，點選本裝置即可連線。",
+            Self::SimplifiedChinese => "请将 iPhone / iPad 与本电脑连接至同一 Wi-Fi 网络。在 iOS「控制中心」点击音频播放卡片右上角的投播图标，点击本设备即可连接。",
+            Self::English => "Connect your iPhone / iPad to the same Wi-Fi network as this PC. In the iOS Control Center, tap the AirPlay icon on the Now Playing card and select this device.",
+            Self::French => "Connectez votre iPhone / iPad au même réseau Wi-Fi que ce PC. Dans le Centre de contrôle iOS, appuyez sur l'icône de diffusion et sélectionnez cet appareil.",
+            Self::German => "Verbinden Sie Ihr iPhone / iPad mit demselben WLAN wie diesen PC. Tippen Sie im iOS-Kontrollzentrum auf das AirPlay-Symbol und wählen Sie dieses Gerät aus.",
+            Self::Italian => "Connetti iPhone / iPad alla stessa rete Wi-Fi di questo PC. Nel Centro di controllo iOS, tocca l'icona di trasmissione e seleziona questo dispositivo.",
+            Self::Japanese => "iPhone / iPad と本 PC を同じ Wi-Fi ネットワークに接続してください。iOS の「コントロールセンター」で再生カード右上のキャストアイコンをタップし、本デバイスを選択して接続します。",
+            Self::Korean => "iPhone / iPad를 이 PC와 동일한 Wi-Fi 네트워크에 연결하세요. iOS '제어 센터'에서 재생 카드의 캐스트 아이콘을 탭하고 이 기기를 선택하여 연결합니다.",
+            Self::PortugueseBrazil => "Conecte seu iPhone / iPad à mesma rede Wi-Fi deste PC. Na Central de Controle do iOS, toque no ícone de transmissão e selecione este dispositivo.",
+            Self::PortuguesePortugal => "Ligue o seu iPhone / iPad à mesma rede Wi-Fi deste PC. Na Central de Controlo do iOS, toque no ícone AirPlay no cartão A Reproduzir e selecione este dispositivo.",
+            Self::Indonesian => "Hubungkan iPhone / iPad Anda ke jaringan Wi-Fi yang sama dengan PC ini. Di Pusat Kontrol iOS, ketuk ikon AirPlay pada kartu Sedang Diputar dan pilih perangkat ini.",
+            Self::Vietnamese => "Kết nối iPhone / iPad của bạn vào cùng mạng Wi-Fi với PC này. Trong Trung tâm điều khiển iOS, chạm vào biểu tượng AirPlay trên thẻ Đang phát và chọn thiết bị này.",
+            Self::Russian => "Подключите iPhone / iPad к той же сети Wi-Fi, что и этот ПК. В Пункте управления iOS коснитесь значка трансляции и выберите это устройство.",
+            Self::Spanish => "Conecte su iPhone / iPad a la misma red Wi-Fi que este PC. En el Centro de control de iOS, toque el icono de transmisión y seleccione este dispositivo.",
+        }
+    }
+
+    pub fn receiver_guide_troubleshoot_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🔄 播放異常排解：",
+            Self::SimplifiedChinese => "🔄 播放异常排查：",
+            Self::English => "🔄 Playback Troubleshooting:",
+            Self::French => "🔄 Dépannage de la lecture :",
+            Self::German => "🔄 Fehlerbehebung bei der Wiedergabe:",
+            Self::Italian => "🔄 Risoluzione problemi riproduzione:",
+            Self::Japanese => "🔄 再生トラブルの解消：",
+            Self::Korean => "🔄 재생 오류 해결:",
+            Self::PortugueseBrazil => "🔄 Solução de problemas de reprodução:",
+            Self::PortuguesePortugal => "🔄 Resolução de Problemas de Reprodução:",
+            Self::Indonesian => "🔄 Pemecahan Masalah Pemutaran:",
+            Self::Vietnamese => "🔄 Khắc phục sự cố phát lại:",
+            Self::Russian => "🔄 Устранение ошибок воспроизведения:",
+            Self::Spanish => "🔄 Solución de problemas de reproducción:",
+        }
+    }
+
+    pub fn receiver_guide_troubleshoot_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "若應用程式重啟後，iOS 提示「播放錯誤」或無法出聲，請在 iOS 控制中心先切換回「iPhone 喇叭」，再重新點選連接本裝置，即可立即恢復正常。",
+            Self::SimplifiedChinese => "若应用程序重启后，iOS 提示「播放错误」或无法出声，请在 iOS 控制中心先切换回「iPhone 扬声器」，再重新点击连接本设备，即可立即恢复正常。",
+            Self::English => "If iOS shows 'Playback Error' or there is no sound after restarting this app, switch audio back to 'iPhone Speaker' in the iOS Control Center, then re-select this device to resume immediately.",
+            Self::French => "Si iOS affiche 'Erreur de lecture' après le redémarrage, basculez vers le 'Haut-parleur iPhone' dans le Centre de contrôle, puis sélectionnez à nouveau cet appareil.",
+            Self::German => "Falls iOS nach dem Neustart 'Wiedergabefehler' anzeigt, wechseln Sie im Kontrollzentrum kurz zu 'iPhone-Lautsprecher' und wählen Sie dieses Gerät erneut aus.",
+            Self::Italian => "Se iOS mostra 'Errore di riproduzione' dopo il riavvio, torna a 'Altoparlante iPhone' nel Centro di controllo, quindi riseleziona questo dispositivo.",
+            Self::Japanese => "本アプリの再起動後に iOS で「再生エラー」が表示されたり音が出ない場合は、iOS のコントロールセンターで一度「iPhone スピーカー」に戻してから、再度本デバイスを選択して接続し直してください。",
+            Self::Korean => "앱 재시작 후 iOS에서 '재생 오류'가 표시되거나 소리가 나지 않는 경우, iOS 제어 센터에서 먼저 'iPhone 스피커'로 전환한 다음 이 기기를 다시 선택하면 즉시 복구됩니다.",
+            Self::PortugueseBrazil => "Se o iOS exibir 'Erro de reprodução' após reiniciar o aplicativo, volte para o 'Alto-falante do iPhone' na Central de Controle e selecione este dispositivo novamente.",
+            Self::PortuguesePortugal => "Se o iOS apresentar \"Erro de Reprodução\" ou não houver som após reiniciar esta aplicação, mude o áudio de volta para \"Altifalante do iPhone\" na Central de Controlo do iOS e selecione novamente este dispositivo para retomar imediatamente.",
+            Self::Indonesian => "Jika iOS menampilkan \"Kesalahan Pemutaran\" atau tidak ada suara setelah memulai ulang aplikasi ini, alihkan audio kembali ke \"Speaker iPhone\" di Pusat Kontrol iOS, lalu pilih kembali perangkat ini untuk melanjutkan segera.",
+            Self::Vietnamese => "Nếu iOS báo \"Lỗi phát lại\" hoặc không có âm thanh sau khi khởi động lại ứng dụng này, hãy chuyển âm thanh về \"Loa iPhone\" trong Trung tâm điều khiển iOS, sau đó chọn lại thiết bị này để tiếp tục ngay lập tức.",
+            Self::Russian => "Если после перезапуска приложения iOS показывает «Ошибка воспроизведения», переключитесь на «Динамик iPhone» в Пункте управления, затем снова выберите это устройство.",
+            Self::Spanish => "Si iOS muestra 'Error de reproducción' tras reiniciar la app, cambie a 'Altavoz del iPhone' en el Centro de control y vuelva a seleccionar este dispositivo.",
+        }
+    }
+
+    pub fn airplay_receiver_section_header(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "AirPlay 音訊投放",
+            Self::SimplifiedChinese => "AirPlay 音频投送",
+            Self::English => "AirPlay Audio Casting",
+            Self::French => "Diffusion audio AirPlay",
+            Self::German => "AirPlay-Audio-Streaming",
+            Self::Italian => "Streaming audio AirPlay",
+            Self::Japanese => "AirPlay 音声ストリーミング",
+            Self::Korean => "AirPlay 오디오 캐스팅",
+            Self::PortugueseBrazil => "Transmissão de áudio AirPlay",
+            Self::PortuguesePortugal => "Transmissão de Áudio AirPlay",
+            Self::Indonesian => "Pemeran Audio AirPlay",
+            Self::Vietnamese => "Truyền phát âm thanh AirPlay",
+            Self::Russian => "Аудиотрансляция AirPlay",
+            Self::Spanish => "Transmisión de audio AirPlay",
+        }
+    }
+
+    pub fn airplay_receiver_standby_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "AirPlay 接收端待命中",
+            Self::SimplifiedChinese => "AirPlay 接收端待命中",
+            Self::English => "AirPlay Receiver Standby",
+            Self::French => "Récepteur AirPlay en attente",
+            Self::German => "AirPlay-Empfänger bereit",
+            Self::Italian => "Ricevitore AirPlay in standby",
+            Self::Japanese => "AirPlay 受信待機中",
+            Self::Korean => "AirPlay 수신 대기 중",
+            Self::PortugueseBrazil => "Receptor AirPlay em espera",
+            Self::PortuguesePortugal => "Recetor AirPlay em Espera",
+            Self::Indonesian => "Penerima AirPlay Siaga",
+            Self::Vietnamese => "Bộ nhận AirPlay đang chờ",
+            Self::Russian => "Приемник AirPlay ожидает",
+            Self::Spanish => "Receptor AirPlay en espera",
+        }
+    }
+
+    pub fn airplay_receiver_streaming_badge(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "播放中",
+            Self::SimplifiedChinese => "播放中",
+            Self::English => "Playing",
+            Self::French => "Lecture",
+            Self::German => "Wiedergabe",
+            Self::Italian => "In riproduzione",
+            Self::Japanese => "再生中",
+            Self::Korean => "재생 중",
+            Self::PortugueseBrazil => "Reproduzindo",
+            Self::PortuguesePortugal => "Em reprodução",
+            Self::Indonesian => "Memutar",
+            Self::Vietnamese => "Đang phát",
+            Self::Russian => "Воспроизведение",
+            Self::Spanish => "Reproduciendo",
+        }
+    }
+
+    pub fn airplay_receiver_standby_badge(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "待命",
+            Self::SimplifiedChinese => "待命",
+            Self::English => "Standby",
+            Self::French => "En attente",
+            Self::German => "Bereit",
+            Self::Italian => "Standby",
+            Self::Japanese => "待機",
+            Self::Korean => "대기",
+            Self::PortugueseBrazil => "Espera",
+            Self::PortuguesePortugal => "Em espera",
+            Self::Indonesian => "Siaga",
+            Self::Vietnamese => "Chế độ chờ",
+            Self::Russian => "Ожидание",
+            Self::Spanish => "Espera",
+        }
+    }
+
+    pub fn airplay_receiver_connected_badge(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "已連線",
+            Self::SimplifiedChinese => "已连接",
+            Self::English => "Connected",
+            Self::French => "Connecté",
+            Self::German => "Verbunden",
+            Self::Italian => "Connesso",
+            Self::Japanese => "接続済み",
+            Self::Korean => "연결됨",
+            Self::PortugueseBrazil => "Conectado",
+            Self::PortuguesePortugal => "Ligado",
+            Self::Indonesian => "Terhubung",
+            Self::Vietnamese => "Đã kết nối",
+            Self::Russian => "Подключено",
+            Self::Spanish => "Conectado",
+        }
+    }
+
+    pub fn airplay_receiver_paused_suffix(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => " (已暫停)",
+            Self::SimplifiedChinese => " (已暂停)",
+            Self::English => " (Paused)",
+            Self::French => " (En pause)",
+            Self::German => " (Pausiert)",
+            Self::Italian => " (In pausa)",
+            Self::Japanese => " (一時停止中)",
+            Self::Korean => " (일시 중지됨)",
+            Self::PortugueseBrazil => " (Pausado)",
+            Self::PortuguesePortugal => " (Em pausa)",
+            Self::Indonesian => " (Dijeda)",
+            Self::Vietnamese => " (Đã tạm dừng)",
+            Self::Russian => " (Пауза)",
+            Self::Spanish => " (En pausa)",
+        }
+    }
+
+    pub fn airplay_receiver_connect_name_prefix(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "連線名稱: ",
+            Self::SimplifiedChinese => "连接名称: ",
+            Self::English => "Connect name: ",
+            Self::French => "Nom de connexion : ",
+            Self::German => "Verbindungsname: ",
+            Self::Italian => "Nome connessione: ",
+            Self::Japanese => "接続名: ",
+            Self::Korean => "연결 이름: ",
+            Self::PortugueseBrazil => "Nome de conexão: ",
+            Self::PortuguesePortugal => "Nome de ligação: ",
+            Self::Indonesian => "Nama koneksi: ",
+            Self::Vietnamese => "Tên kết nối: ",
+            Self::Russian => "Имя для подключения: ",
+            Self::Spanish => "Nombre de conexión: ",
+        }
+    }
+
+    pub fn airplay_receiver_casting_suffix(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => " 投放中",
+            Self::SimplifiedChinese => " 投送中",
+            Self::English => " Casting",
+            Self::French => " en diffusion",
+            Self::German => " streamt",
+            Self::Italian => " in streaming",
+            Self::Japanese => " からキャスト中",
+            Self::Korean => " 캐스팅 중",
+            Self::PortugueseBrazil => " transmitindo",
+            Self::PortuguesePortugal => " a transmitir",
+            Self::Indonesian => " Mentransmisikan",
+            Self::Vietnamese => " Đang truyền phát",
+            Self::Russian => " транслирует",
+            Self::Spanish => " transmitiendo",
+        }
+    }
+
+    pub fn airplay_receiver_casting_default_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "AirPlay 裝置投放中",
+            Self::SimplifiedChinese => "AirPlay 设备投送中",
+            Self::English => "AirPlay Device Casting",
+            Self::French => "Appareil AirPlay en diffusion",
+            Self::German => "AirPlay-Gerät streamt",
+            Self::Italian => "Dispositivo AirPlay in streaming",
+            Self::Japanese => "AirPlay デバイスからキャスト中",
+            Self::Korean => "AirPlay 기기 캐스팅 중",
+            Self::PortugueseBrazil => "Dispositivo AirPlay transmitindo",
+            Self::PortuguesePortugal => "Dispositivo AirPlay a transmitir",
+            Self::Indonesian => "Pemeran Perangkat AirPlay",
+            Self::Vietnamese => "Thiết bị AirPlay đang phát",
+            Self::Russian => "Устройство AirPlay транслирует",
+            Self::Spanish => "Dispositivo AirPlay transmitiendo",
+        }
+    }
+
+    pub fn airplay_receiver_phone_volume(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "手機端音量: ",
+            Self::SimplifiedChinese => "手机端音量: ",
+            Self::English => "Phone volume: ",
+            Self::French => "Volume appareil : ",
+            Self::German => "Gerätelautstärke: ",
+            Self::Italian => "Volume dispositivo: ",
+            Self::Japanese => "端末の音量: ",
+            Self::Korean => "스마트폰 볼륨: ",
+            Self::PortugueseBrazil => "Volume do aparelho: ",
+            Self::PortuguesePortugal => "Volume do telemóvel: ",
+            Self::Indonesian => "Volume ponsel: ",
+            Self::Vietnamese => "Âm lượng điện thoại: ",
+            Self::Russian => "Громкость устройства: ",
+            Self::Spanish => "Volumen del dispositivo: ",
+        }
+    }
+
+    pub fn airplay_receiver_max_dynamic_range(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "✨ 最大動態範圍",
+            Self::SimplifiedChinese => "✨ 最大动态范围",
+            Self::English => "✨ Max Dynamic Range",
+            Self::French => "✨ Plage dynamique max",
+            Self::German => "✨ Max. Dynamikbereich",
+            Self::Italian => "✨ Max gamma dinamica",
+            Self::Japanese => "✨ 最大ダイナミックレンジ",
+            Self::Korean => "✨ 최대 다이내믹 레인지",
+            Self::PortugueseBrazil => "✨ Alcance dinâmico máx.",
+            Self::PortuguesePortugal => "✨ Alcance Dinâmico Máx.",
+            Self::Indonesian => "✨ Rentang Dinamis Maks",
+            Self::Vietnamese => "✨ Dải động tối đa",
+            Self::Russian => "✨ Макс. динамика",
+            Self::Spanish => "✨ Rango dinámico máx.",
+        }
+    }
+
+    pub fn airplay_receiver_max_dynamic_tooltip(&self, phone_vol: Option<u8>) -> String {
+        match self {
+            Self::TraditionalChinese => match phone_vol {
+                Some(v) => format!("以 100% 原始最大動態範圍播出中（已忽略手機端音量減損，當前手機音量為 {}%）", v),
+                None => "以 100% 原始最大動態範圍播出中（已忽略手機端音量減損）".to_string(),
+            },
+            Self::SimplifiedChinese => match phone_vol {
+                Some(v) => format!("以 100% 原始最大动态范围播出中（已忽略手机端音量减损，当前手机音量为 {}%）", v),
+                None => "以 100% 原始最大动态范围播出中（已忽略手机端音量减损）".to_string(),
+            },
+            Self::English => match phone_vol {
+                Some(v) => format!("Playing in 100% maximum dynamic range (phone attenuation ignored, current phone volume: {}%)", v),
+                None => "Playing in 100% maximum dynamic range (phone attenuation ignored)".to_string(),
+            },
+            Self::French => match phone_vol {
+                Some(v) => format!("Lecture en plage dynamique maximale à 100 % (atténuation ignorée, volume actuel : {} %)", v),
+                None => "Lecture en plage dynamique maximale à 100 % (atténuation du téléphone ignorée)".to_string(),
+            },
+            Self::German => match phone_vol {
+                Some(v) => format!("Wiedergabe mit 100 % max. Dynamikbereich (Lautstärkedämpfung ignoriert, Smartphone: {} %)", v),
+                None => "Wiedergabe mit 100 % max. Dynamikbereich (Lautstärkedämpfung ignoriert)".to_string(),
+            },
+            Self::Italian => match phone_vol {
+                Some(v) => format!("Riproduzione al 100% della gamma dinamica (attenuazione ignorata, volume attuale: {}%)", v),
+                None => "Riproduzione al 100% della gamma dinamica massima (attenuazione ignorata)".to_string(),
+            },
+            Self::Japanese => match phone_vol {
+                Some(v) => format!("100% 最大ダイナミックレンジで再生中（端末音量の減衰を無視、現在の端末音量: {}%）", v),
+                None => "100% 最大ダイナミックレンジで再生中（端末音量の減衰を無視）".to_string(),
+            },
+            Self::Korean => match phone_vol {
+                Some(v) => format!("100% 최대 다이내믹 레인지로 재생 중 (휴대폰 볼륨 감쇠 무시, 현재 볼륨: {}%)", v),
+                None => "100% 최대 다이내믹 레인지로 재생 중 (휴대폰 볼륨 감쇠 무시)".to_string(),
+            },
+            Self::PortugueseBrazil => match phone_vol {
+                Some(v) => format!("Reproduzindo em 100% de alcance dinâmico máximo (atenuação ignorada, volume atual: {}%)", v),
+                None => "Reproduzindo em 100% de alcance dinâmico máximo (atenuação ignorada)".to_string(),
+            },
+            Self::PortuguesePortugal => match phone_vol {
+                    Some(v) => format!("A reproduzir com 100% de alcance dinâmico máximo (atenuação ignorada, volume atual: {}%)", v),
+                    None => "A reproduzir com 100% de alcance dinâmico máximo (atenuação ignorada)".to_string(),
+                },
+            Self::Indonesian => match phone_vol {
+                    Some(v) => format!("Memutar pada rentang dinamis maks 100% (atenuasi diabaikan, volume ponsel saat ini: {}%)", v),
+                    None => "Memutar pada rentang dinamis maks 100% (atenuasi ponsel diabaikan)".to_string(),
+                },
+            Self::Vietnamese => match phone_vol {
+                    Some(v) => format!("Đang phát ở dải động tối đa 100% (bỏ qua suy giảm âm lượng, âm lượng điện thoại: {}%)", v),
+                    None => "Đang phát ở dải động tối đa 100% (bỏ qua suy giảm âm lượng của điện thoại)".to_string(),
+                },
+            Self::Russian => match phone_vol {
+                Some(v) => format!("Воспроизведение со 100% макс. динамическим диапазоном (ослабление игнорируется, телефон: {}%)", v),
+                None => "Воспроизведение со 100% максимальным динамическим диапазоном (ослабление игнорируется)".to_string(),
+            },
+            Self::Spanish => match phone_vol {
+                Some(v) => format!("Reproduciendo con rango dinámico máximo al 100% (atenuación ignorada, volumen actual: {}%)", v),
+                None => "Reproduciendo con rango dinámico máximo al 100% (atenuación del dispositivo ignorada)".to_string(),
+            },
+        }
+    }
+
+    pub fn airplay_receiver_resume_tooltip(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "點擊以嘗試喚醒手機繼續播放",
+            Self::SimplifiedChinese => "点击以尝试唤醒手机继续播放",
+            Self::English => "Click to wake phone and resume playback",
+            Self::French => "Cliquez pour réveiller le téléphone et reprendre",
+            Self::German => "Klicken, um Smartphone zu wecken und fortzusetzen",
+            Self::Italian => "Fai clic per riattivare il telefono e riprendere",
+            Self::Japanese => "クリックして端末を復帰し再生を再開",
+            Self::Korean => "클릭하여 휴대폰을 깨우고 재생 재개",
+            Self::PortugueseBrazil => "Clique para acordar o aparelho e retomar a reprodução",
+            Self::PortuguesePortugal => "Clique para acordar o telemóvel e retomar a reprodução",
+            Self::Indonesian => "Klik untuk membangunkan ponsel dan melanjutkan pemutaran",
+            Self::Vietnamese => "Nhấp để đánh thức điện thoại và tiếp tục phát lại",
+            Self::Russian => "Нажмите, чтобы разбудить телефон и возобновить",
+            Self::Spanish => "Haz clic para reactivar el teléfono y reanudar",
+        }
+    }
+
+    pub fn airplay_receiver_no_device_tooltip(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "尚未連線，請先由 iPhone 控制中心選取本裝置",
+            Self::SimplifiedChinese => "尚未连线，请先由 iPhone 控制中心选取本装置",
+            Self::English => "Not connected. Please select this device in iPhone Control Center",
+            Self::French => "Non connecté. Veuillez sélectionner cet appareil dans le Centre de contrôle de l'iPhone",
+            Self::German => "Nicht verbunden. Bitte dieses Gerät im iPhone-Kontrollzentrum auswählen",
+            Self::Italian => "Non connesso. Seleziona questo dispositivo nel Centro di controllo dell'iPhone",
+            Self::Japanese => "未接続です。iPhoneのコントロールセンターから本端末を選択してください",
+            Self::Korean => "연결되지 않음. iPhone 제어 센터에서 이 기기를 선택하세요",
+            Self::PortugueseBrazil => "Não conectado. Selecione este dispositivo na Central de Controle do iPhone",
+            Self::PortuguesePortugal => "Não ligado. Selecione este dispositivo na Central de Controlo do iPhone",
+            Self::Indonesian => "Tidak terhubung. Silakan pilih perangkat ini di Pusat Kontrol iPhone",
+            Self::Vietnamese => "Chưa kết nối. Vui lòng chọn thiết bị này trong Trung tâm điều khiển iPhone",
+            Self::Russian => "Не подключено. Выберите это устройство в Пункте управления iPhone",
+            Self::Spanish => "No conectado. Selecciona este dispositivo en el Centro de control del iPhone",
+        }
+    }
+
+    pub fn airplay_receiver_wake_failed(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "⚠️ 無法喚醒手機，請至手機重新點選投放",
+            Self::SimplifiedChinese => "⚠️ 无法唤醒手机，请至手机重新点选投放",
+            Self::English => "⚠️ Could not wake device, please re-cast from phone",
+            Self::French => "⚠️ Impossible de réveiller l'appareil, veuillez relancer depuis le téléphone",
+            Self::German => "⚠️ Gerät konnte nicht geweckt werden, bitte vom Smartphone neu übertragen",
+            Self::Italian => "⚠️ Impossibile riattivare il dispositivo, ritrasmetti dal telefono",
+            Self::Japanese => "⚠️ 端末を復帰できません。スマホから再度キャストしてください",
+            Self::Korean => "⚠️ 기기를 깨울 수 없습니다. 휴대폰에서 다시 전송하세요",
+            Self::PortugueseBrazil => "⚠️ Não foi possível acordar o aparelho, retransmita pelo celular",
+            Self::PortuguesePortugal => "⚠️ Não foi possível acordar o dispositivo, volte a transmitir a partir do telemóvel",
+            Self::Indonesian => "⚠️ Tidak dapat membangunkan perangkat, silakan transmisikan ulang dari ponsel",
+            Self::Vietnamese => "⚠️ Không thể đánh thức thiết bị, vui lòng truyền phát lại từ điện thoại",
+            Self::Russian => "⚠️ Не удалось разбудить устройство, запустите трансляцию заново с телефона",
+            Self::Spanish => "⚠️ No se pudo reactivar el dispositivo, vuelve a transmitir desde el teléfono",
+        }
+    }
+
+    pub fn airplay_receiver_require_connect(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "📱 請先由手機控制中心點選投放至本裝置",
+            Self::SimplifiedChinese => "📱 请先由手机控制中心点选投放至本装置",
+            Self::English => "📱 Please select this device in iPhone Control Center first",
+            Self::French => "📱 Veuillez d'abord sélectionner cet appareil dans le Centre de contrôle",
+            Self::German => "📱 Bitte zuerst dieses Gerät im iPhone-Kontrollzentrum auswählen",
+            Self::Italian => "📱 Seleziona prima questo dispositivo nel Centro di controllo",
+            Self::Japanese => "📱 先にiPhoneのコントロールセンターから本端末を選択してください",
+            Self::Korean => "📱 먼저 iPhone 제어 센터에서 이 기기를 선택하세요",
+            Self::PortugueseBrazil => "📱 Selecione primeiro este dispositivo na Central de Controle",
+            Self::PortuguesePortugal => "📱 Selecione primeiro este dispositivo na Central de Controlo do iPhone",
+            Self::Indonesian => "📱 Silakan pilih perangkat ini di Pusat Kontrol iPhone terlebih dahulu",
+            Self::Vietnamese => "📱 Vui lòng chọn thiết bị này trong Trung tâm điều khiển iPhone trước",
+            Self::Russian => "📱 Сначала выберите это устройство в Пункте управления iPhone",
+            Self::Spanish => "📱 Selecciona primero este dispositivo en el Centro de control del iPhone",
+        }
+    }
+
+    pub fn btn_prev_track(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "上一首",
+            Self::SimplifiedChinese => "上一首",
+            Self::English => "Previous Track",
+            Self::French => "Piste précédente",
+            Self::German => "Vorheriger Titel",
+            Self::Italian => "Traccia precedente",
+            Self::Japanese => "前の曲",
+            Self::Korean => "이전 곡",
+            Self::PortugueseBrazil => "Faixa anterior",
+            Self::PortuguesePortugal => "Faixa anterior",
+            Self::Indonesian => "Trek Sebelumnya",
+            Self::Vietnamese => "Bản nhạc trước",
+            Self::Russian => "Предыдущий трек",
+            Self::Spanish => "Pista anterior",
+        }
+    }
+
+    pub fn btn_play_pause(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "播放 / 暫停",
+            Self::SimplifiedChinese => "播放 / 暂停",
+            Self::English => "Play / Pause",
+            Self::French => "Lecture / Pause",
+            Self::German => "Wiedergabe / Pause",
+            Self::Italian => "Riproduci / Pausa",
+            Self::Japanese => "再生 / 一時停止",
+            Self::Korean => "재생 / 일시정지",
+            Self::PortugueseBrazil => "Reproduzir / Pausar",
+            Self::PortuguesePortugal => "Reproduzir / Pausar",
+            Self::Indonesian => "Putar / Jeda",
+            Self::Vietnamese => "Phát / Tạm dừng",
+            Self::Russian => "Воспроизведение / Пауза",
+            Self::Spanish => "Reproducir / Pausa",
+        }
+    }
+
+    pub fn btn_next_track(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "下一首",
+            Self::SimplifiedChinese => "下一首",
+            Self::English => "Next Track",
+            Self::French => "Piste suivante",
+            Self::German => "Nächster Titel",
+            Self::Italian => "Traccia successiva",
+            Self::Japanese => "次の曲",
+            Self::Korean => "다음 곡",
+            Self::PortugueseBrazil => "Próxima faixa",
+            Self::PortuguesePortugal => "Faixa seguinte",
+            Self::Indonesian => "Trek Berikutnya",
+            Self::Vietnamese => "Bản nhạc tiếp theo",
+            Self::Russian => "Следующий трек",
+            Self::Spanish => "Pista siguiente",
+        }
+    }
+
+    pub fn btn_phone_volume_max(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🔊 設為最大",
+            Self::SimplifiedChinese => "🔊 设为最大",
+            Self::English => "🔊 Set to Max",
+            Self::French => "🔊 Régler au max",
+            Self::German => "🔊 Auf Max stellen",
+            Self::Italian => "🔊 Imposta al massimo",
+            Self::Japanese => "🔊 最大にする",
+            Self::Korean => "🔊 최대로 설정",
+            Self::PortugueseBrazil => "🔊 Ajustar ao máximo",
+            Self::PortuguesePortugal => "🔊 Ajustar ao máximo",
+            Self::Indonesian => "🔊 Atur ke Maksimal",
+            Self::Vietnamese => "🔊 Đặt mức tối đa",
+            Self::Russian => "🔊 На максимум",
+            Self::Spanish => "🔊 Poner al máximo",
+        }
+    }
+
+    pub fn btn_phone_volume_max_tooltip(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "透過 DACP 將手機端投放音量調至 100%（最大聲）",
+            Self::SimplifiedChinese => "通过 DACP 将手机端投送音量调至 100%（最大声）",
+            Self::English => "Set phone casting volume to 100% via DACP",
+            Self::French => "Régler le volume de l'appareil à 100 % via DACP",
+            Self::German => "Telefon-Streaming-Lautstärke über DACP auf 100 % einstellen",
+            Self::Italian => "Imposta il volume di streaming del telefono al 100% tramite DACP",
+            Self::Japanese => "DACP経由でスマートフォンのキャスト音量を100%（最大）に設定",
+            Self::Korean => "DACP를 통해 스마트폰 캐스팅 볼륨을 100%(최대)로 설정",
+            Self::PortugueseBrazil => "Ajustar o volume de transmissão do celular para 100% via DACP",
+            Self::PortuguesePortugal => "Ajustar o volume de transmissão do telemóvel para 100% via DACP",
+            Self::Indonesian => "Atur volume transmisi ponsel ke 100% melalui DACP",
+            Self::Vietnamese => "Đặt âm lượng truyền phát của điện thoại thành 100% qua DACP",
+            Self::Russian => "Установить громкость трансляции на 100% через DACP",
+            Self::Spanish => "Ajustar el volumen de transmisión del teléfono al 100% mediante DACP",
+        }
+    }
+
+    pub fn airplay_receiver_auto_max_volume_label(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "忽略手機音量調節，保持音訊最大動態範圍",
+            Self::SimplifiedChinese => "忽略手机音量调节，保持音频最大动态范围",
+            Self::English => "Ignore phone volume adjustments, preserve maximum dynamic range",
+            Self::French => "Ignorer le réglage du volume du téléphone, préserver la plage dynamique maximale",
+            Self::German => "Telefon-Lautstärkeanpassung ignorieren, maximale Dynamik beibehalten",
+            Self::Italian => "Ignora la regolazione del volume del telefono, mantieni la gamma dinamica massima",
+            Self::Japanese => "スマホの音量調節を無視し、音声の最大ダイナミックレンジを維持",
+            Self::Korean => "스마트폰 볼륨 조절을 무시하고 오디오 최대 다이내믹 레인지 유지",
+            Self::PortugueseBrazil => "Ignorar ajuste de volume do celular, manter o alcance dinâmico máximo",
+            Self::PortuguesePortugal => "Ignorar ajuste de volume do telemóvel, manter o alcance dinâmico máximo",
+            Self::Indonesian => "Abaikan penyesuaian volume ponsel, pertahankan rentang dinamis audio maksimum",
+            Self::Vietnamese => "Bỏ qua điều chỉnh âm lượng điện thoại, duy trì dải động âm thanh tối đa",
+            Self::Russian => "Игнорировать громкость телефона, сохраняя максимальный динамический диапазон",
+            Self::Spanish => "Ignorar el ajuste de volumen del teléfono, mantener el rango dinámico máximo",
+        }
+    }
+
+    pub fn airplay_receiver_output_device_label(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "音訊轉發輸出裝置",
+            Self::SimplifiedChinese => "音频转发输出设备",
+            Self::English => "Audio Forwarding Device",
+            Self::French => "Périphérique de transfert audio",
+            Self::German => "Audio-Weiterleitungsgerät",
+            Self::Italian => "Dispositivo di inoltro audio",
+            Self::Japanese => "音声転送出力デバイス",
+            Self::Korean => "오디오 전달 출력 장치",
+            Self::PortugueseBrazil => "Dispositivo de encaminhamento de áudio",
+            Self::PortuguesePortugal => "Dispositivo de reencaminhamento de áudio",
+            Self::Indonesian => "Perangkat Penerusan Audio",
+            Self::Vietnamese => "Thiết bị chuyển tiếp âm thanh",
+            Self::Russian => "Устройство перенаправления звука",
+            Self::Spanish => "Dispositivo de reenvío de audio",
+        }
+    }
+
+    pub fn airplay_receiver_output_device_hint(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "可選系統預設或指定虛擬音效卡 (如 VB-Cable、VoiceMeeter) 供其他軟體進行聲音後製處理",
+            Self::SimplifiedChinese => "可选系统默认或指定虚拟声卡 (如 VB-Cable、VoiceMeeter) 供其他软件进行声音后期处理",
+            Self::English => "Select system default or virtual cables (e.g. VB-Cable, VoiceMeeter) to route audio into DAW, OBS, or DSP tools",
+            Self::French => "Choisissez le périphérique par défaut ou virtuel (VB-Cable, VoiceMeeter) pour le traitement audio externe",
+            Self::German => "Wählen Sie das Standardgerät oder virtuelle Audiokabel (z. B. VB-Cable, VoiceMeeter) für externe Effekte",
+            Self::Italian => "Scegli il dispositivo predefinito o virtuale (VB-Cable, VoiceMeeter) per l'elaborazione audio esterna",
+            Self::Japanese => "システム既定または仮想オーディオ (VB-Cable、VoiceMeeter 等) を指定し、DAW や外部ソフトで音響処理が可能",
+            Self::Korean => "시스템 기본값 또는 가상 오디오 케이블(VB-Cable, VoiceMeeter 등)로 지정하여 DAW나 외부 소프트웨어에서 후처리 가능",
+            Self::PortugueseBrazil => "Selecione o dispositivo padrão ou cabo virtual (ex: VB-Cable, VoiceMeeter) para processamento em outros softwares",
+            Self::PortuguesePortugal => "Selecione o dispositivo predefinido ou cabo virtual (ex: VB-Cable, VoiceMeeter) para processamento em software externo",
+            Self::Indonesian => "Pilih default sistem atau kabel virtual (mis. VB-Cable, VoiceMeeter) untuk pemrosesan efek audio di aplikasi lain",
+            Self::Vietnamese => "Chọn mặc định hệ thống hoặc cáp âm thanh ảo (như VB-Cable, VoiceMeeter) để xử lý hiệu ứng âm thanh qua phần mềm khác",
+            Self::Russian => "Выберите устройство по умолчанию или виртуальный кабель (VB-Cable, VoiceMeeter) для внешней обработки звука",
+            Self::Spanish => "Seleccione el dispositivo predeterminado o virtual (VB-Cable, VoiceMeeter) para posprocesamiento de audio",
+        }
+    }
+
+    pub fn airplay_receiver_apply_effects_label(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "轉發時套用專屬音效處理 (等化器、諧波激勵與溫暖潤色)",
+            Self::SimplifiedChinese => "转发时应用专属音效处理 (均衡器、谐波激励与温暖润色)",
+            Self::English => "Apply dedicated audio effects when forwarding (EQ, Harmonic Exciter & Warmth)",
+            Self::French => "Appliquer les effets audio dédiés lors du transfert (égaliseur, exciteur et chaleur)",
+            Self::German => "Dedizierte Audioeffekte bei Weiterleitung anwenden (EQ, Harmonic Exciter & Wärme)",
+            Self::Italian => "Applica effetti audio dedicati durante l'inoltro (equalizzatore, eccitatore e calore)",
+            Self::Japanese => "転送時に専用サウンド効果を適用 (EQ、ハーモニックエキサイター、温かみ)",
+            Self::Korean => "전달 시 전용 음향 효과 적용 (EQ, 하모닉 익사이터 및 온기 강화)",
+            Self::PortugueseBrazil => "Aplicar efeitos de áudio dedicados ao encaminhar (equalizador, excitador e calor)",
+            Self::PortuguesePortugal => "Aplicar efeitos de áudio dedicados ao reencaminhar (equalizador, excitador e calor)",
+            Self::Indonesian => "Terapkan efek audio khusus saat meneruskan (EQ, Harmonic Exciter & Warmth)",
+            Self::Vietnamese => "Áp dụng hiệu ứng âm thanh riêng khi chuyển tiếp (EQ, Tăng cường sóng hài & Độ ấm)",
+            Self::Russian => "Применять выделенные звуковые эффекты при перенаправлении (эквалайзер, сатурация и теплота)",
+            Self::Spanish => "Aplicar efectos de audio dedicados al reenviar (ecualizador, excitador y calidez)",
+        }
+    }
+
+    pub fn airplay_receiver_btn_adjust_eq(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "調整接收專屬等化器 ➜",
+            Self::SimplifiedChinese => "调整接收专属均衡器 ➜",
+            Self::English => "Configure Receiver Audio Effects ➜",
+            Self::French => "Configurer les effets du récepteur ➜",
+            Self::German => "Empfänger-Audioeffekte anpassen ➜",
+            Self::Italian => "Configura effetti del ricevitore ➜",
+            Self::Japanese => "受信専用イコライザーを調整 ➜",
+            Self::Korean => "수신 전용 이퀄라이저 설정 ➜",
+            Self::PortugueseBrazil => "Ajustar efeitos do receptor ➜",
+            Self::PortuguesePortugal => "Ajustar efeitos do recetor ➜",
+            Self::Indonesian => "Atur Efek Audio Penerima ➜",
+            Self::Vietnamese => "Tùy chỉnh hiệu ứng bộ thu ➜",
+            Self::Russian => "Настроить эквалайзер приёмника ➜",
+            Self::Spanish => "Ajustar efectos del receptor ➜",
+        }
+    }
+
+    pub fn eq_profile_label(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "音效設定檔",
+            Self::SimplifiedChinese => "音效配置文件",
+            Self::English => "Audio Profile",
+            Self::French => "Profil audio",
+            Self::German => "Audioprofil",
+            Self::Italian => "Profilo audio",
+            Self::Japanese => "オーディオプロファイル",
+            Self::Korean => "오디오 프로필",
+            Self::PortugueseBrazil => "Perfil de áudio",
+            Self::PortuguesePortugal => "Perfil de áudio",
+            Self::Indonesian => "Profil Audio",
+            Self::Vietnamese => "Hồ sơ âm thanh",
+            Self::Russian => "Профиль звука",
+            Self::Spanish => "Perfil de audio",
+        }
+    }
+
+    pub fn eq_profile_normal(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🖥️ 一般播放 / HomePod",
+            Self::SimplifiedChinese => "🖥️ 普通播放 / HomePod",
+            Self::English => "🖥️ Playback / HomePod",
+            Self::French => "🖥️ Lecture / HomePod",
+            Self::German => "🖥️ Wiedergabe / HomePod",
+            Self::Italian => "🖥️ Riproduzione / HomePod",
+            Self::Japanese => "🖥️ 通常再生 / HomePod",
+            Self::Korean => "🖥️ 일반 재생 / HomePod",
+            Self::PortugueseBrazil => "🖥️ Reprodução / HomePod",
+            Self::PortuguesePortugal => "🖥️ Reprodução / HomePod",
+            Self::Indonesian => "🖥️ Pemutaran / HomePod",
+            Self::Vietnamese => "🖥️ Phát lại / HomePod",
+            Self::Russian => "🖥️ Воспроизведение / HomePod",
+            Self::Spanish => "🖥️ Reproducción / HomePod",
+        }
+    }
+
+    pub fn eq_profile_receiver(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "📲 音訊接收轉發",
+            Self::SimplifiedChinese => "📲 音频接收转发",
+            Self::English => "📲 Receiver Forwarding",
+            Self::French => "📲 Transfert récepteur",
+            Self::German => "📲 Empfänger-Weiterleitung",
+            Self::Italian => "📲 Inoltro ricevitore",
+            Self::Japanese => "📲 音声受信・転送",
+            Self::Korean => "📲 오디오 수신 전달",
+            Self::PortugueseBrazil => "📲 Encaminhamento de recepção",
+            Self::PortuguesePortugal => "📲 Reencaminhamento de receção",
+            Self::Indonesian => "📲 Penerusan Penerima",
+            Self::Vietnamese => "📲 Chuyển tiếp nhận âm",
+            Self::Russian => "📲 Перенаправление приёма",
+            Self::Spanish => "📲 Reenvío de receptor",
+        }
+    }
+
+    pub fn eq_profile_receiver_hint(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "💡 正在調整 AirPlay 接收轉發時的專屬等化器與聲音增強效果，此設定完全獨立於一般播放。",
+            Self::SimplifiedChinese => "💡 正在调整 AirPlay 接收转发时的专属均衡器与声音增强效果，此设置完全独立于普通播放。",
+            Self::English => "💡 Tuning dedicated EQ and sound enhancers for AirPlay Receiver forwarding. These settings are completely independent of normal playback.",
+            Self::French => "💡 Réglage de l'égaliseur et des effets dédiés au transfert AirPlay. Ces réglages sont indépendants de la lecture standard.",
+            Self::German => "💡 Einstellen der dedizierten EQ- und Effekteinstellungen für die AirPlay-Weiterleitung. Diese Einstellungen sind unabhängig von der normalen Wiedergabe.",
+            Self::Italian => "💡 Regolazione dell'equalizzatore e degli effetti per l'inoltro AirPlay. Queste impostazioni sono indipendenti dalla riproduzione normale.",
+            Self::Japanese => "💡 AirPlay 受信転送時の専用イコライザーとサウンド効果を調整中。通常再生とは完全に独立しています。",
+            Self::Korean => "💡 AirPlay 수신 전달 시 전용 이퀄라이저와 음향 효과를 조정 중입니다. 일반 재생 설정과 완전히 독립적입니다.",
+            Self::PortugueseBrazil => "💡 Ajustando o equalizador e efeitos dedicados para o encaminhamento AirPlay. Essas configurações são independentes da reprodução padrão.",
+            Self::PortuguesePortugal => "💡 A ajustar o equalizador e efeitos dedicados para o reencaminhamento AirPlay. Estas definições são independentes da reprodução predefinida.",
+            Self::Indonesian => "💡 Menyesuaikan EQ dan efek audio khusus untuk penerusan AirPlay. Pengaturan ini sepenuhnya independen dari pemutaran biasa.",
+            Self::Vietnamese => "💡 Đang điều chỉnh EQ và hiệu ứng riêng cho chuyển tiếp nhận AirPlay. Cài đặt này hoàn toàn độc lập với phát lại thông thường.",
+            Self::Russian => "💡 Настройка выделенного эквалайзера и эффектов для перенаправления AirPlay. Эти параметры не влияют на обычное воспроизведение.",
+            Self::Spanish => "💡 Ajustando ecualizador y efectos dedicados para el reenvío de AirPlay. Estos ajustes son independientes de la reproducción normal.",
+        }
+    }
+
 
     pub fn status_ao_active(&self) -> &'static str {
         match self {
@@ -4162,6 +6010,9 @@ impl Language {
             Self::Japanese => "ローカル音声強化中",
             Self::Korean => "로컬 오디오 향상 중",
             Self::PortugueseBrazil => "Aprimoramento de áudio local ativo",
+            Self::PortuguesePortugal => "Melhoramento de áudio local ativo",
+            Self::Indonesian => "Peningkatan Audio Lokal Aktif",
+            Self::Vietnamese => "Đang nâng cao âm thanh cục bộ",
             Self::Russian => "Локальная обработка активна",
             Self::Spanish => "Mejora de audio local activa",
         }
@@ -4178,6 +6029,9 @@ impl Language {
             Self::Japanese => "💡 アプリ音声強化中：強化された音声を指定の出力デバイスへ送信します。選択した出力デバイスがシステム既定デバイスと同一の場合、原音の重複を防ぐためにシステム音声を別のデバイスへルーティングすることをおすすめします。",
             Self::Korean => "💡 애플리케이션 오디오 향상 중: 향상된 오디오가 선택한 출력 장치로 전달됩니다. 선택한 출력 장치가 시스템 오디오 장치와 동일한 경우, 소리 겹침을 방지하기 위해 시스템 오디오를 다른 장치로 라우팅하는 것을 권장합니다.",
             Self::PortugueseBrazil => "💡 Aprimoramento de áudio do app: O áudio aprimorado é enviado ao dispositivo de saída selecionado. Se a saída selecionada for o mesmo dispositivo de áudio do sistema, recomenda-se rotear o áudio do sistema para um dispositivo diferente para evitar sobreposição.",
+            Self::PortuguesePortugal => "💡 Melhoramento de áudio da aplicação: O áudio melhorado é enviado para o dispositivo selecionado. Se a saída selecionada for o mesmo dispositivo de áudio do sistema, recomenda-se encaminhar o áudio do sistema para um dispositivo diferente para evitar sobreposição de áudio.",
+            Self::Indonesian => "💡 Peningkatan Audio Aplikasi: Audio yang ditingkatkan dikeluarkan ke perangkat yang dipilih. Jika output yang dipilih sama dengan perangkat audio sistem, merutekan audio sistem ke perangkat yang berbeda disarankan untuk mencegah audio tumpang tindih.",
+            Self::Vietnamese => "💡 Nâng cao âm thanh ứng dụng: Âm thanh nâng cao được phát ra thiết bị đã chọn. Nếu đầu ra được chọn trùng với thiết bị âm thanh hệ thống, bạn nên định tuyến âm thanh hệ thống sang thiết bị khác để tránh âm thanh bị chồng chéo.",
             Self::Russian => "💡 Улучшение звука приложения: Обработанный звук выводится на выбранное устройство. Если выбранное устройство совпадает с системным аудиоустройством, рекомендуется перенаправить системный звук на другое устройство для устранения наложения.",
             Self::Spanish => "💡 Mejora de audio de la aplicación: El audio procesado se envía al dispositivo de salida seleccionado. Si la salida seleccionada es el mismo dispositivo que el de audio del sistema, se recomienda enrutar el audio del sistema a un dispositivo distinto para evitar la superposición.",
         }
@@ -4198,6 +6052,9 @@ impl Language {
             Self::Japanese => "💡 システム音声スペクトラム可視化中：音源とローカル出力先が同一デバイスです。ハウリング防止のためローカル音声出力は自動抑制され、DSPとEQはPaint Pulseビジュアライザーを駆動します。10バンドEQの音質強化を聴くには別の出力先（ヘッドホン等）を選択してください。",
             Self::Korean => "💡 시스템 오디오 스펙트럼 시각화 중: 오디오 소스와 로컬 출력이 동일한 장치입니다. 피드백(하울링) 방지를 위해 로컬 오디오 출력이 자동 차단되며 DSP와 EQ는 Paint Pulse 시각화를 구동합니다. 10밴드 EQ 향상 음질을 청취하려면 다른 출력 장치(헤드폰 등)를 선택하세요.",
             Self::PortugueseBrazil => "💡 Visualizador de espectro do sistema: A fonte de áudio e a saída local compartilham o mesmo dispositivo. A saída local é suprimida para evitar microfonia/feedback; DSP anima o Paint Pulse. Selecione outra saída local (ex.: fones) para ouvir o equalizador.",
+            Self::PortuguesePortugal => "💡 Visualizador de espetro do sistema: A fonte de áudio e a saída local partilham o mesmo dispositivo físico. A saída de áudio local é suprimida automaticamente para evitar ciclos de feedback/microfonia; o DSP e o equalizador estão a animar o Paint Pulse. Selecione outra saída local (ex.: auscultadores) para ouvir o melhoramento do equalizador de 10 bandas.",
+            Self::Indonesian => "💡 Visualizer Spektrum Audio Sistem: Sumber audio dan output lokal berbagi perangkat fisik yang sama. Output audio lokal otomatis ditekan untuk mencegah loop umpan balik; DSP & EQ secara aktif menggerakkan Paint Pulse. Pilih output lokal yang berbeda (misalnya headphone) untuk mendengar peningkatan EQ 10-band.",
+            Self::Vietnamese => "💡 Trực quan hóa phổ âm thanh hệ thống: Nguồn âm thanh và đầu ra cục bộ dùng chung một thiết bị vật lý. Đầu ra âm thanh cục bộ sẽ tự động bị khử để ngăn chặn vòng lặp phản hồi âm (hú); DSP & EQ đang kích hoạt hiệu ứng Paint Pulse. Hãy chọn đầu ra cục bộ khác (ví dụ: tai nghe) để nghe âm thanh nâng cao từ EQ 10 băng tần.",
             Self::Russian => "💡 Визуализация спектра системного звука: Источник и локальный выход используют одно устройство. Локальный вывод звука автоматически заблокирован для предотвращения обратной связи; DSP управляет Paint Pulse. Выберите другое локальное устройство (например, наушники), чтобы слушать 10-полосный EQ.",
             Self::Spanish => "💡 Visualizador de espectro del sistema: La fuente de audio y la salida local comparten el mismo dispositivo. La salida local se suprime para evitar acoples/retroalimentación; el DSP anima Paint Pulse. Selecciona otra salida local (ej. auriculares) para escuchar el ecualizador.",
         }
@@ -4214,8 +6071,315 @@ impl Language {
             Self::Japanese => "💡 システム音声強化中：DSP強化後の全システム音声を指定デバイス（ヘッドホン等）へリアルタイム出力しています。システム音声デバイスからも音が出る場合は、システム音声をミュートにすると純粋な強化音声をお楽しみいただけます。",
             Self::Korean => "💡 시스템 오디오 향상 중: DSP로 향상된 전체 시스템 오디오가 선택한 장치(헤드폰 등)로 실시간 출력됩니다. 시스템 오디오 장치에서도 소리가 나는 경우, 시스템 오디오를 음소거하면 더욱 순수한 향상 음질을 감상할 수 있습니다.",
             Self::PortugueseBrazil => "💡 Aprimoramento de áudio do sistema: O áudio aprimorado do sistema é enviado em tempo real ao dispositivo selecionado (ex.: fones). Se o dispositivo de áudio do sistema também emitir som, recomenda-se silenciar o áudio do sistema para uma melhor experiência.",
+            Self::PortuguesePortugal => "💡 Melhoramento de áudio do sistema: O áudio melhorado do sistema é enviado ativamente para o dispositivo selecionado (ex.: auscultadores). Se o dispositivo de áudio do sistema também emitir som, recomenda-se cortar o som do áudio do sistema para uma experiência pura melhorada.",
+            Self::Indonesian => "💡 Peningkatan Audio Sistem: Audio sistem yang ditingkatkan dikeluarkan secara aktif ke perangkat yang Anda pilih (misalnya headphone). Jika perangkat audio sistem juga mengeluarkan suara, disarankan untuk membisukan audio sistem untuk pengalaman yang ditingkatkan murni.",
+            Self::Vietnamese => "💡 Nâng cao âm thanh hệ thống: Âm thanh hệ thống nâng cao đang được xuất trực tiếp ra thiết bị bạn đã chọn (ví dụ: tai nghe). Nếu thiết bị âm thanh hệ thống cũng phát ra tiếng, bạn nên tắt tiếng âm thanh hệ thống để có trải nghiệm thưởng thức trọn vẹn nhất.",
             Self::Russian => "💡 Улучшение звука системы: Обработанный системный звук выводится в реальном времени на выбранное устройство (например, наушники). Если системное аудиоустройство также воспроизводит звук, рекомендуется отключить звук системы.",
             Self::Spanish => "💡 Mejora de audio del sistema: El audio mejorado del sistema se envía en tiempo real al dispositivo seleccionado (ej. auriculares). Si el dispositivo de audio del sistema también emite sonido, se recomienda silenciar el audio del sistema para una experiencia óptima.",
+        }
+    }
+
+    pub fn btn_popout_equalizer(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "⧉ 獨立視窗",
+            Self::SimplifiedChinese => "⧉ 独立窗口",
+            Self::English => "⧉ Pop out window",
+            Self::French => "⧉ Fenêtre séparée",
+            Self::German => "⧉ Eigenes Fenster",
+            Self::Italian => "⧉ Finestra separata",
+            Self::Japanese => "⧉ 独立ウィンドウ",
+            Self::Korean => "⧉ 독립 창으로 열기",
+            Self::PortugueseBrazil => "⧉ Destacar janela",
+            Self::PortuguesePortugal => "⧉ Janela independente",
+            Self::Indonesian => "⧉ Pisahkan jendela",
+            Self::Vietnamese => "⧉ Tách cửa sổ riêng",
+            Self::Russian => "⧉ Отдельное окно",
+            Self::Spanish => "⧉ Separar ventana",
+        }
+    }
+
+    pub fn btn_dock_equalizer(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "⤓ 嵌入主視窗",
+            Self::SimplifiedChinese => "⤓ 嵌入主窗口",
+            Self::English => "⤓ Embed in main window",
+            Self::French => "⤓ Intégrer à la fenêtre principale",
+            Self::German => "⤓ Im Hauptfenster einbetten",
+            Self::Italian => "⤓ Incorpora nella finestra principale",
+            Self::Japanese => "⤓ メインウィンドウに埋め込む",
+            Self::Korean => "⤓ 메인 창으로 넣기",
+            Self::PortugueseBrazil => "⤓ Fixar na janela principal",
+            Self::PortuguesePortugal => "⤓ Incorporar na janela principal",
+            Self::Indonesian => "⤓ Sematkan di jendela utama",
+            Self::Vietnamese => "⤓ Nhúng vào cửa sổ chính",
+            Self::Russian => "⤓ Встроить в главное окно",
+            Self::Spanish => "⤓ Incrustar en ventana principal",
+        }
+    }
+
+    pub fn eq_window_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "Win2Pod - 音訊等化器",
+            Self::SimplifiedChinese => "Win2Pod - 音频均衡器",
+            Self::English => "Win2Pod - Audio Equalizer",
+            Self::French => "Win2Pod - Égaliseur audio",
+            Self::German => "Win2Pod - Audio-Equalizer",
+            Self::Italian => "Win2Pod - Equalizzatore audio",
+            Self::Japanese => "Win2Pod - オーディオイコライザー",
+            Self::Korean => "Win2Pod - 오디오 이퀄라이저",
+            Self::PortugueseBrazil => "Win2Pod - Equalizador de áudio",
+            Self::PortuguesePortugal => "Win2Pod - Equalizador de áudio",
+            Self::Indonesian => "Win2Pod - Equalizer Audio",
+            Self::Vietnamese => "Win2Pod - Bộ chỉnh âm Equalizer",
+            Self::Russian => "Win2Pod - Аудио эквалайзер",
+            Self::Spanish => "Win2Pod - Ecualizador de audio",
+        }
+    }
+
+    pub fn setting_detach_equalizer_window(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🪟 以獨立視窗開啟音訊等化器（支援視窗串右側磁吸）",
+            Self::SimplifiedChinese => "🪟 以独立窗口开启音频均衡器（支持窗口串右侧磁吸）",
+            Self::English => "🪟 Open equalizer in standalone window (snaps to window chain)",
+            Self::French => "🪟 Ouvrir l'égaliseur dans une fenêtre séparée (aimantation)",
+            Self::German => "🪟 Equalizer im eigenen Fenster öffnen (an Fensterkette andocken)",
+            Self::Italian => "🪟 Apri equalizzatore in finestra separata (aggancio alla catena)",
+            Self::Japanese => "🪟 イコライザーを独立ウィンドウで開く（ウィンドウ連の右端へ磁着）",
+            Self::Korean => "🪟 이퀄라이저를 독립 창으로 열기 (창 체인 우측에 자석 결합)",
+            Self::PortugueseBrazil => "🪟 Abrir equalizador em janela separada (encaixa na cadeia de janelas)",
+            Self::PortuguesePortugal => "🪟 Abrir equalizador em janela independente (encaixa na cadeia de janelas)",
+            Self::Indonesian => "🪟 Buka equalizer di jendela terpisah (menempel ke rantai jendela)",
+            Self::Vietnamese => "🪟 Mở bộ chỉnh âm ở cửa sổ riêng biệt (hút dính vào chuỗi cửa sổ)",
+            Self::Russian => "🪟 Открывать эквалайзер в отдельном окне (примагничивание)",
+            Self::Spanish => "🪟 Abrir ecualizador en ventana separada (acoplar a cadena)",
+        }
+    }
+
+    pub fn btn_open_mini_player(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "♫ 迷你播放器",
+            Self::SimplifiedChinese => "♫ 迷你播放器",
+            Self::English => "♫ Mini Player",
+            Self::French => "♫ Mini Lecteur",
+            Self::German => "♫ Mini-Player",
+            Self::Italian => "♫ Mini Lettore",
+            Self::Japanese => "♫ ミニプレーヤー",
+            Self::Korean => "♫ 미니 플레이어",
+            Self::PortugueseBrazil => "♫ Mini Player",
+            Self::PortuguesePortugal => "♫ Mini Leitor",
+            Self::Indonesian => "♫ Mini Player",
+            Self::Vietnamese => "♫ Trình phát thu nhỏ",
+            Self::Russian => "♫ Мини-плеер",
+            Self::Spanish => "♫ Mini Reproductor",
+        }
+    }
+
+    pub fn btn_open_equalizer(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🎚 等化器",
+            Self::SimplifiedChinese => "🎚 均衡器",
+            Self::English => "🎚 Equalizer",
+            Self::French => "🎚 Égaliseur",
+            Self::German => "🎚 Equalizer",
+            Self::Italian => "🎚 Equalizzatore",
+            Self::Japanese => "🎚 イコライザー",
+            Self::Korean => "🎚 이퀄라이저",
+            Self::PortugueseBrazil => "🎚 Equalizador",
+            Self::PortuguesePortugal => "🎚 Equalizador",
+            Self::Indonesian => "🎚 Equalizer",
+            Self::Vietnamese => "🎚 Bộ chỉnh âm",
+            Self::Russian => "🎚 Эквалайзер",
+            Self::Spanish => "🎚 Ecualizador",
+        }
+    }
+
+    pub fn mini_player_window_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "Win2Pod - 迷你播放器",
+            Self::SimplifiedChinese => "Win2Pod - 迷你播放器",
+            Self::English => "Win2Pod - Mini Player",
+            Self::French => "Win2Pod - Mini Lecteur",
+            Self::German => "Win2Pod - Mini-Player",
+            Self::Italian => "Win2Pod - Mini Lettore",
+            Self::Japanese => "Win2Pod - ミニプレーヤー",
+            Self::Korean => "Win2Pod - 미니 플레이어",
+            Self::PortugueseBrazil => "Win2Pod - Mini Player",
+            Self::PortuguesePortugal => "Win2Pod - Mini Leitor",
+            Self::Indonesian => "Win2Pod - Mini Player",
+            Self::Vietnamese => "Win2Pod - Trình phát thu nhỏ",
+            Self::Russian => "Win2Pod - Мини-плеер",
+            Self::Spanish => "Win2Pod - Mini Reproductor",
+        }
+    }
+
+    pub fn tooltip_open_mini_player(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "開啟迷你播放器並磁吸於等化器上方",
+            Self::SimplifiedChinese => "开启迷你播放器并磁吸于均衡器上方",
+            Self::English => "Open Mini Player docked above Equalizer",
+            Self::French => "Ouvrir le mini lecteur aimanté au-dessus de l'égaliseur",
+            Self::German => "Mini-Player öffnen (über Equalizer andocken)",
+            Self::Italian => "Apri mini lettore agganciato sopra l'equalizzatore",
+            Self::Japanese => "イコライザー上部に磁着するミニプレーヤーを開く",
+            Self::Korean => "이퀄라이저 상단에 자석 결합되는 미니 플레이어 열기",
+            Self::PortugueseBrazil => "Abrir mini player fixado acima do equalizador",
+            Self::PortuguesePortugal => "Abrir mini leitor fixado acima do equalizador",
+            Self::Indonesian => "Buka Mini Player menempel di atas Equalizer",
+            Self::Vietnamese => "Mở trình phát thu nhỏ hút dính phía trên bộ chỉnh âm",
+            Self::Russian => "Открыть мини-плеер с примагничиванием сверху эквалайзера",
+            Self::Spanish => "Abrir mini reproductor acoplado arriba del ecualizador",
+        }
+    }
+
+    pub fn tooltip_open_equalizer(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "開啟音訊等化器並磁吸於播放器下方",
+            Self::SimplifiedChinese => "开启音频均衡器并磁吸于播放器下方",
+            Self::English => "Open Equalizer docked below Mini Player",
+            Self::French => "Ouvrir l'égaliseur aimanté sous le lecteur",
+            Self::German => "Equalizer öffnen (unter Player andocken)",
+            Self::Italian => "Apri equalizzatore agganciato sotto il lettore",
+            Self::Japanese => "プレーヤー下部に磁着するイコライザーを開く",
+            Self::Korean => "플레이어 하단에 자석 결합되는 이퀄라이저 열기",
+            Self::PortugueseBrazil => "Abrir equalizador fixado abaixo do player",
+            Self::PortuguesePortugal => "Abrir equalizador fixado abaixo do leitor",
+            Self::Indonesian => "Buka Equalizer menempel di bawah Player",
+            Self::Vietnamese => "Mở bộ chỉnh âm hút dính phía dưới trình phát",
+            Self::Russian => "Открыть эквалайзер с примагничиванием снизу плеера",
+            Self::Spanish => "Abrir ecualizador acoplado debajo del reproductor",
+        }
+    }
+
+    pub fn mini_player_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "迷你播放器",
+            Self::SimplifiedChinese => "迷你播放器",
+            Self::English => "Mini Player",
+            Self::French => "Mini Lecteur",
+            Self::German => "Mini-Player",
+            Self::Italian => "Mini Lettore",
+            Self::Japanese => "ミニプレーヤー",
+            Self::Korean => "미니 플레이어",
+            Self::PortugueseBrazil => "Mini Player",
+            Self::PortuguesePortugal => "Mini Leitor",
+            Self::Indonesian => "Pemutar Mini",
+            Self::Vietnamese => "Trình phát mini",
+            Self::Russian => "Мини-плеер",
+            Self::Spanish => "Mini Reproductor",
+        }
+    }
+
+    pub fn tooltip_show_main_window(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "叫出 Win2Pod 主視窗",
+            Self::SimplifiedChinese => "调出 Win2Pod 主窗口",
+            Self::English => "Show Win2Pod Main Window",
+            Self::French => "Afficher la fenêtre principale Win2Pod",
+            Self::German => "Win2Pod-Hauptfenster anzeigen",
+            Self::Italian => "Mostra la finestra principale di Win2Pod",
+            Self::Japanese => "Win2Pod メインウィンドウを表示",
+            Self::Korean => "Win2Pod 메인 창 표시",
+            Self::PortugueseBrazil => "Mostrar janela principal do Win2Pod",
+            Self::PortuguesePortugal => "Mostrar janela principal do Win2Pod",
+            Self::Indonesian => "Tampilkan Jendela Utama Win2Pod",
+            Self::Vietnamese => "Hiện cửa sổ chính Win2Pod",
+            Self::Russian => "Показать главное окно Win2Pod",
+            Self::Spanish => "Mostrar la ventana principal de Win2Pod",
+        }
+    }
+
+    pub fn tooltip_dock_main_window(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🧲 將主視窗磁吸至此處",
+            Self::SimplifiedChinese => "🧲 将主窗口磁吸至此处",
+            Self::English => "🧲 Dock Main Window here",
+            Self::French => "🧲 Aimante la fenêtre principale ici",
+            Self::German => "🧲 Hauptfenster hier andocken",
+            Self::Italian => "🧲 Aggancia la finestra principale qui",
+            Self::Japanese => "🧲 メインウィンドウをここに磁着",
+            Self::Korean => "🧲 메인 창을 여기에 자석 결합",
+            Self::PortugueseBrazil => "🧲 Encaixar a janela principal aqui",
+            Self::PortuguesePortugal => "🧲 Encaixar a janela principal aqui",
+            Self::Indonesian => "🧲 Tempelkan Jendela Utama ke sini",
+            Self::Vietnamese => "🧲 Hút dính Cửa sổ chính vào đây",
+            Self::Russian => "🧲 Примагнитить главное окно сюда",
+            Self::Spanish => "🧲 Acoplar la ventana principal aquí",
+        }
+    }
+
+    pub fn tooltip_popout_mini_player(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "開啟迷你播放器獨立視窗",
+            Self::SimplifiedChinese => "打开迷你播放器独立窗口",
+            Self::English => "Open Mini Player window",
+            Self::French => "Ouvrir la fenêtre du mini lecteur",
+            Self::German => "Mini-Player-Fenster öffnen",
+            Self::Italian => "Apri finestra mini lettore",
+            Self::Japanese => "ミニプレーヤーウィンドウを開く",
+            Self::Korean => "미니 플레이어 창 열기",
+            Self::PortugueseBrazil => "Abrir janela do mini player",
+            Self::PortuguesePortugal => "Abrir janela do mini leitor",
+            Self::Indonesian => "Buka jendela pemutar mini",
+            Self::Vietnamese => "Mở cửa sổ trình phát mini",
+            Self::Russian => "Открыть окно мини-плеера",
+            Self::Spanish => "Abrir ventana del mini reproductor",
+        }
+    }
+
+    pub fn tooltip_popout_open(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "彈出獨立視窗",
+            Self::SimplifiedChinese => "弹出独立窗口",
+            Self::English => "Pop out into standalone window",
+            Self::French => "Ouvrir dans une fenêtre séparée",
+            Self::German => "In eigenem Fenster öffnen",
+            Self::Italian => "Apri in finestra separata",
+            Self::Japanese => "独立ウィンドウで開く",
+            Self::Korean => "독립 창으로 열기",
+            Self::PortugueseBrazil => "Destacar em janela separada",
+            Self::PortuguesePortugal => "Abrir em janela independente",
+            Self::Indonesian => "Buka di jendela terpisah",
+            Self::Vietnamese => "Mở trong cửa sổ riêng",
+            Self::Russian => "Открыть в отдельном окне",
+            Self::Spanish => "Abrir en ventana independiente",
+        }
+    }
+
+    pub fn tooltip_popout_close(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "關閉獨立視窗",
+            Self::SimplifiedChinese => "关闭独立窗口",
+            Self::English => "Close standalone window",
+            Self::French => "Fermer la fenêtre séparée",
+            Self::German => "Eigenes Fenster schließen",
+            Self::Italian => "Chiudi finestra separata",
+            Self::Japanese => "独立ウィンドウを閉じる",
+            Self::Korean => "독립 창 닫기",
+            Self::PortugueseBrazil => "Fechar janela separada",
+            Self::PortuguesePortugal => "Fechar janela independente",
+            Self::Indonesian => "Tutup jendela terpisah",
+            Self::Vietnamese => "Đóng cửa sổ riêng",
+            Self::Russian => "Закрыть отдельное окно",
+            Self::Spanish => "Cerrar ventana independiente",
+        }
+    }
+
+    pub fn eq_profile_normal_hint(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "💡 正在調整本機投放至音訊裝置時的等化器與聲音增強效果。",
+            Self::SimplifiedChinese => "💡 正在调整本机投放至音频设备时的均衡器与声音增强效果。",
+            Self::English => "💡 Tuning EQ and sound enhancers for standard playback to audio devices.",
+            Self::French => "💡 Réglage de l'égaliseur et des effets pour la lecture standard vers les périphériques audio.",
+            Self::German => "💡 Optimieren von EQ und Soundeffekten für die Standardwiedergabe auf Audiogeräten.",
+            Self::Italian => "💡 Regolazione di EQ ed effetti sonori per la riproduzione standard sui dispositivi audio.",
+            Self::Japanese => "💡 オーディオデバイスへの通常再生時のイコライザーとサウンド拡張を調整中。",
+            Self::Korean => "💡 오디오 장치로의 일반 재생용 EQ 및 사운드 향상 효과를 조정하는 중입니다.",
+            Self::PortugueseBrazil => "💡 Ajustando EQ e efeitos sonoros para reprodução padrão em dispositivos de áudio.",
+            Self::PortuguesePortugal => "💡 A ajustar o equalizador e os efeitos sonoros para a reprodução padrão nos dispositivos de áudio.",
+            Self::Indonesian => "💡 Menyesuaikan EQ dan penyempurna suara untuk pemutaran standar ke perangkat audio.",
+            Self::Vietnamese => "💡 Đang điều chỉnh EQ và hiệu ứng âm thanh cho phát lại tiêu chuẩn đến thiết bị âm thanh.",
+            Self::Russian => "💡 Настройка эквалайзера и звуковых эффектов для стандартного воспроизведения.",
+            Self::Spanish => "💡 Ajustando el ecualizador y los efectos para la reproducción estándar en dispositivos de audio.",
         }
     }
 }
@@ -4246,6 +6410,9 @@ impl NoticeKind {
                 Language::Japanese => format!("スピーカー「{name}」の接続が切断されました。自動再接続中..."),
                 Language::Korean => format!("스피커 \"{name}\" 연결이 끊어졌습니다. 자동 재연결 중..."),
                 Language::PortugueseBrazil => format!("Conexão perdida com \"{name}\", reconectando automaticamente..."),
+                Language::PortuguesePortugal => format!("Ligação perdida com \"{name}\", a religar automaticamente..."),
+                Language::Indonesian => format!("Koneksi terputus ke \"{name}\", menghubungkan kembali otomatis..."),
+                Language::Vietnamese => format!("Mất kết nối với \"{name}\", đang tự động kết nối lại..."),
                 Language::Russian => format!("Связь с \"{name}\" потеряна, автоматическое переподключение..."),
                 Language::Spanish => format!("Conexión perdida con \"{name}\", reconectando automáticamente..."),
             },
@@ -4259,6 +6426,9 @@ impl NoticeKind {
                 Language::Japanese => format!("スピーカー「{name}」の接続が復旧しました"),
                 Language::Korean => format!("스피커 \"{name}\" 연결이 복구되었습니다"),
                 Language::PortugueseBrazil => format!("Conexão restabelecida com \"{name}\""),
+                Language::PortuguesePortugal => format!("Ligação restabelecida com \"{name}\""),
+                Language::Indonesian => format!("Koneksi dipulihkan ke \"{name}\""),
+                Language::Vietnamese => format!("Đã khôi phục kết nối với \"{name}\""),
                 Language::Russian => format!("Связь с \"{name}\" восстановлена"),
                 Language::Spanish => format!("Conexión restablecida con \"{name}\""),
             },
@@ -4272,6 +6442,9 @@ impl NoticeKind {
                 Language::Japanese => format!("スピーカー「{name}」が他のデバイスに乗っ取られたため、自動ミュートしました。"),
                 Language::Korean => format!("스피커 \"{name}\"을(를) 다른 기기에서 사용하여 자동으로 음소거되었습니다."),
                 Language::PortugueseBrazil => format!("O alto-falante \"{name}\" foi assumido por outro dispositivo, silenciado."),
+                Language::PortuguesePortugal => format!("O altifalante \"{name}\" foi assumido por outro dispositivo, sem som."),
+                Language::Indonesian => format!("Speaker \"{name}\" diambil alih oleh perangkat lain, dibisukan."),
+                Language::Vietnamese => format!("Loa \"{name}\" đã bị thiết bị khác chiếm quyền, đã tắt tiếng."),
                 Language::Russian => format!("Колонка \"{name}\" занята другим устройством, звук выключен."),
                 Language::Spanish => format!("El altavoz \"{name}\" fue tomado por otro dispositivo, silenciado."),
             },
@@ -4285,6 +6458,9 @@ impl NoticeKind {
                 Language::Japanese => format!("スピーカー「{name}」の接続が切断されたため、自動ミュートしました。"),
                 Language::Korean => format!("스피커 \"{name}\" 연결이 끊겨 자동으로 음소거되었습니다."),
                 Language::PortugueseBrazil => format!("Conexão perdida com \"{name}\", silenciado."),
+                Language::PortuguesePortugal => format!("Ligação perdida com \"{name}\", sem som."),
+                Language::Indonesian => format!("Koneksi terputus ke \"{name}\", dibisukan."),
+                Language::Vietnamese => format!("Mất kết nối với \"{name}\", đã tắt tiếng."),
                 Language::Russian => format!("Связь с \"{name}\" прервана, звук выключен."),
                 Language::Spanish => format!("Conexión perdida con \"{name}\", silenciado."),
             },
@@ -4298,6 +6474,9 @@ impl NoticeKind {
                 Language::Japanese => format!("PCがスリープから復帰しました。「{name}」に再接続中..."),
                 Language::Korean => format!("PC가 절전 모드에서 해제되었습니다. \"{name}\"에 다시 연결 중..."),
                 Language::PortugueseBrazil => format!("PC reativado, reconectando a \"{name}\"..."),
+                Language::PortuguesePortugal => format!("PC reativado, a religar a \"{name}\"..."),
+                Language::Indonesian => format!("PC bangun, menghubungkan kembali ke \"{name}\"..."),
+                Language::Vietnamese => format!("PC đã đánh thức, đang kết nối lại với \"{name}\"..."),
                 Language::Russian => format!("ПК вышел из сна, переподключение к \"{name}\"..."),
                 Language::Spanish => format!("PC reanudado, reconectando a \"{name}\"..."),
             },
@@ -4311,6 +6490,9 @@ impl NoticeKind {
                 Language::Japanese => format!("PCが復帰し、「{name}」への接続を正常に再開しました"),
                 Language::Korean => format!("PC가 해제되어 \"{name}\" 연결이 성공적으로 복구되었습니다"),
                 Language::PortugueseBrazil => format!("PC reativado, conexão restabelecida com sucesso a \"{name}\""),
+                Language::PortuguesePortugal => format!("PC reativado, ligação restabelecida com sucesso a \"{name}\""),
+                Language::Indonesian => format!("PC bangun, koneksi ke \"{name}\" berhasil dipulihkan"),
+                Language::Vietnamese => format!("PC đã đánh thức, đã khôi phục thành công kết nối tới \"{name}\""),
                 Language::Russian => format!("ПК вышел из сна, связь с \"{name}\" успешно восстановлена"),
                 Language::Spanish => format!("PC reanudado, conexión con \"{name}\" restablecida con éxito"),
             },
@@ -4324,6 +6506,9 @@ impl NoticeKind {
                 Language::Japanese => format!("スピーカー「{name}」は他のデバイスに使用中のため、ミュートに設定しました。"),
                 Language::Korean => format!("스피커 \"{name}\"이(가) 다른 기기에서 사용 중이므로 음소거되었습니다."),
                 Language::PortugueseBrazil => format!("O alto-falante \"{name}\" está ocupado por outro dispositivo, silenciado."),
+                Language::PortuguesePortugal => format!("O altifalante \"{name}\" está ocupado por outro dispositivo, sem som."),
+                Language::Indonesian => format!("Speaker \"{name}\" sedang digunakan oleh perangkat lain, dibisukan."),
+                Language::Vietnamese => format!("Loa \"{name}\" đang bận bởi thiết bị khác, đã tắt tiếng."),
                 Language::Russian => format!("Колонка \"{name}\" занята другим устройством, звук заглушен."),
                 Language::Spanish => format!("El altavoz \"{name}\" está ocupado por otro dispositivo, silenciado."),
             },
@@ -4337,6 +6522,9 @@ impl NoticeKind {
                 Language::Japanese => format!("復帰後に「{name}」へ再接続できなかったため、ミュートに設定しました。"),
                 Language::Korean => format!("절전 해제 후 \"{name}\"에 다시 연결할 수 없어 음소거되었습니다."),
                 Language::PortugueseBrazil => format!("Não foi possível reconectar a \"{name}\" após suspensão, silenciado."),
+                Language::PortuguesePortugal => format!("Não foi possível religar a \"{name}\" após suspensão, sem som."),
+                Language::Indonesian => format!("Tidak dapat menghubungkan kembali ke \"{name}\" setelah bangun, dibisukan."),
+                Language::Vietnamese => format!("Không thể kết nối lại với \"{name}\" sau khi đánh thức, đã tắt tiếng."),
                 Language::Russian => format!("Не удалось переподключиться к \"{name}\" после сна, звук отключен."),
                 Language::Spanish => format!("No se pudo reconectar a \"{name}\" tras reactivar, silenciado."),
             },
@@ -4350,6 +6538,9 @@ impl NoticeKind {
                 Language::Japanese => "AirPods の Bluetooth 音声チャンネルの準備を待機中...（iPhone 等の別機器で使用中の場合は、Windows の Bluetooth 設定から接続してください）".to_string(),
                 Language::Korean => "AirPods Bluetooth 오디오 채널 준비 대기 중... (iPhone 등 다른 기기에서 사용 중인 경우 Windows Bluetooth 설정에서 연결하세요)".to_string(),
                 Language::PortugueseBrazil => "Aguardando canal de áudio Bluetooth dos AirPods... (Se em uso por outro dispositivo como iPhone, conecte nas configurações de Bluetooth do Windows)".to_string(),
+                Language::PortuguesePortugal => "A aguardar pelo canal de áudio Bluetooth dos AirPods... (Se em utilização por outro dispositivo como o iPhone, ligue nas Definições de Bluetooth do Windows)".to_string(),
+                Language::Indonesian => "Menunggu saluran audio Bluetooth AirPods siap... (Jika sedang digunakan oleh perangkat lain seperti iPhone, hubungkan melalui Pengaturan Bluetooth Windows)".to_string(),
+                Language::Vietnamese => "Đang chờ kênh âm thanh Bluetooth của AirPods sẵn sàng... (Nếu đang được thiết bị khác như iPhone sử dụng, hãy kết nối trong Cài đặt Bluetooth của Windows)".to_string(),
                 Language::Russian => "Ожидание готовности аудиоканала Bluetooth AirPods... (Если используется другим устройством, например iPhone, подключитесь в настройках Bluetooth Windows)".to_string(),
                 Language::Spanish => "Esperando el canal de audio Bluetooth de los AirPods... (Si se usa en otro dispositivo como un iPhone, conéctelo en la configuración de Bluetooth de Windows)".to_string(),
             },
@@ -4363,6 +6554,9 @@ impl NoticeKind {
                 Language::Japanese => "AirPods の準備が未完了か他の機器で使用中のため、HomePod に接続中。PCで使用する場合は Windows の Bluetooth 設定から接続してください。".to_string(),
                 Language::Korean => "AirPods가 준비되지 않았거나 다른 기기에서 사용 중이므로 HomePod에 연결합니다. PC에서 사용하려면 Windows Bluetooth 설정에서 연결하세요.".to_string(),
                 Language::PortugueseBrazil => "AirPods não prontos ou em uso por outro dispositivo; conectando ao HomePod. Para usá-los no PC, conecte nas configurações de Bluetooth do Windows.".to_string(),
+                Language::PortuguesePortugal => "AirPods não preparados ou em utilização por outro dispositivo; a ligar ao HomePod. Para os utilizar no PC, ligue nas Definições de Bluetooth do Windows.".to_string(),
+                Language::Indonesian => "AirPods belum siap atau sedang digunakan perangkat lain; menghubungkan ke HomePod. Untuk menggunakan di PC, hubungkan melalui Pengaturan Bluetooth Windows.".to_string(),
+                Language::Vietnamese => "AirPods chưa sẵn sàng hoặc đang được thiết bị khác sử dụng; đang kết nối với HomePod. Để sử dụng trên PC, hãy kết nối trong Cài đặt Bluetooth của Windows.".to_string(),
                 Language::Russian => "AirPods не готовы или заняты другим устройством; подключение к HomePod. Для использования на ПК подключите их в настройках Bluetooth Windows.".to_string(),
                 Language::Spanish => "AirPods no listos o en uso por otro dispositivo; conectando a HomePod. Para usarlos en PC, conéctelos en la configuración de Bluetooth de Windows.".to_string(),
             },
@@ -4388,5 +6582,91 @@ mod tests {
 
         let ap_status = lang.tray_airpods_status_only("AirPods 3", lang.airpods_connected_status_tag());
         assert_eq!(ap_status, "🎧 AirPods 3 (已連線)");
+    }
+
+    #[test]
+    fn test_phase1_languages() {
+        // Portuguese (Portugal)
+        assert_eq!(Language::from_code("pt-pt"), Some(Language::PortuguesePortugal));
+        assert_eq!(Language::PortuguesePortugal.code(), "pt-PT");
+        assert_eq!(Language::PortuguesePortugal.btn_refresh(), " ⟳ Atualizar ");
+        assert_eq!(Language::PortuguesePortugal.settings_section_audio(), "Fonte de áudio e saída");
+        assert_eq!(Language::PortuguesePortugal.settings_tab_receiver(), "Recetor de áudio");
+        assert_eq!(Language::PortuguesePortugal.vol_speaker_muted("HomePod"), "🔇 HomePod sem som");
+        assert_eq!(Language::PortuguesePortugal.vol_speaker_playing("HomePod"), "🔊 HomePod em reprodução");
+        assert_eq!(Language::PortuguesePortugal.balance_left(25), "◄ E 25%");
+        assert_eq!(Language::PortuguesePortugal.balance_right(25), "25% D ►");
+
+        // Indonesian
+        assert_eq!(Language::from_code("id"), Some(Language::Indonesian));
+        assert_eq!(Language::from_code("id-id"), Some(Language::Indonesian));
+        assert_eq!(Language::from_code("in"), Some(Language::Indonesian));
+        assert_eq!(Language::Indonesian.code(), "id-ID");
+        assert_eq!(Language::Indonesian.btn_refresh(), " ⟳ Segarkan ");
+        assert_eq!(Language::Indonesian.btn_back(), "⬅ Kembali");
+        assert_eq!(Language::Indonesian.settings_section_audio(), "Sumber & Output Audio");
+        assert_eq!(Language::Indonesian.vol_speaker_muted("HomePod"), "🔇 HomePod dibisukan");
+        assert_eq!(Language::Indonesian.vol_speaker_playing("HomePod"), "🔊 HomePod sedang memutar");
+        assert_eq!(Language::Indonesian.balance_center(), "◄ Tengah ►");
+
+        // Vietnamese
+        assert_eq!(Language::from_code("vi"), Some(Language::Vietnamese));
+        assert_eq!(Language::from_code("vi-vn"), Some(Language::Vietnamese));
+        assert_eq!(Language::Vietnamese.code(), "vi-VN");
+        assert_eq!(Language::Vietnamese.btn_refresh(), " ⟳ Làm mới ");
+        assert_eq!(Language::Vietnamese.btn_back(), "⬅ Quay lại");
+        assert_eq!(Language::Vietnamese.settings_section_audio(), "Nguồn & Đầu ra âm thanh");
+        assert_eq!(Language::Vietnamese.vol_speaker_muted("HomePod"), "🔇 HomePod đã tắt tiếng");
+        assert_eq!(Language::Vietnamese.vol_speaker_playing("HomePod"), "🔊 HomePod đang phát");
+        assert_eq!(Language::Vietnamese.balance_center(), "◄ Giữa ►");
+    }
+
+    #[test]
+    fn test_receiver_forwarding_and_dual_eq_i18n() {
+        for lang in ALL_LANGUAGES {
+            assert!(!lang.airplay_receiver_output_device_label().is_empty());
+            assert!(!lang.airplay_receiver_output_device_hint().is_empty());
+            assert!(!lang.airplay_receiver_apply_effects_label().is_empty());
+            assert!(!lang.airplay_receiver_btn_adjust_eq().is_empty());
+            assert!(!lang.eq_profile_label().is_empty());
+            assert!(!lang.eq_profile_normal().is_empty());
+            assert!(!lang.eq_profile_receiver().is_empty());
+            assert!(!lang.eq_profile_receiver_hint().is_empty());
+        }
+        assert_eq!(Language::TraditionalChinese.eq_profile_normal(), "🖥️ 一般播放 / HomePod");
+        assert_eq!(Language::TraditionalChinese.eq_profile_receiver(), "📲 音訊接收轉發");
+        assert_eq!(Language::English.eq_profile_normal(), "🖥️ Playback / HomePod");
+        assert_eq!(Language::English.eq_profile_receiver(), "📲 Receiver Forwarding");
+    }
+
+    #[test]
+    fn test_equalizer_window_i18n() {
+        for lang in ALL_LANGUAGES {
+            assert!(!lang.btn_popout_equalizer().is_empty());
+            assert!(!lang.btn_dock_equalizer().is_empty());
+            assert!(!lang.eq_window_title().is_empty());
+            assert!(!lang.setting_detach_equalizer_window().is_empty());
+            assert!(!lang.btn_open_mini_player().is_empty());
+            assert!(!lang.btn_open_equalizer().is_empty());
+            assert!(!lang.mini_player_window_title().is_empty());
+            assert!(!lang.tooltip_open_mini_player().is_empty());
+            assert!(!lang.tooltip_open_equalizer().is_empty());
+            assert!(!lang.mini_player_title().is_empty());
+            assert!(!lang.tooltip_show_main_window().is_empty());
+            assert!(!lang.tooltip_popout_mini_player().is_empty());
+            assert!(!lang.tooltip_popout_open().is_empty());
+            assert!(!lang.tooltip_popout_close().is_empty());
+            assert!(!lang.eq_profile_normal_hint().is_empty());
+        }
+        assert_eq!(Language::TraditionalChinese.btn_popout_equalizer(), "⧉ 獨立視窗");
+        assert_eq!(Language::TraditionalChinese.btn_dock_equalizer(), "⤓ 嵌入主視窗");
+        assert_eq!(Language::TraditionalChinese.btn_open_mini_player(), "♫ 迷你播放器");
+        assert_eq!(Language::TraditionalChinese.btn_open_equalizer(), "🎚 等化器");
+        assert_eq!(Language::TraditionalChinese.mini_player_title(), "迷你播放器");
+        assert_eq!(Language::English.btn_popout_equalizer(), "⧉ Pop out window");
+        assert_eq!(Language::English.btn_dock_equalizer(), "⤓ Embed in main window");
+        assert_eq!(Language::English.btn_open_mini_player(), "♫ Mini Player");
+        assert_eq!(Language::English.btn_open_equalizer(), "🎚 Equalizer");
+        assert_eq!(Language::English.mini_player_title(), "Mini Player");
     }
 }

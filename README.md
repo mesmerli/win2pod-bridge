@@ -93,7 +93,7 @@ rustup default stable-x86_64-pc-windows-gnu
 
 ## 📜 Acknowledgements & License
 
-This project builds upon foundational research and code from [**airplay2-rs**](https://github.com/lmcgartland/airplay2-rs) by Lucas McGartland and [**AirPodsDesktop**](https://github.com/SpriteOvO/AirPodsDesktop) by SpriteOvO (Apple Continuity BLE Proximity Pairing protocol & in-ear detection logic), extended with:
+This project builds upon foundational research and code from [**airplay2-rs**](https://github.com/lmcgartland/airplay2-rs) by Lucas McGartland, [**UxPlay**](https://github.com/FDH2/UxPlay) (AirPlay RAOP / RTSP audio receiver & DACP remote protocol reference), and [**AirPodsDesktop**](https://github.com/SpriteOvO/AirPodsDesktop) by SpriteOvO (Apple Continuity BLE Proximity Pairing protocol & in-ear detection logic), extended with:
 - Pure Rust Fluent flyout GUI & system tray management (`crates/homepod-cast-gui`)
 - Native AirPods / Beats BLE in-ear detection, battery tracking, and priority audio routing handoff
 - Windows native WASAPI Loopback capture pipeline and real-time ALAC encoder

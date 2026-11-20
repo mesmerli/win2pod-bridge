@@ -1,17 +1,20 @@
 # Microsoft Store Produktbeschreibung - Deutsch (de-DE)
-# Win2Pod Bridge - Version 0.1.16
+# Win2Pod Bridge - Version 0.1.18
 
 ## 0. Neuheiten in dieser Version (What's new in this version - Für Partner Center)
 ```text
-[Win2Pod Bridge 0.1.16 Großes Update]
-• 🔔 Neu gestalteter kompakter 2-Zeilen-Tooltip im Infobereich: Der Tooltip des Taskleistensymbols wurde in ein übersichtliches zweizeiliges Format umgestaltet. Zeile 1 zeigt den HomePod / AirPlay Streaming-Status und die Lautstärke (z. B. „🔊 Streaming: Wohnzimmer (9%)“ oder Stumm); Zeile 2 zeigt den Tragezustand und Akkustand der AirPods (z. B. „🎧 AirPods 3: ● L 100%“). Verhindert Textabschneidungen und unnötige Zusätze.
-• 🔄 Dynamische AirPods ↔ HomePod Statusspiegelung: Schaltet der automatische Vorrang auf die Ohrhörer um, zeigt der Tooltip sofort die lokale Audio-Verbesserung an und wechselt beim Einlegen ins Ladecase nahtlos zurück zur HomePod-Übertragung.
-• 🛡️ Auto Pre-Amp & Dynamisches Headroom-Management: Der 10-Band-Equalizer passt die Vorverstärkung bei Bandanhebungen automatisch an, um digitale Übersteuerungen (Clipping) vollständig zu eliminieren. In Kombination mit einem transparenten Peak-Limiter bleibt der Klang stets unverfälscht und kristallklar.
-• 🔄 Globales Audio-Fallback & Selbstheilung: Systemweite Überwachung der Audio-Endpunkte. Wird das Standard-Wiedergabegerät oder das Proxy-Gerät getrennt, schaltet Win2Pod nahtlos auf ein anderes aktives Audiogerät um, sodass der Windows-Ton niemals blockiert wird.
-• 🎧 AirPods Audio- & Lautstärke-Isolation: Dynamische Erkennung der Hardware-GUIDs verhindert fehlerhafte Lautstärke- oder Stummschaltungszustände beim Wechsel vom HomePod zu AirPods und synchronisiert die Lautstärkeregelung per Touch am Kopfhörer perfekt.
-• ⚡ Ereignisgesteuertes Smart Handoff (Event-Driven): Präzise automatische Fortsetzung der Medienwiedergabe beim Einlegen der AirPods in das Ladecase innerhalb von 30 Sekunden – vollkommen ohne Zeitverzögerungsfehler.
-• 🛡️ Anti-Feedback Shield Rückkopplungsschutz: Erkennt Rückkopplungsrisiken bei alleiniger AirPods-Nutzung und unterdrückt die Wiedergabeschleife zuverlässig, während die Frequenzspektrum-Visualisierung ressourcenschonend aktiv bleibt.
-• 🚀 Code-Optimierung & Leistungsverbesserungen: Verschlankte Audio-Umschaltlogik für höchste Zuverlässigkeit bei langen Streaming-Sitzungen.
+[Win2Pod Bridge 0.1.18 Großes Update - AirPlay Audio-Empfänger ist da!]
+• 📲 Brandneuer „AirPlay Audio-Empfänger (Audio Receiver)“:
+  - Verwandeln Sie Ihren Windows-PC in einen echten kabellosen AirPlay-Lautsprecher! Streamen Sie Audio von iPhone, iPad oder Mac („AirPlay“ im Kontrollzentrum) direkt auf Ihren PC.
+  - Native 44,1 kHz / 16-Bit verlustfreie ALAC-Echtzeit-Dekodierung für glasklaren Hi-Fi-Sound.
+• ✨ Maximaler Dynamikbereich (Unity Gain Passthrough):
+  - Umgeht Lautstärkebeschränkungen des iOS-Kontrollzentrums. Der Empfänger dekodiert direkt mit 1,0 (0 dB Unity Gain) digitalem Maximalpegel – volle Dynamik und Details bleiben auch bei leiserem Handy erhalten.
+  - Neues „✨ Max Dynamikbereich“-Badge mit Lautstärkeanzeige beim Darüberfahren.
+• ⏯️ Intelligente Standby-Reaktivierung (DACP-Target-Caching):
+  - Bei Wiedergabepause auf dem iPhone behält die Standby-Karte die ▶-Wiedergabetaste. Ein Klick weckt die Wiedergabe auf dem iPhone drahtlos auf.
+• 🎛️ Bidirektionale Mediensteuerung & Lip-Sync-Synchronisation:
+  - Steuern Sie Wiedergabe/Pause/Titelwechsel direkt vom PC aus, inklusive Albumcover-Synchronisation.
+  - Integrierte Dual-Latenz-Modi: Standard (1,5 s) und Tief (2,0 s) für lippensynchrones YouTube- & Videostreaming.
 ```
 
 ## 1. Produktname (Product Name)
@@ -25,9 +28,9 @@ Win2Pod Bridge
 *(Wird in Microsoft Store-Suchergebnissen, Kategoriekarten und Bannern angezeigt)*
 
 ```text
-Windows 10 & 11 Audio in verlustfreier ALAC-Qualität an Apple HomePod & AirPlay 2 Lautsprecher streamen. Neu: Win2Pod Motion 3D-Visualizer, Cover-Klick öffnet Player, dynamischer Zeiger-Stereo-Balance, HomePod-Gesten, Oberton-Exciter (HE) und 10-Band-EQ.
+Windows & Apple Audio perfekt vereint! PC-Audio verlustfrei via ALAC an HomePod streamen oder Musik von iPhone & iPad via AirPlay empfangen mit Unity Gain Dynamikbereich! Inkl. AirPods-Handoff, 3D-Visualizer, Medienfernbedienung & 10-Band-EQ.
 ```
-*(Zeichenanzahl: ca. 250 Zeichen, innerhalb des Limits von 270 Zeichen)*
+*(Zeichenanzahl: ca. 240 Zeichen, innerhalb des Limits von 270 Zeichen)*
 
 ---
 

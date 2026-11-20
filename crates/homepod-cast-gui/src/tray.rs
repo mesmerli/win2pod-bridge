@@ -90,9 +90,35 @@ pub fn notify_tray_state() {
 
 pub static MAIN_HWND: AtomicIsize = AtomicIsize::new(0);
 pub static IS_TRAY_HIDDEN: AtomicBool = AtomicBool::new(false);
+pub static IS_APP_FLEET_HIDDEN: AtomicBool = AtomicBool::new(false);
 pub static IS_ALWAYS_ON_TOP: AtomicBool = AtomicBool::new(false);
+pub static IS_APP_QUITTING: AtomicBool = AtomicBool::new(false);
 pub static LAST_POS_X: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(i32::MIN);
 pub static LAST_POS_Y: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(i32::MIN);
+
+pub fn is_app_fleet_hidden() -> bool {
+    IS_APP_FLEET_HIDDEN.load(Ordering::SeqCst)
+}
+
+pub fn is_app_quitting() -> bool {
+    IS_APP_QUITTING.load(Ordering::SeqCst)
+}
+
+pub fn trigger_app_quit(cmd_tx: &async_channel::Sender<GuiCmd>) {
+    if IS_APP_QUITTING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+        tracing::info!("[Shutdown] Initiating graceful application shutdown...");
+        let _ = cmd_tx.try_send(GuiCmd::Quit);
+        std::thread::spawn(|| {
+            // Give graceful shutdown ample time (5.0s) for network RTSP TEARDOWN and audio endpoint restoration.
+            // Under normal conditions, controller exits cleanly in ~0.5s - 1.5s via std::process::exit(0).
+            std::thread::sleep(std::time::Duration::from_millis(5000));
+            tracing::warn!("[Watchdog] Graceful exit timed out after 5000ms. Forcing exit.");
+            std::process::exit(0);
+        });
+    } else {
+        tracing::debug!("[Shutdown] Quit already in progress, ignoring repeated request.");
+    }
+}
 
 pub fn is_window_hidden_to_tray() -> bool {
     IS_TRAY_HIDDEN.load(Ordering::SeqCst)
@@ -100,7 +126,10 @@ pub fn is_window_hidden_to_tray() -> bool {
 
 #[inline]
 pub fn is_any_window_visible() -> bool {
-    !is_window_hidden_to_tray() || crate::visualizer::is_visualizer_open()
+    !is_window_hidden_to_tray()
+        || crate::visualizer::is_visualizer_visible()
+        || crate::snapping::is_window_visible_and_active(crate::snapping::WindowKind::MiniPlayer)
+        || crate::snapping::is_window_visible_and_active(crate::snapping::WindowKind::Equalizer)
 }
 
 static START_INSTANT: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
@@ -117,6 +146,27 @@ pub fn was_just_shown(threshold_ms: u64) -> bool {
     let now_ms = start.elapsed().as_millis() as u64;
     let last = LAST_SHOWN_MS.load(Ordering::SeqCst);
     now_ms.saturating_sub(last) < threshold_ms
+}
+
+/// Pure state evaluation: checks if Main Window is currently frontmost, on Page::Main,
+/// unminimized, not hidden, and fully ready for magnetic docking (Stage 2).
+/// Re-exported from Window Manager (snapping.rs).
+pub fn is_main_window_dock_ready() -> bool {
+    crate::snapping::is_main_window_dock_ready()
+}
+
+pub fn is_main_window_in_foreground() -> bool {
+    let hwnd = get_main_hwnd();
+    if hwnd.is_null() || is_window_hidden_to_tray() {
+        return false;
+    }
+    unsafe {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, IsIconic, IsWindowVisible};
+        if IsWindowVisible(hwnd) == 0 || IsIconic(hwnd) != 0 {
+            return false;
+        }
+        GetForegroundWindow() == hwnd
+    }
 }
 
 pub fn set_main_hwnd(hwnd: isize) {
@@ -158,19 +208,24 @@ pub fn get_main_hwnd() -> HWND {
 /// an unconstrained busy-poll loop consuming 100% of a CPU core (~5% total).
 /// Moving off-screen keeps DWM VSync active while removing the window from the screen,
 /// taskbar, and Alt+Tab switcher with 0.0% CPU usage.
-pub fn hide_window_to_tray(hwnd: HWND, _ctx: &egui::Context) {
+/// Hide ONLY the main window to the system tray (used when closing main window / cluster via X)
+pub fn hide_main_window_only(hwnd: HWND, _ctx: &egui::Context) {
     if hwnd.is_null() {
         return;
     }
     unsafe {
-        use windows_sys::Win32::Foundation::RECT;
         use windows_sys::Win32::UI::WindowsAndMessaging::{
             GetWindowLongW, GetWindowRect, SetWindowLongW, SetWindowPos,
-            GWL_EXSTYLE, HWND_NOTOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
-            WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+            GWL_EXSTYLE, HWND_NOTOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+            SWP_NOSIZE, SWP_NOZORDER, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
         };
 
-        let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+        let mut rect = windows_sys::Win32::Foundation::RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
         GetWindowRect(hwnd, &mut rect);
         let monitor = windows_sys::Win32::Graphics::Gdi::MonitorFromWindow(
             hwnd,
@@ -191,6 +246,7 @@ pub fn hide_window_to_tray(hwnd: HWND, _ctx: &egui::Context) {
         }
 
         IS_TRAY_HIDDEN.store(true, Ordering::SeqCst);
+        crate::spectrum::update_spectrum_needed_state();
 
         // Add WS_EX_TOOLWINDOW so it disappears from Taskbar and Alt+Tab
         let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
@@ -207,40 +263,36 @@ pub fn hide_window_to_tray(hwnd: HWND, _ctx: &egui::Context) {
             0,
             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
         );
-
-        if crate::visualizer::is_visualizer_fullscreen() {
-            let vis_hwnd = crate::visualizer::get_visualizer_hwnd();
-            if !vis_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0 {
-                windows_sys::Win32::UI::WindowsAndMessaging::SetWindowPos(
-                    vis_hwnd,
-                    windows_sys::Win32::UI::WindowsAndMessaging::HWND_TOPMOST,
-                    0,
-                    0,
-                    0,
-                    0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-                );
-            }
-        }
-
-        let is_bonded = crate::snapping::SNAPPING_ENABLED.load(Ordering::Relaxed)
-            && crate::snapping::get_dock_bond().is_bonded;
-
-        if is_bonded {
-            // When magnetically docked to main window, caption buttons are unified under main window.
-            // Closing main window (via X button) acts as a group close: close visualizer too!
-            crate::visualizer::close_visualizer();
-        } else {
-            // When visualizer is detached/independent, seamlessly return focus to visualizer
-            // if it is open so user can continue interacting with it.
-            let vis_hwnd = crate::visualizer::get_visualizer_hwnd();
-            if !vis_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0 {
-                windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow(vis_hwnd);
-                crate::visualizer::focus_visualizer();
-            }
-        }
     }
     trim_working_set();
+}
+
+/// Backward compatibility alias for hide_main_window_only
+pub fn hide_window_to_tray(hwnd: HWND, ctx: &egui::Context) {
+    hide_main_window_only(hwnd, ctx);
+}
+
+/// Hide ALL application windows to the system tray (used by global hotkey / tray click)
+pub fn hide_all_windows_to_tray(hwnd: HWND, ctx: &egui::Context) {
+    IS_APP_FLEET_HIDDEN.store(true, Ordering::SeqCst);
+    hide_main_window_only(hwnd, ctx);
+
+    unsafe {
+        let vis_hwnd = crate::visualizer::get_visualizer_hwnd();
+        if !vis_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0 {
+            crate::visualizer::hide_visualizer_with_cluster();
+        }
+
+        let eq_hwnd = crate::snapping::get_equalizer_hwnd();
+        if !eq_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(eq_hwnd) != 0 {
+            windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(eq_hwnd, windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE);
+        }
+
+        let mini_hwnd = crate::snapping::get_mini_player_hwnd();
+        if !mini_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(mini_hwnd) != 0 {
+            windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(mini_hwnd, windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE);
+        }
+    }
 }
 
 /// Restore window from system tray back onto visible desktop screen
@@ -252,12 +304,14 @@ pub fn show_window_from_tray(hwnd: HWND, ctx: &egui::Context) {
     unsafe {
         use windows_sys::Win32::UI::WindowsAndMessaging::{
             GetWindowLongW, SetWindowLongW, SetWindowPos,
-            GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST,
-            SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+            GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOP, HWND_TOPMOST,
+            SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SWP_NOACTIVATE,
             WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
         };
 
+        IS_APP_FLEET_HIDDEN.store(false, Ordering::SeqCst);
         IS_TRAY_HIDDEN.store(false, Ordering::SeqCst);
+        crate::spectrum::update_spectrum_needed_state();
 
         // Restore normal ex_style (removes WS_EX_TOOLWINDOW)
         let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
@@ -287,8 +341,24 @@ pub fn show_window_from_tray(hwnd: HWND, ctx: &egui::Context) {
             SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
         }
 
-        force_foreground(hwnd);
-        ensure_window_on_screen(hwnd);
+        // Restore any bonded or detached visualizer window that was hidden with the cluster/app
+        crate::visualizer::restore_visualizer_with_cluster();
+
+        let eq_hwnd = crate::snapping::get_equalizer_hwnd();
+        if !eq_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(eq_hwnd) != 0 {
+            windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(eq_hwnd, windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNOACTIVATE);
+            SetWindowPos(eq_hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+
+        let mini_hwnd = crate::snapping::get_mini_player_hwnd();
+        if !mini_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(mini_hwnd) != 0 {
+            windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(mini_hwnd, windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNOACTIVATE);
+            SetWindowPos(mini_hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+
+        // Elevate all fleet windows (including detached ones) and preserve clustered relations
+        crate::snapping::bring_fleet_to_top();
+
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         ctx.request_repaint();
     }
@@ -442,23 +512,22 @@ pub fn toggle_main_window(ctx: &egui::Context) {
         };
 
         if is_hidden || is_offscreen {
-            tracing::info!("toggle_main_window: Window hidden in tray -> showing and focusing");
+            tracing::info!("toggle_main_window: Window hidden in tray -> showing and focusing fleet");
             show_window_from_tray(hwnd, ctx);
         } else if !is_foreground || is_minimized {
             tracing::info!(
-                "toggle_main_window: Window not in foreground (is_fg={}, min={}) -> bringing to top",
+                "toggle_main_window: Fleet not in foreground (is_fg={}, min={}) -> bringing all windows to top",
                 is_foreground,
                 is_minimized
             );
             unsafe {
-                force_foreground(hwnd);
-                ensure_window_on_screen(hwnd);
+                crate::snapping::bring_fleet_to_top();
             }
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
             ctx.request_repaint();
         } else {
-            tracing::info!("toggle_main_window: Window is already foreground -> hiding to tray");
-            hide_window_to_tray(hwnd, ctx);
+            tracing::info!("toggle_main_window: Fleet is already foreground -> hiding all to tray");
+            hide_all_windows_to_tray(hwnd, ctx);
         }
     }
 }
@@ -467,6 +536,33 @@ pub fn show_and_focus_main_window(ctx: &egui::Context) {
     let hwnd = get_main_hwnd();
     if !hwnd.is_null() {
         show_window_from_tray(hwnd, ctx);
+    }
+}
+
+pub unsafe fn reset_all_windows_to_screen_center() {
+    let hwnd = get_main_hwnd();
+    if !hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(hwnd) != 0 {
+        if is_window_hidden_to_tray() {
+            if let Some(ctx) = crate::gui::get_egui_ctx() {
+                show_window_from_tray(hwnd, &ctx);
+            }
+        }
+        let work = crate::snapping::get_monitor_work_area(hwnd);
+        let cx = work.left + (work.right - work.left - 460).max(0) / 2;
+        let cy = work.top + (work.bottom - work.top - 680).max(0) / 2;
+        LAST_POS_X.store(cx, Ordering::SeqCst);
+        LAST_POS_Y.store(cy, Ordering::SeqCst);
+        windows_sys::Win32::UI::WindowsAndMessaging::SetWindowPos(
+            hwnd,
+            windows_sys::Win32::UI::WindowsAndMessaging::HWND_TOPMOST,
+            cx,
+            cy,
+            0,
+            0,
+            windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOSIZE | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
+        );
+        ensure_window_on_screen(hwnd);
+        force_foreground(hwnd);
     }
 }
 
@@ -487,9 +583,11 @@ pub fn bring_main_to_front() {
             };
 
             record_shown_time();
+            IS_APP_FLEET_HIDDEN.store(false, Ordering::SeqCst);
 
             if was_hidden {
                 IS_TRAY_HIDDEN.store(false, Ordering::SeqCst);
+                crate::spectrum::update_spectrum_needed_state();
                 let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
                 let new_ex = (ex & !(WS_EX_TOOLWINDOW as i32)) | (WS_EX_APPWINDOW as i32);
                 SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
@@ -540,6 +638,9 @@ pub fn bring_main_to_front() {
 
             // Always bring main window topmost above the visualizer window without stealing focus
             SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+            // Elevate all fleet windows (including detached ones) and preserve clustered relations
+            crate::snapping::bring_fleet_to_top();
 
             // If visualizer is open and in fullscreen, ensure Windows taskbar stays below it
             if crate::visualizer::is_visualizer_fullscreen() {
@@ -606,8 +707,10 @@ pub struct TrayManager {
     pub _menu: Menu,
     pub quit_id: tray_icon::menu::MenuId,
     pub show_id: tray_icon::menu::MenuId,
+    pub reset_id: tray_icon::menu::MenuId,
     pub mute_id: tray_icon::menu::MenuId,
     pub show_item: MenuItem,
+    pub reset_item: MenuItem,
     pub quit_item: MenuItem,
     pub mute_item: CheckMenuItem,
     last_status: Option<DeviceStatus>,
@@ -627,6 +730,10 @@ impl TrayManager {
         let show_item = MenuItem::new(lang.tray_open_panel(), true, None);
         let show_id = show_item.id().clone();
         menu.append(&show_item)?;
+
+        let reset_item = MenuItem::new(lang.tray_reset_windows(), true, None);
+        let reset_id = reset_item.id().clone();
+        menu.append(&reset_item)?;
 
         let mute_item = CheckMenuItem::new(lang.tray_mute(), true, false, None);
         let mute_id = mute_item.id().clone();
@@ -664,8 +771,10 @@ impl TrayManager {
             _menu: menu,
             quit_id,
             show_id,
+            reset_id,
             mute_id,
             show_item,
+            reset_item,
             quit_item,
             mute_item,
             last_status: None,
@@ -735,6 +844,7 @@ impl TrayManager {
         if lang_changed {
             self.last_language = Some(state.language);
             self.show_item.set_text(state.language.tray_open_panel());
+            self.reset_item.set_text(state.language.tray_reset_windows());
             self.quit_item.set_text(state.language.tray_quit());
         }
 
@@ -963,18 +1073,19 @@ pub fn spawn_tray_thread(
 
             let quit_id = tray_mgr.quit_id.clone();
             let show_id = tray_mgr.show_id.clone();
+            let reset_id = tray_mgr.reset_id.clone();
             let mute_id = tray_mgr.mute_id.clone();
 
             // Direct callback for right-click context menu clicks
             tray_icon::menu::MenuEvent::set_event_handler(Some(move |event: tray_icon::menu::MenuEvent| {
                 if event.id == quit_id {
-                    let _ = cmd_tx_menu.try_send(GuiCmd::Quit);
-                    std::thread::spawn(|| {
-                        std::thread::sleep(std::time::Duration::from_millis(2500));
-                        std::process::exit(0);
-                    });
+                    trigger_app_quit(&cmd_tx_menu);
                 } else if event.id == show_id {
                     show_and_focus_main_window(&egui_ctx_menu);
+                } else if event.id == reset_id {
+                    unsafe {
+                        reset_all_windows_to_screen_center();
+                    }
                 } else if event.id == mute_id {
                     let new_muted = !is_muted_menu.load(Ordering::SeqCst);
                     is_muted_menu.store(new_muted, Ordering::SeqCst);

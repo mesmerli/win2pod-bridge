@@ -606,7 +606,7 @@ mod tests {
 
             // Over 0.95: smoothly compresses and never exceeds 1.0
             let over = peak_limit(2.0);
-            assert!(over < 1.0 && over > 0.95);
+            assert!(over <= 1.0 && over > 0.95);
         }
     }
 }

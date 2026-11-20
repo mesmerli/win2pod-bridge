@@ -13,7 +13,10 @@ use serde::{Deserialize, Serialize};
 use airplay_audio::eq::{MAX_GAIN_DB, MIN_GAIN_DB};
 use airplay_audio::{
     AlacEncoder, AudioStreamer, EqConfig, EqParams, LiveAudioDecoder, LiveFrameSender, LivePcmFrame,
-    RetransmitRequest, SoundEnhancerMode, SoundEnhancerParams, WarmthEnhancerMode, WarmthEnhancerParams,
+    RetransmitRequest, SoftwareAudioMixer, SoundEnhancerMode, SoundEnhancerParams, WarmthEnhancerMode, WarmthEnhancerParams,
+};
+use airplay_receiver::{
+    AirPlayReceiver, AirPlayReceiverConfig, AudioSink, CallbackSink, LocalSpeakerSink, SwitchableSink,
 };
 use airplay_client::Connection;
 use airplay_core::device::Device;
@@ -52,6 +55,62 @@ pub enum AudioSource {
 impl Default for AudioSource {
     fn default() -> Self {
         Self::Device("default".to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AirPlayReceiverTarget {
+    #[serde(rename = "default")]
+    SystemDefault,
+    #[serde(rename = "homepod")]
+    HomePodRelay,
+}
+
+impl Default for AirPlayReceiverTarget {
+    fn default() -> Self {
+        Self::SystemDefault
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AirPlayReceiverState {
+    #[serde(rename = "standby")]
+    Standby,
+    #[serde(rename = "connected")]
+    Connected,
+    #[serde(rename = "streaming")]
+    Streaming,
+}
+
+impl Default for AirPlayReceiverState {
+    fn default() -> Self {
+        Self::Standby
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AirPlayReceiverSyncLevel {
+    #[serde(rename = "none")]
+    None,
+    #[serde(rename = "standard")]
+    Standard,
+    #[serde(rename = "strong")]
+    Strong,
+}
+
+impl Default for AirPlayReceiverSyncLevel {
+    fn default() -> Self {
+        Self::Standard
+    }
+}
+
+impl AirPlayReceiverSyncLevel {
+    pub fn delay_stereo_samples(&self) -> usize {
+        match self {
+            Self::None => 0,
+            Self::Standard => 132300, // 1500ms at 44.1kHz stereo (剛好與 YouTube 完美同步)
+            Self::Strong => 176400,   // 2000ms at 44.1kHz stereo (2.0秒標準 AirPlay 延遲，針對極大落後)
+        }
     }
 }
 
@@ -145,8 +204,32 @@ pub struct ControllerState {
     pub airpods_auto_pause: bool,
     pub window_snapping: bool,
     pub snap_distance: i32,
+    pub detach_equalizer_window: bool,
     pub paired_airpods: Vec<crate::airpods::PairedAirPodsDevice>,
     pub airpods_states: std::collections::HashMap<String, crate::airpods::protocol::AirPodsDeviceState>,
+    pub airplay_receiver_enabled: bool,
+    pub airplay_receiver_name: String,
+    pub airplay_receiver_sync_level: AirPlayReceiverSyncLevel,
+    pub airplay_receiver_streaming: bool,
+    pub airplay_receiver_state: AirPlayReceiverState,
+    pub airplay_receiver_client_name: Option<String>,
+    pub airplay_receiver_device_type: Option<String>,
+    pub airplay_receiver_client_ip: Option<String>,
+    pub airplay_receiver_volume: Option<u8>,
+    pub airplay_receiver_track_title: Option<String>,
+    pub airplay_receiver_track_artist: Option<String>,
+    pub airplay_receiver_track_album: Option<String>,
+    pub airplay_receiver_artwork_bytes: Option<Vec<u8>>,
+    pub airplay_receiver_auto_max_volume: bool,
+    pub airplay_receiver_has_cached_session: bool,
+    pub airplay_receiver_status_hint: Option<(String, std::time::Instant)>,
+    pub airplay_receiver_output_device: String,
+    pub airplay_receiver_apply_effects: bool,
+    pub airplay_receiver_eq_enabled: bool,
+    pub airplay_receiver_eq_gains: [f32; 10],
+    pub airplay_receiver_custom_eq_gains: [f32; 10],
+    pub airplay_receiver_sound_enhancer_mode: SoundEnhancerMode,
+    pub airplay_receiver_warmth_enhancer_mode: WarmthEnhancerMode,
 }
 
 impl ControllerState {
@@ -245,8 +328,32 @@ impl Default for ControllerState {
             airpods_auto_pause: load_airpods_auto_pause(),
             window_snapping: load_window_snapping(),
             snap_distance: load_snap_distance(),
+            detach_equalizer_window: load_detach_equalizer_window(),
             paired_airpods: Vec::new(),
             airpods_states: std::collections::HashMap::new(),
+            airplay_receiver_enabled: load_airplay_receiver_enabled(),
+            airplay_receiver_name: load_airplay_receiver_name(),
+            airplay_receiver_sync_level: load_airplay_receiver_sync_level(),
+            airplay_receiver_streaming: false,
+            airplay_receiver_state: AirPlayReceiverState::Standby,
+            airplay_receiver_client_name: None,
+            airplay_receiver_device_type: None,
+            airplay_receiver_client_ip: None,
+            airplay_receiver_volume: None,
+            airplay_receiver_track_title: None,
+            airplay_receiver_track_artist: None,
+            airplay_receiver_track_album: None,
+            airplay_receiver_artwork_bytes: None,
+            airplay_receiver_auto_max_volume: load_airplay_receiver_auto_max_volume(),
+            airplay_receiver_has_cached_session: false,
+            airplay_receiver_status_hint: None,
+            airplay_receiver_output_device: load_airplay_receiver_output_device(),
+            airplay_receiver_apply_effects: load_airplay_receiver_apply_effects(),
+            airplay_receiver_eq_enabled: load_airplay_receiver_eq_enabled(),
+            airplay_receiver_eq_gains: load_airplay_receiver_eq_gains(),
+            airplay_receiver_custom_eq_gains: load_airplay_receiver_custom_eq_gains(),
+            airplay_receiver_sound_enhancer_mode: load_airplay_receiver_sound_enhancer_mode(),
+            airplay_receiver_warmth_enhancer_mode: load_airplay_receiver_warmth_enhancer_mode(),
         }
     }
 }
@@ -293,6 +400,11 @@ impl EqPreset {
 
     /// Check if a set of 10-band gains matches any defined preset within tolerance.
     pub fn matches_gains(gains: &[f32; 10]) -> Option<EqPreset> {
+        Self::matches_gains_with_custom(gains, &load_custom_eq_gains())
+    }
+
+    /// Check if a set of 10-band gains matches any defined preset within tolerance, using a custom gains slice.
+    pub fn matches_gains_with_custom(gains: &[f32; 10], custom: &[f32; 10]) -> Option<EqPreset> {
         for preset in Self::ALL {
             if *preset == Self::Custom {
                 continue;
@@ -302,7 +414,6 @@ impl EqPreset {
                 return Some(*preset);
             }
         }
-        let custom = load_custom_eq_gains();
         if gains.iter().zip(custom.iter()).all(|(a, b)| (a - b).abs() < 0.1) {
             Some(Self::Custom)
         } else {
@@ -347,7 +458,32 @@ pub enum GuiCmd {
     SetAirPodsAutoPause(bool),
     SetWindowSnapping(bool),
     SetSnapDistance(i32),
+    SetDetachEqualizerWindow(bool),
     AirPodsEventReceived(crate::airpods::AirPodsEvent),
+    SetAirPlayReceiverEnabled(bool),
+    SetAirPlayReceiverName(String),
+    SetAirPlayReceiverSyncLevel(AirPlayReceiverSyncLevel),
+    AirPlayReceiverStreamingStatus { streaming: bool, client_name: Option<String> },
+    AirPlayReceiverClientConnected { name: String, device_type: String, ip: String },
+    AirPlayReceiverClientDisconnected,
+    AirPlayReceiverPaused,
+    AirPlayReceiverVolume(f32),
+    AirPlayReceiverClientName(String),
+    AirPlayReceiverMetadata { title: Option<String>, artist: Option<String>, album: Option<String> },
+    AirPlayReceiverArtwork(Option<Vec<u8>>),
+    AirPlayReceiverDacpPlayPause,
+    AirPlayReceiverDacpNext,
+    AirPlayReceiverDacpPrev,
+    SetAirPlayReceiverAutoMaxVolume(bool),
+    AirPlayReceiverCheckWakeResult,
+    SetAirPlayReceiverOutputDevice(String),
+    SetAirPlayReceiverApplyEffects(bool),
+    SetReceiverEqGain(usize, f32),
+    SetReceiverEqBypass(bool),
+    ResetReceiverEq,
+    ApplyReceiverEqPreset(EqPreset),
+    SetReceiverSoundEnhancerMode(SoundEnhancerMode),
+    SetReceiverWarmthEnhancerMode(WarmthEnhancerMode),
 }
 
 #[derive(Debug, Clone)]
@@ -376,6 +512,75 @@ pub static AUDIO_IS_MONO: AtomicBool = AtomicBool::new(false);
 #[inline]
 pub fn set_source_mute(muted: bool) {
     IS_SOURCE_MUTED.store(muted, Ordering::Relaxed);
+}
+
+/// AudioSink wrapper that intercepts stream start/stop events to notify Controller for GUI status updates.
+pub struct ReceiverStatusProxySink {
+    pub target: Arc<dyn AudioSink>,
+    pub cmd_tx: async_channel::Sender<GuiCmd>,
+}
+
+impl AudioSink for ReceiverStatusProxySink {
+    fn on_audio_samples(&self, samples: &[i16], sample_rate: u32, channels: u8) {
+        self.target.on_audio_samples(samples, sample_rate, channels);
+    }
+    fn on_volume_change(&self, volume_db: f32) {
+        let _ = self.cmd_tx.send_blocking(GuiCmd::AirPlayReceiverVolume(volume_db));
+        self.target.on_volume_change(volume_db);
+    }
+    fn on_stream_start(&self) {
+        let _ = self.cmd_tx.send_blocking(GuiCmd::AirPlayReceiverStreamingStatus { streaming: true, client_name: None });
+        self.target.on_stream_start();
+    }
+    fn on_stream_start_with_client(&self, client_name: Option<&str>) {
+        let _ = self.cmd_tx.send_blocking(GuiCmd::AirPlayReceiverStreamingStatus {
+            streaming: true,
+            client_name: client_name.map(|s| s.to_string()),
+        });
+        self.target.on_stream_start_with_client(client_name);
+    }
+    fn on_client_name_change(&self, name: &str) {
+        let _ = self.cmd_tx.send_blocking(GuiCmd::AirPlayReceiverClientName(name.to_string()));
+        self.target.on_client_name_change(name);
+    }
+    fn on_client_connected(&self, client_name: &str, device_model: &str, client_ip: &str) {
+        let _ = self.cmd_tx.send_blocking(GuiCmd::AirPlayReceiverClientConnected {
+            name: client_name.to_string(),
+            device_type: device_model.to_string(),
+            ip: client_ip.to_string(),
+        });
+        self.target.on_client_connected(client_name, device_model, client_ip);
+    }
+    fn on_stream_paused(&self) {
+        let _ = self.cmd_tx.send_blocking(GuiCmd::AirPlayReceiverPaused);
+        self.target.on_stream_paused();
+    }
+    fn on_client_disconnected(&self) {
+        let _ = self.cmd_tx.send_blocking(GuiCmd::AirPlayReceiverClientDisconnected);
+        self.target.on_client_disconnected();
+    }
+    fn on_metadata_change(&self, title: Option<&str>, artist: Option<&str>, album: Option<&str>) {
+        let _ = self.cmd_tx.send_blocking(GuiCmd::AirPlayReceiverMetadata {
+            title: title.map(|s| s.to_string()),
+            artist: artist.map(|s| s.to_string()),
+            album: album.map(|s| s.to_string()),
+        });
+        self.target.on_metadata_change(title, artist, album);
+    }
+    fn on_artwork_change(&self, artwork_bytes: Option<&[u8]>) {
+        let _ = self.cmd_tx.send_blocking(GuiCmd::AirPlayReceiverArtwork(artwork_bytes.map(|b| b.to_vec())));
+        self.target.on_artwork_change(artwork_bytes);
+    }
+    fn on_stream_stop(&self) {
+        let _ = self.cmd_tx.send_blocking(GuiCmd::AirPlayReceiverStreamingStatus { streaming: false, client_name: None });
+        self.target.on_stream_stop();
+    }
+    fn on_flush(&self) {
+        self.target.on_flush();
+    }
+    fn latency_frames(&self) -> u32 {
+        self.target.latency_frames()
+    }
 }
 
 #[inline]
@@ -1123,10 +1328,10 @@ fn teardown_all_shields() {
     let orig_muted = INITIAL_DEFAULT_DEVICE_MUTED.lock().ok().and_then(|m| *m).unwrap_or(false);
     let orig_vol = INITIAL_DEFAULT_DEVICE_VOLUME.lock().ok().and_then(|v| *v);
     if let Some(ref id) = orig_id {
-        let _ = set_endpoint_mute(Some(id), orig_muted);
         if let Some(vol) = orig_vol {
             let _ = set_endpoint_volume(Some(id), vol);
         }
+        let _ = set_endpoint_mute(Some(id), orig_muted);
     }
 }
 
@@ -1459,13 +1664,20 @@ pub fn restore_initial_default_device() {
 
         let _ = crate::policy_config::set_default_render_device(&actual_id);
         // Restore mute and volume ONLY on the physical speaker, never on AirPods or blind default
+        // Safety: ALWAYS lower volume before unmuting to avoid 100% volume blast!
         if !is_airpods_device_or_id(&devices, &actual_id) {
             if !is_fallback {
-                let _ = set_endpoint_mute(Some(&actual_id), orig_muted);
                 if let Some(vol) = orig_vol {
                     let _ = set_endpoint_volume(Some(&actual_id), vol);
                 }
+                let _ = set_endpoint_mute(Some(&actual_id), orig_muted);
             } else {
+                if let Some(vol) = orig_vol {
+                    let _ = set_endpoint_volume(Some(&actual_id), vol);
+                } else {
+                    // Safe fallback volume if unknown, never leave unmuted at 100%
+                    let _ = set_endpoint_volume(Some(&actual_id), 0.3);
+                }
                 let _ = set_endpoint_mute(Some(&actual_id), false);
             }
         }
@@ -1480,10 +1692,10 @@ pub fn restore_original_speaker_state() {
     if let Some(ref id) = orig_id {
         let devices = get_audio_render_devices();
         if !is_airpods_device_or_id(&devices, id) {
-            let _ = set_endpoint_mute(Some(id), orig_muted);
             if let Some(vol) = orig_vol {
                 let _ = set_endpoint_volume(Some(id), vol);
             }
+            let _ = set_endpoint_mute(Some(id), orig_muted);
         }
     }
 }
@@ -1882,8 +2094,11 @@ impl Session {
             streamer.set_sound_enhancer_params(sound_enhancer_params.clone()).await;
             streamer.set_warmth_enhancer_params(warmth_enhancer_params.clone()).await;
 
-            // 9. Start audio capture
-            let (sender, decoder) = LiveAudioDecoder::create_pair(RATE, CHANNELS, 32);
+            // 9. Start audio capture with SoftwareAudioMixer support
+            let (hp_sender, decoder) = LiveAudioDecoder::create_pair(RATE, CHANNELS, 256);
+            let mixer = Arc::new(SoftwareAudioMixer::new(hp_sender, RATE, CHANNELS));
+
+            let (sender, mut cap_decoder) = LiveAudioDecoder::create_pair(RATE, CHANNELS, 256);
             let session_sender = sender.clone();
             let cap_stop = Arc::new(AtomicBool::new(false));
             let stop_clone = cap_stop.clone();
@@ -1906,6 +2121,27 @@ impl Session {
                     }
                 }
             });
+
+            let bridge_mixer = mixer.clone();
+            let bridge_stop = cap_stop.clone();
+            std::thread::Builder::new()
+                .name("homepod-multi-mixer-bridge".into())
+                .spawn(move || {
+                    while !bridge_stop.load(Ordering::Relaxed) {
+                        match cap_decoder.decode_frame() {
+                            Ok(Some(frame)) => {
+                                bridge_mixer.process_primary(LivePcmFrame {
+                                    samples: frame.samples,
+                                    channels: frame.channels,
+                                    sample_rate: frame.sample_rate,
+                                });
+                            }
+                            Ok(None) => std::thread::sleep(Duration::from_millis(2)),
+                            Err(_) => break,
+                        }
+                    }
+                })
+                .ok();
 
             // 10. Start live streaming to all devices
             if let Err(e) = streamer.start_live(decoder).await {
@@ -2051,7 +2287,10 @@ impl Session {
             conn.set_warmth_enhancer_params(warmth_enhancer_params.clone());
             let _ = conn.set_volume(single_vol).await;
 
-            let (sender, decoder) = LiveAudioDecoder::create_pair(RATE, CHANNELS, 32);
+            let (hp_sender, decoder) = LiveAudioDecoder::create_pair(RATE, CHANNELS, 256);
+            let mixer = Arc::new(SoftwareAudioMixer::new(hp_sender, RATE, CHANNELS));
+
+            let (sender, mut cap_decoder) = LiveAudioDecoder::create_pair(RATE, CHANNELS, 256);
             let session_sender = sender.clone();
             let cap_stop = Arc::new(AtomicBool::new(false));
             let stop_clone = cap_stop.clone();
@@ -2074,6 +2313,27 @@ impl Session {
                     }
                 }
             });
+
+            let bridge_mixer = mixer.clone();
+            let bridge_stop = cap_stop.clone();
+            std::thread::Builder::new()
+                .name("homepod-single-mixer-bridge".into())
+                .spawn(move || {
+                    while !bridge_stop.load(Ordering::Relaxed) {
+                        match cap_decoder.decode_frame() {
+                            Ok(Some(frame)) => {
+                                bridge_mixer.process_primary(LivePcmFrame {
+                                    samples: frame.samples,
+                                    channels: frame.channels,
+                                    sample_rate: frame.sample_rate,
+                                });
+                            }
+                            Ok(None) => std::thread::sleep(Duration::from_millis(2)),
+                            Err(_) => break,
+                        }
+                    }
+                })
+                .ok();
 
             if let Err(e) = conn.start_streaming_live(decoder).await {
                 cap_stop.store(true, Ordering::Relaxed);
@@ -2263,10 +2523,14 @@ impl Session {
             let _ = streamer.stop().await;
         }
         let _ = tokio::time::timeout(Duration::from_secs(3), self.conn.disconnect()).await;
-        for mut c in self.secondary_conns {
+        for mut c in std::mem::take(&mut self.secondary_conns) {
             let _ = tokio::time::timeout(Duration::from_secs(3), c.disconnect()).await;
         }
     }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {}
 }
 
 fn update_thread_execution_state(prevent_sleep: bool, is_streaming: bool) {
@@ -2878,7 +3142,57 @@ pub fn spawn_controller(
             let global_sound_enhancer_params = Arc::new(SoundEnhancerParams::new(state.sound_enhancer_mode));
             let global_warmth_enhancer_params = Arc::new(WarmthEnhancerParams::new(state.warmth_enhancer_mode));
 
+            let rx_apply_effects = Arc::new(AtomicBool::new(state.airplay_receiver_apply_effects));
+            let rx_eq_params = Arc::new(EqParams::new(eq_config.num_bands()));
+            rx_eq_params.set_bypass(!state.airplay_receiver_eq_enabled);
+            for (i, &g) in state.airplay_receiver_eq_gains.iter().enumerate() {
+                rx_eq_params.set_gain_db(i, g);
+            }
+            let rx_sound_enhancer_params = Arc::new(SoundEnhancerParams::new(state.airplay_receiver_sound_enhancer_mode));
+            let rx_warmth_enhancer_params = Arc::new(WarmthEnhancerParams::new(state.airplay_receiver_warmth_enhancer_mode));
 
+            let rx_dsp_params = airplay_receiver::ReceiverDspParams {
+                apply_effects: rx_apply_effects.clone(),
+                eq_params: rx_eq_params.clone(),
+                sound_enhancer_params: rx_sound_enhancer_params.clone(),
+                warmth_enhancer_params: rx_warmth_enhancer_params.clone(),
+            };
+
+            let rx_output_dev = if state.airplay_receiver_output_device.is_empty() || state.airplay_receiver_output_device == "default" {
+                None
+            } else {
+                Some(state.airplay_receiver_output_device.clone())
+            };
+
+            // Initialize AirPlay Receiver switchable sink and server
+            let initial_sink: Arc<dyn AudioSink> = match LocalSpeakerSink::new_with_device_and_dsp(rx_output_dev, Some(rx_dsp_params.clone())) {
+                Ok(s) => Arc::new(s),
+                Err(_) => Arc::new(CallbackSink::new(|_, _, _| {})),
+            };
+            let switchable_sink = SwitchableSink::new(initial_sink);
+            switchable_sink.set_delay_samples(state.airplay_receiver_sync_level.delay_stereo_samples());
+
+            let proxy_sink = Arc::new(ReceiverStatusProxySink {
+                target: Arc::new(switchable_sink.clone()),
+                cmd_tx: cmd_tx.clone(),
+            });
+
+            let mut receiver_instance: Option<AirPlayReceiver> = None;
+            let mut last_rx_phone_volume: Option<u8> = None;
+            if state.airplay_receiver_enabled {
+                let mut config = AirPlayReceiverConfig::new(&state.airplay_receiver_name);
+                config.ignore_volume_control = state.airplay_receiver_auto_max_volume;
+                let mut rx_server = AirPlayReceiver::new(config, proxy_sink.clone());
+                match rx_server.start().await {
+                    Ok(_) => {
+                        tracing::info!("[AirPlayReceiver] Started at launch: '{}'", state.airplay_receiver_name);
+                        receiver_instance = Some(rx_server);
+                    }
+                    Err(e) => {
+                        tracing::error!("[AirPlayReceiver] Failed to start at launch: {}", e);
+                    }
+                }
+            }
 
             loop {
                 tokio::select! {
@@ -3824,6 +4138,300 @@ pub fn spawn_controller(
                                 }
                                 broadcast(&state);
                             }
+                            GuiCmd::SetDetachEqualizerWindow(enabled) => {
+                                state.detach_equalizer_window = enabled;
+                                save_detach_equalizer_window(enabled);
+                                broadcast(&state);
+                            }
+                            GuiCmd::SetAirPlayReceiverEnabled(enabled) => {
+                                state.airplay_receiver_enabled = enabled;
+                                save_airplay_receiver_enabled(enabled);
+                                if enabled {
+                                    if receiver_instance.is_none() {
+                                        let mut config = AirPlayReceiverConfig::new(&state.airplay_receiver_name);
+                                        config.ignore_volume_control = state.airplay_receiver_auto_max_volume;
+                                        let mut rx_server = AirPlayReceiver::new(config, proxy_sink.clone());
+                                        match rx_server.start().await {
+                                            Ok(_) => {
+                                                tracing::info!("[AirPlayReceiver] Started: '{}'", state.airplay_receiver_name);
+                                                receiver_instance = Some(rx_server);
+                                            }
+                                            Err(e) => {
+                                                tracing::error!("[AirPlayReceiver] Failed to start: {}", e);
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    if let Some(mut rx_server) = receiver_instance.take() {
+                                        rx_server.stop().await;
+                                        tracing::info!("[AirPlayReceiver] Stopped and disabled");
+                                    }
+                                    state.airplay_receiver_streaming = false;
+                                    state.airplay_receiver_client_name = None;
+                                    state.airplay_receiver_state = AirPlayReceiverState::Standby;
+                                    state.airplay_receiver_device_type = None;
+                                    state.airplay_receiver_client_ip = None;
+                                    state.airplay_receiver_track_title = None;
+                                    state.airplay_receiver_track_artist = None;
+                                    state.airplay_receiver_track_album = None;
+                                    state.airplay_receiver_artwork_bytes = None;
+                                    state.airplay_receiver_volume = None;
+                                }
+                                broadcast(&state);
+                            }
+                            GuiCmd::SetAirPlayReceiverName(name) => {
+                                state.airplay_receiver_name = name.clone();
+                                save_airplay_receiver_name(&name);
+                                if state.airplay_receiver_enabled {
+                                    if let Some(mut rx_server) = receiver_instance.take() {
+                                        rx_server.stop().await;
+                                    }
+                                    let mut config = AirPlayReceiverConfig::new(&state.airplay_receiver_name);
+                                    config.ignore_volume_control = state.airplay_receiver_auto_max_volume;
+                                    let mut rx_server = AirPlayReceiver::new(config, proxy_sink.clone());
+                                    match rx_server.start().await {
+                                        Ok(_) => {
+                                            tracing::info!("[AirPlayReceiver] Restarted with new name: '{}'", state.airplay_receiver_name);
+                                            receiver_instance = Some(rx_server);
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("[AirPlayReceiver] Failed to restart: {}", e);
+                                        }
+                                    }
+                                }
+                                broadcast(&state);
+                            }
+                            GuiCmd::SetAirPlayReceiverSyncLevel(level) => {
+                                state.airplay_receiver_sync_level = level;
+                                save_airplay_receiver_sync_level(level);
+                                switchable_sink.set_delay_samples(level.delay_stereo_samples());
+                                broadcast(&state);
+                            }
+                            GuiCmd::AirPlayReceiverStreamingStatus { streaming, client_name } => {
+                                tracing::info!(
+                                    "[AirPlayReceiver] StreamingStatus: streaming={}, client={:?}, prev_state={:?}",
+                                    streaming, client_name, state.airplay_receiver_state
+                                );
+                                state.airplay_receiver_streaming = streaming;
+                                if streaming {
+                                    state.airplay_receiver_state = AirPlayReceiverState::Streaming;
+                                    state.airplay_receiver_has_cached_session = true;
+                                    state.airplay_receiver_status_hint = None;
+                                    if client_name.is_some() {
+                                        state.airplay_receiver_client_name = client_name;
+                                    }
+                                    if state.airplay_receiver_volume.is_none() {
+                                        state.airplay_receiver_volume = last_rx_phone_volume;
+                                    }
+                                } else {
+                                    // When streaming ends, only transition to Connected if we were actively Streaming
+                                    // and a client session is still present. Never overwrite Standby back to Connected!
+                                    if state.airplay_receiver_state == AirPlayReceiverState::Streaming {
+                                        if state.airplay_receiver_client_name.is_some() {
+                                            state.airplay_receiver_state = AirPlayReceiverState::Connected;
+                                        } else {
+                                            state.airplay_receiver_state = AirPlayReceiverState::Standby;
+                                        }
+                                    }
+                                }
+                                broadcast(&state);
+                            }
+                            GuiCmd::AirPlayReceiverClientConnected { name, device_type, ip } => {
+                                tracing::info!(
+                                    "[AirPlayReceiver] ClientConnected: name='{}', type='{}', ip='{}', prev_state={:?}",
+                                    name, device_type, ip, state.airplay_receiver_state
+                                );
+                                state.airplay_receiver_has_cached_session = true;
+                                state.airplay_receiver_status_hint = None;
+                                state.airplay_receiver_client_name = Some(name);
+                                state.airplay_receiver_device_type = Some(device_type);
+                                state.airplay_receiver_client_ip = Some(ip);
+                                if state.airplay_receiver_volume.is_none() {
+                                    state.airplay_receiver_volume = last_rx_phone_volume;
+                                }
+                                if state.airplay_receiver_state == AirPlayReceiverState::Standby {
+                                    state.airplay_receiver_state = AirPlayReceiverState::Connected;
+                                }
+                                broadcast(&state);
+                            }
+                            GuiCmd::AirPlayReceiverPaused => {
+                                tracing::info!("[AirPlayReceiver] Paused (setting state to Connected)");
+                                state.airplay_receiver_streaming = false;
+                                state.airplay_receiver_state = AirPlayReceiverState::Connected;
+                                broadcast(&state);
+                            }
+                            GuiCmd::AirPlayReceiverClientDisconnected => {
+                                tracing::info!("[AirPlayReceiver] ClientDisconnected -> Standby");
+                                state.airplay_receiver_streaming = false;
+                                state.airplay_receiver_state = AirPlayReceiverState::Standby;
+                                state.airplay_receiver_client_name = None;
+                                state.airplay_receiver_device_type = None;
+                                state.airplay_receiver_client_ip = None;
+                                state.airplay_receiver_track_title = None;
+                                state.airplay_receiver_track_artist = None;
+                                state.airplay_receiver_track_album = None;
+                                state.airplay_receiver_artwork_bytes = None;
+                                state.airplay_receiver_volume = None;
+                                broadcast(&state);
+                            }
+                            GuiCmd::AirPlayReceiverClientName(name) => {
+                                state.airplay_receiver_client_name = Some(name);
+                                broadcast(&state);
+                            }
+                            GuiCmd::AirPlayReceiverMetadata { title, artist, album } => {
+                                state.airplay_receiver_track_title = title;
+                                state.airplay_receiver_track_artist = artist;
+                                state.airplay_receiver_track_album = album;
+                                broadcast(&state);
+                            }
+                            GuiCmd::AirPlayReceiverArtwork(bytes) => {
+                                state.airplay_receiver_artwork_bytes = bytes;
+                                broadcast(&state);
+                            }
+                            GuiCmd::AirPlayReceiverDacpPlayPause => {
+                                if let Some(ref rx) = receiver_instance {
+                                    let sent = rx.send_dacp(airplay_receiver::DacpCommand::PlayPause).await;
+                                    if !sent {
+                                        state.airplay_receiver_status_hint = Some((
+                                            state.language.airplay_receiver_require_connect().to_string(),
+                                            std::time::Instant::now(),
+                                        ));
+                                        broadcast(&state);
+                                    } else if state.airplay_receiver_state == AirPlayReceiverState::Standby {
+                                        let cmd_tx_clone = cmd_tx.clone();
+                                        tokio::spawn(async move {
+                                            tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+                                            let _ = cmd_tx_clone.send(GuiCmd::AirPlayReceiverCheckWakeResult).await;
+                                        });
+                                    }
+                                } else {
+                                    state.airplay_receiver_status_hint = Some((
+                                        state.language.airplay_receiver_require_connect().to_string(),
+                                        std::time::Instant::now(),
+                                    ));
+                                    broadcast(&state);
+                                }
+                            }
+                            GuiCmd::AirPlayReceiverCheckWakeResult => {
+                                if state.airplay_receiver_state == AirPlayReceiverState::Standby {
+                                    state.airplay_receiver_status_hint = Some((
+                                        state.language.airplay_receiver_wake_failed().to_string(),
+                                        std::time::Instant::now(),
+                                    ));
+                                    broadcast(&state);
+                                }
+                            }
+                            GuiCmd::AirPlayReceiverDacpNext => {
+                                if let Some(ref rx) = receiver_instance {
+                                    rx.send_dacp(airplay_receiver::DacpCommand::Next).await;
+                                }
+                            }
+                            GuiCmd::AirPlayReceiverDacpPrev => {
+                                if let Some(ref rx) = receiver_instance {
+                                    rx.send_dacp(airplay_receiver::DacpCommand::Prev).await;
+                                }
+                            }
+                            GuiCmd::SetAirPlayReceiverAutoMaxVolume(enabled) => {
+                                state.airplay_receiver_auto_max_volume = enabled;
+                                save_airplay_receiver_auto_max_volume(enabled);
+                                if let Some(ref rx) = receiver_instance {
+                                    rx.set_ignore_volume_control(enabled).await;
+                                }
+                                broadcast(&state);
+                            }
+                            GuiCmd::SetAirPlayReceiverOutputDevice(dev_id) => {
+                                state.airplay_receiver_output_device = dev_id.clone();
+                                save_airplay_receiver_output_device(&dev_id);
+                                let opt_dev = if dev_id.is_empty() || dev_id == "default" {
+                                    None
+                                } else {
+                                    Some(dev_id)
+                                };
+                                match LocalSpeakerSink::new_with_device_and_dsp(opt_dev, Some(rx_dsp_params.clone())) {
+                                    Ok(s) => {
+                                        switchable_sink.set_target(Arc::new(s));
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("Failed to switch LocalSpeakerSink device: {e}");
+                                    }
+                                }
+                                broadcast(&state);
+                            }
+                            GuiCmd::SetAirPlayReceiverApplyEffects(enabled) => {
+                                state.airplay_receiver_apply_effects = enabled;
+                                save_airplay_receiver_apply_effects(enabled);
+                                rx_apply_effects.store(enabled, Ordering::Relaxed);
+                                broadcast(&state);
+                            }
+                            GuiCmd::SetReceiverEqGain(band, gain_db) => {
+                                if band < state.airplay_receiver_eq_gains.len() {
+                                    let clamped = gain_db.clamp(MIN_GAIN_DB, MAX_GAIN_DB);
+                                    state.airplay_receiver_eq_gains[band] = clamped;
+                                    state.airplay_receiver_custom_eq_gains[band] = clamped;
+                                    save_airplay_receiver_eq_gains(&state.airplay_receiver_eq_gains);
+                                    save_airplay_receiver_custom_eq_gains(&state.airplay_receiver_custom_eq_gains);
+                                }
+                                if !state.airplay_receiver_eq_enabled {
+                                    state.airplay_receiver_eq_enabled = true;
+                                    save_airplay_receiver_eq_enabled(true);
+                                }
+                                rx_eq_params.set_bypass(false);
+                                rx_eq_params.set_gain_db(band, gain_db);
+                                broadcast(&state);
+                            }
+                            GuiCmd::SetReceiverEqBypass(bypass) => {
+                                state.airplay_receiver_eq_enabled = !bypass;
+                                save_airplay_receiver_eq_enabled(state.airplay_receiver_eq_enabled);
+                                rx_eq_params.set_bypass(bypass);
+                                broadcast(&state);
+                            }
+                            GuiCmd::ResetReceiverEq => {
+                                state.airplay_receiver_eq_gains = [0.0; 10];
+                                save_airplay_receiver_eq_gains(&state.airplay_receiver_eq_gains);
+                                rx_eq_params.reset();
+                                broadcast(&state);
+                            }
+                            GuiCmd::ApplyReceiverEqPreset(preset) => {
+                                let gains = if preset == EqPreset::Custom {
+                                    state.airplay_receiver_custom_eq_gains
+                                } else {
+                                    preset.gains()
+                                };
+                                state.airplay_receiver_eq_gains = gains;
+                                save_airplay_receiver_eq_gains(&state.airplay_receiver_eq_gains);
+                                if !state.airplay_receiver_eq_enabled {
+                                    state.airplay_receiver_eq_enabled = true;
+                                    save_airplay_receiver_eq_enabled(true);
+                                }
+                                rx_eq_params.set_bypass(false);
+                                for (i, &g) in state.airplay_receiver_eq_gains.iter().enumerate() {
+                                    rx_eq_params.set_gain_db(i, g);
+                                }
+                                broadcast(&state);
+                            }
+                            GuiCmd::SetReceiverSoundEnhancerMode(mode) => {
+                                state.airplay_receiver_sound_enhancer_mode = mode;
+                                save_airplay_receiver_sound_enhancer_mode(mode);
+                                rx_sound_enhancer_params.set_mode(mode);
+                                broadcast(&state);
+                            }
+                            GuiCmd::SetReceiverWarmthEnhancerMode(mode) => {
+                                state.airplay_receiver_warmth_enhancer_mode = mode;
+                                save_airplay_receiver_warmth_enhancer_mode(mode);
+                                rx_warmth_enhancer_params.set_mode(mode);
+                                broadcast(&state);
+                            }
+                            GuiCmd::AirPlayReceiverVolume(volume_db) => {
+                                let pct = if volume_db <= -140.0 {
+                                    0
+                                } else {
+                                    let linear = ((volume_db + 30.0) / 30.0).clamp(0.0, 1.0) * 100.0;
+                                    linear.round() as u8
+                                };
+                                last_rx_phone_volume = Some(pct);
+                                state.airplay_receiver_volume = Some(pct);
+                                broadcast(&state);
+                            }
                             GuiCmd::AirPodsEventReceived(event) => {
                                 match event {
                                     crate::airpods::AirPodsEvent::StateChanged {
@@ -4256,7 +4864,16 @@ pub fn spawn_controller(
                                 }
                             }
                             GuiCmd::Quit => {
+                                static IS_SHUTTING_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                                if IS_SHUTTING_DOWN.compare_exchange(false, true, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
+                                    tracing::warn!("[Controller] Duplicate GuiCmd::Quit received, ignoring.");
+                                    continue;
+                                }
                                 tracing::info!("[Controller] Processing GuiCmd::Quit: restoring speaker and devices...");
+                                if let Some(mut rx_server) = receiver_instance.take() {
+                                    rx_server.stop().await;
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+                                }
                                 unregister_notification_client();
                                 unregister_local_endpoint_listener();
                                 restore_original_speaker_mute();
@@ -4732,10 +5349,37 @@ pub struct AppConfig {
     pub window_snapping: bool,
     #[serde(default = "default_snap_distance")]
     pub snap_distance: i32,
+    #[serde(default = "default_false")]
+    pub detach_equalizer_window: bool,
     #[serde(default)]
     pub standin_device_id: Option<String>,
+    #[serde(default = "default_false")]
+    pub airplay_receiver_enabled: bool,
+    #[serde(default = "default_receiver_name")]
+    pub airplay_receiver_name: String,
+    #[serde(default)]
+    pub airplay_receiver_target: AirPlayReceiverTarget,
+    #[serde(default)]
+    pub airplay_receiver_sync_level: AirPlayReceiverSyncLevel,
+    #[serde(default = "default_true")]
+    pub airplay_receiver_auto_max_volume: bool,
+    #[serde(default = "default_audio_device")]
+    pub airplay_receiver_output_device: String,
+    #[serde(default = "default_false")]
+    pub airplay_receiver_apply_effects: bool,
+    #[serde(default = "default_false")]
+    pub airplay_receiver_eq_enabled: bool,
+    #[serde(default = "default_eq_gains")]
+    pub airplay_receiver_eq_gains: Vec<f32>,
+    #[serde(default = "default_custom_eq_gains")]
+    pub airplay_receiver_custom_eq_gains: Vec<f32>,
+    #[serde(default)]
+    pub airplay_receiver_sound_enhancer_mode: SoundEnhancerMode,
+    #[serde(default)]
+    pub airplay_receiver_warmth_enhancer_mode: WarmthEnhancerMode,
 }
 
+fn default_receiver_name() -> String { "Win2Pod Audio Receiver".to_string() }
 fn default_snap_distance() -> i32 { 12 }
 fn default_audio_device() -> String { "default".to_string() }
 fn default_volume() -> f32 { DEFAULT_VOLUME }
@@ -4775,7 +5419,20 @@ impl Default for AppConfig {
             airpods_auto_pause: default_true(),
             window_snapping: default_true(),
             snap_distance: default_snap_distance(),
+            detach_equalizer_window: default_false(),
             standin_device_id: None,
+            airplay_receiver_enabled: false,
+            airplay_receiver_name: default_receiver_name(),
+            airplay_receiver_target: AirPlayReceiverTarget::default(),
+            airplay_receiver_sync_level: AirPlayReceiverSyncLevel::default(),
+            airplay_receiver_auto_max_volume: default_true(),
+            airplay_receiver_output_device: default_audio_device(),
+            airplay_receiver_apply_effects: default_false(),
+            airplay_receiver_eq_enabled: false,
+            airplay_receiver_eq_gains: default_eq_gains(),
+            airplay_receiver_custom_eq_gains: default_custom_eq_gains(),
+            airplay_receiver_sound_enhancer_mode: SoundEnhancerMode::Off,
+            airplay_receiver_warmth_enhancer_mode: WarmthEnhancerMode::Off,
         }
     }
 }
@@ -5135,6 +5792,114 @@ pub fn load_snap_distance() -> i32 {
 
 pub fn save_snap_distance(dist: i32) {
     update_config(|c| c.snap_distance = dist);
+}
+
+pub fn load_detach_equalizer_window() -> bool {
+    load_config().detach_equalizer_window
+}
+
+pub fn save_detach_equalizer_window(enabled: bool) {
+    update_config(|c| c.detach_equalizer_window = enabled);
+}
+
+pub fn load_airplay_receiver_enabled() -> bool {
+    load_config().airplay_receiver_enabled
+}
+
+pub fn save_airplay_receiver_enabled(enabled: bool) {
+    update_config(|c| c.airplay_receiver_enabled = enabled);
+}
+
+pub fn load_airplay_receiver_name() -> String {
+    load_config().airplay_receiver_name
+}
+
+pub fn save_airplay_receiver_name(name: &str) {
+    let name_owned = name.to_string();
+    update_config(|c| c.airplay_receiver_name = name_owned);
+}
+
+pub fn load_airplay_receiver_sync_level() -> AirPlayReceiverSyncLevel {
+    load_config().airplay_receiver_sync_level
+}
+
+pub fn save_airplay_receiver_sync_level(level: AirPlayReceiverSyncLevel) {
+    update_config(|c| c.airplay_receiver_sync_level = level);
+}
+
+pub fn load_airplay_receiver_auto_max_volume() -> bool {
+    load_config().airplay_receiver_auto_max_volume
+}
+
+pub fn save_airplay_receiver_auto_max_volume(auto_max: bool) {
+    update_config(|c| c.airplay_receiver_auto_max_volume = auto_max);
+}
+
+pub fn load_airplay_receiver_output_device() -> String {
+    load_config().airplay_receiver_output_device
+}
+
+pub fn save_airplay_receiver_output_device(dev: &str) {
+    let dev_owned = dev.to_string();
+    update_config(|c| c.airplay_receiver_output_device = dev_owned);
+}
+
+pub fn load_airplay_receiver_apply_effects() -> bool {
+    load_config().airplay_receiver_apply_effects
+}
+
+pub fn save_airplay_receiver_apply_effects(enabled: bool) {
+    update_config(|c| c.airplay_receiver_apply_effects = enabled);
+}
+
+pub fn load_airplay_receiver_eq_enabled() -> bool {
+    load_config().airplay_receiver_eq_enabled
+}
+
+pub fn save_airplay_receiver_eq_enabled(enabled: bool) {
+    update_config(|c| c.airplay_receiver_eq_enabled = enabled);
+}
+
+pub fn load_airplay_receiver_eq_gains() -> [f32; 10] {
+    let cfg = load_config();
+    let mut gains = [0.0; 10];
+    for (i, &g) in cfg.airplay_receiver_eq_gains.iter().take(10).enumerate() {
+        gains[i] = g;
+    }
+    gains
+}
+
+pub fn save_airplay_receiver_eq_gains(gains: &[f32; 10]) {
+    update_config(|c| c.airplay_receiver_eq_gains = gains.to_vec());
+}
+
+pub fn load_airplay_receiver_custom_eq_gains() -> [f32; 10] {
+    let cfg = load_config();
+    let mut gains = [0.0; 10];
+    for (i, &g) in cfg.airplay_receiver_custom_eq_gains.iter().take(10).enumerate() {
+        gains[i] = g;
+    }
+    gains
+}
+
+pub fn save_airplay_receiver_custom_eq_gains(gains: &[f32; 10]) {
+    update_config(|c| c.airplay_receiver_custom_eq_gains = gains.to_vec());
+}
+
+pub fn load_airplay_receiver_sound_enhancer_mode() -> SoundEnhancerMode {
+    load_config().airplay_receiver_sound_enhancer_mode
+}
+
+pub fn save_airplay_receiver_sound_enhancer_mode(mode: SoundEnhancerMode) {
+    update_config(|c| c.airplay_receiver_sound_enhancer_mode = mode);
+}
+
+pub fn load_airplay_receiver_warmth_enhancer_mode() -> WarmthEnhancerMode {
+    load_config().airplay_receiver_warmth_enhancer_mode
+}
+
+pub fn save_airplay_receiver_warmth_enhancer_mode(mode: WarmthEnhancerMode) {
+    update_config(|c| c.airplay_receiver_warmth_enhancer_mode = mode);
 }
 
 pub fn find_matching_devices(devices: &[DeviceItem], target: &LastConnectedTarget) -> Option<Vec<DeviceItem>> {

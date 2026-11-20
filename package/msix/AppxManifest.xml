@@ -9,7 +9,7 @@
   <Identity
     Name="mesmerli.Win2PodBridge"
     Publisher="CN=B50F36C9-7E5E-4652-A715-0185D35ADE64"
-    Version="0.1.16.0"
+    Version="0.1.18.0"
     ProcessorArchitecture="x64" />
 
   <Properties>
@@ -33,8 +33,11 @@
     <Resource Language="ja-JP" />
     <Resource Language="ko-KR" />
     <Resource Language="pt-BR" />
+    <Resource Language="pt-PT" />
     <Resource Language="ru-RU" />
     <Resource Language="es-ES" />
+    <Resource Language="id-ID" />
+    <Resource Language="vi-VN" />
   </Resources>
 
   <Applications>

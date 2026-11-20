@@ -113,6 +113,25 @@ fn main() -> anyhow::Result<()> {
     // Async channel for GUI & Tray -> Controller commands
     let (cmd_tx, cmd_rx) = async_channel::unbounded::<GuiCmd>();
 
+    static CONSOLE_CMD_TX: std::sync::OnceLock<async_channel::Sender<GuiCmd>> = std::sync::OnceLock::new();
+    let _ = CONSOLE_CMD_TX.set(cmd_tx.clone());
+
+    #[cfg(windows)]
+    unsafe {
+        type HandlerRoutine = unsafe extern "system" fn(u32) -> i32;
+        extern "system" {
+            fn SetConsoleCtrlHandler(handler: Option<HandlerRoutine>, add: i32) -> i32;
+        }
+        unsafe extern "system" fn ctrl_handler(_: u32) -> i32 {
+            if let Some(tx) = CONSOLE_CMD_TX.get() {
+                crate::tray::trigger_app_quit(tx);
+                std::thread::sleep(std::time::Duration::from_millis(2000));
+            }
+            1
+        }
+        SetConsoleCtrlHandler(Some(ctrl_handler), 1);
+    }
+
     // Shared thread-safe state (RwLock) - prevents memory accumulation when GUI is minimized/hidden
     let shared_state = Arc::new(RwLock::new(ControllerState::default()));
 

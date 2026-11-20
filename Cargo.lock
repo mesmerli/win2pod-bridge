@@ -83,7 +83,7 @@ dependencies = [
 
 [[package]]
 name = "airplay-audio"
-version = "0.1.16"
+version = "0.1.18"
 dependencies = [
  "airplay-core",
  "airplay-crypto",
@@ -106,6 +106,7 @@ dependencies = [
  "spin_sleep",
  "symphonia",
  "test-case",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-test",
  "tracing",
@@ -113,7 +114,7 @@ dependencies = [
 
 [[package]]
 name = "airplay-bluetooth"
-version = "0.1.16"
+version = "0.1.18"
 dependencies = [
  "airplay-audio",
  "airplay-core",
@@ -132,18 +133,20 @@ dependencies = [
 
 [[package]]
 name = "airplay-client"
-version = "0.1.16"
+version = "0.1.18"
 dependencies = [
  "airplay-audio",
  "airplay-core",
  "airplay-crypto",
  "airplay-discovery",
  "airplay-pairing",
+ "airplay-receiver",
  "airplay-rtsp",
  "airplay-timing",
  "async-trait",
  "base64 0.22.1",
  "futures",
+ "mdns-sd",
  "mockall",
  "plist",
  "rand 0.8.5",
@@ -155,11 +158,12 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "windows 0.62.2",
 ]
 
 [[package]]
 name = "airplay-core"
-version = "0.1.16"
+version = "0.1.18"
 dependencies = [
  "proptest",
  "serde",
@@ -172,7 +176,7 @@ dependencies = [
 
 [[package]]
 name = "airplay-crypto"
-version = "0.1.16"
+version = "0.1.18"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -201,7 +205,7 @@ dependencies = [
 
 [[package]]
 name = "airplay-discovery"
-version = "0.1.16"
+version = "0.1.18"
 dependencies = [
  "airplay-core",
  "async-stream",
@@ -219,7 +223,7 @@ dependencies = [
 
 [[package]]
 name = "airplay-pairing"
-version = "0.1.16"
+version = "0.1.18"
 dependencies = [
  "aes",
  "airplay-core",
@@ -244,8 +248,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "airplay-receiver"
+version = "0.1.18"
+dependencies = [
+ "airplay-audio",
+ "airplay-core",
+ "airplay-crypto",
+ "async-trait",
+ "base64 0.22.1",
+ "crossbeam-channel",
+ "mdns-sd",
+ "socket2 0.5.10",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "windows 0.62.2",
+]
+
+[[package]]
 name = "airplay-resampler"
-version = "0.1.16"
+version = "0.1.18"
 dependencies = [
  "airplay-core",
  "fastrand",
@@ -256,7 +279,7 @@ dependencies = [
 
 [[package]]
 name = "airplay-rtsp"
-version = "0.1.16"
+version = "0.1.18"
 dependencies = [
  "airplay-core",
  "airplay-crypto",
@@ -278,7 +301,7 @@ dependencies = [
 
 [[package]]
 name = "airplay-timing"
-version = "0.1.16"
+version = "0.1.18"
 dependencies = [
  "airplay-core",
  "async-trait",
@@ -293,7 +316,7 @@ dependencies = [
 
 [[package]]
 name = "airplay-tui"
-version = "0.1.16"
+version = "0.1.18"
 dependencies = [
  "airplay-bluetooth",
  "airplay-client",
@@ -2571,7 +2594,7 @@ dependencies = [
 
 [[package]]
 name = "homepod-cast"
-version = "0.1.15"
+version = "0.1.18"
 dependencies = [
  "airplay-audio",
  "airplay-client",
@@ -2588,12 +2611,13 @@ dependencies = [
 
 [[package]]
 name = "homepod-cast-gui"
-version = "0.1.16"
+version = "0.1.18"
 dependencies = [
  "airplay-audio",
  "airplay-client",
  "airplay-core",
  "airplay-discovery",
+ "airplay-receiver",
  "airplay-resampler",
  "anyhow",
  "async-channel",
