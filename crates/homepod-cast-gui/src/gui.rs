@@ -5181,11 +5181,12 @@ impl FlyoutApp {
                         ui.label(egui::RichText::new(lang.about_packages_header()).size(13.0).strong());
                         ui.add_space(6.0);
 
-                        let packages: [(&str, &str, &str, &str); 33] = [
+                        let packages: [(&str, &str, &str, &str); 34] = [
                             ("airplay2-rs", "Lucas McGartland", "GPL-3.0-or-later", lang.pkg_airplay2_rs_desc()),
                             ("windows-airplay-homepod", "Yang Liu (iakacer)", "GPL-2.0", lang.pkg_windows_airplay_desc()),
                             ("UxPlay", "antimof / FDH2", "GPL-3.0", lang.pkg_uxplay_desc()),
                             ("AirPodsDesktop", "SpriteOvO", "GPL-3.0", lang.pkg_airpodsdesktop_desc()),
+                            ("muelle", "Muelle contributors", "MIT", lang.pkg_muelle_desc()),
                             ("egui & eframe", "v0.29", "MIT / Apache-2.0", lang.pkg_egui_desc()),
                             ("wry", "v0.57", "Apache-2.0 / MIT", lang.pkg_wry_desc()),
                             ("three.js", "r160 (mrdoob)", "MIT", lang.pkg_threejs_desc()),

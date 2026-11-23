@@ -3127,6 +3127,25 @@ impl Language {
         }
     }
 
+    pub fn pkg_muelle_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "macOS Genie Effect 神燈最小化動畫數學模型與視覺演算法參考",
+            Self::SimplifiedChinese => "macOS Genie Effect 神灯最小化动画数学模型与视觉算法参考",
+            Self::English => "macOS Genie Effect minimize animation mathematical model and visual algorithms reference",
+            Self::French => "Modèle mathématique et algorithmes visuels de l'effet Génie de macOS",
+            Self::German => "Mathematisches Modell und visuelle Algorithmen für den macOS Genie-Effekt",
+            Self::Italian => "Modello matematico e algoritmi visivi dell'effetto Genio di macOS",
+            Self::Japanese => "macOS Genie Effect 最小化アニメーションの数学モデルおよび視覚アルゴリズムのリファレンス",
+            Self::Korean => "macOS Genie Effect 최소화 애니메이션 수학 모델 및 시각 알고리즘 참조",
+            Self::PortugueseBrazil => "Modelo matemático e algoritmos visuais do efeito Gênio do macOS",
+            Self::PortuguesePortugal => "Modelo matemático e algoritmos visuais do efeito Génio do macOS",
+            Self::Indonesian => "Model matematika dan algoritme visual animasi Genie Effect macOS",
+            Self::Vietnamese => "Mô hình toán học và thuật toán trực quan hiệu ứng Genie Effect của macOS",
+            Self::Russian => "Математическая модель и визуальные алгоритмы анимации Genie Effect в macOS",
+            Self::Spanish => "Modelo matemático y algoritmos visuales del efecto Genio de macOS",
+        }
+    }
+
     pub fn about_packages_header(&self) -> &'static str {
         match self {
             Self::TraditionalChinese => "開源致謝與授權",
@@ -7138,6 +7157,7 @@ mod tests {
             assert!(!lang.onboarding_workstation_btn_dismiss().is_empty());
             assert!(!lang.tooltip_main_window_docked_focus().is_empty());
             assert!(!lang.eq_profile_normal_hint().is_empty());
+            assert!(!lang.pkg_muelle_desc().is_empty());
         }
         assert_eq!(Language::TraditionalChinese.btn_popout_equalizer(), "⧉ 獨立視窗");
         assert_eq!(Language::TraditionalChinese.btn_dock_equalizer(), "⤓ 嵌入主視窗");
