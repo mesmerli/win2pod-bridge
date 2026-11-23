@@ -4979,34 +4979,6 @@ impl FlyoutApp {
 
                 ui.add_space(6.0);
 
-                // Genie Restore Animation (macOS Reverse S-Curve Swift Fly-out)
-                let mut genie_restore = self.state.genie_restore_animation;
-                let cb = ui.checkbox(
-                    &mut genie_restore,
-                    egui::RichText::new(lang.genie_restore_checkbox()).size(12.0),
-                );
-                if cb.changed() {
-                    let _ = self.cmd_tx.send_blocking(GuiCmd::SetGenieRestoreAnimation(genie_restore));
-                }
-                cb.on_hover_text(lang.genie_restore_tooltip());
-
-                ui.add_space(2.0);
-                ui.horizontal(|ui| {
-                    ui.add_space(20.0);
-                    let hint = if genie_restore {
-                        lang.genie_restore_hint_on()
-                    } else {
-                        lang.genie_restore_hint_off()
-                    };
-                    ui.label(
-                        egui::RichText::new(hint)
-                            .size(11.0)
-                            .weak(),
-                    );
-                });
-
-                ui.add_space(6.0);
-
                 // Global Hotkey
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new(lang.global_hotkey_label()).size(12.0));
