@@ -318,7 +318,7 @@ fn run_genie_s_curve_animation(
 
         let pixels = std::slice::from_raw_parts_mut(pixel_ptr as *mut u32, (win_w * win_h) as usize);
 
-        let duration_ms = 700.0; // 700ms relaxed & elegant macOS Genie duration
+        let duration_ms = 170.0; // 170ms ultra-fast swift macOS Genie duration (matched with restore speed)
         let start_time = Instant::now();
 
         let win_size = SIZE { cx: win_w, cy: win_h };

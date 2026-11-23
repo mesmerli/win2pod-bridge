@@ -1655,8 +1655,8 @@ pub unsafe fn collapse_cluster_animated(kind: WindowKind) {
             // 階梯延遲：外層葉節點（Visualizer / Equalizer）先動，中間層（MiniPlayer）後動
             let delay = match m {
                 WindowKind::Visualizer => 0.00,
-                WindowKind::Equalizer => 0.04,
-                WindowKind::MiniPlayer => 0.08,
+                WindowKind::Equalizer => 0.02,
+                WindowKind::MiniPlayer => 0.04,
                 _ => 0.0,
             };
             children.push(ChildAnimData {
@@ -1673,9 +1673,9 @@ pub unsafe fn collapse_cluster_animated(kind: WindowKind) {
         return;
     }
 
-    // 4. 在背景執行緒執行 12 步（約 192ms）逆向向心彈簧過場動畫
+    // 4. 在背景執行緒執行 8 步（約 88ms）極速逆向向心彈簧過場動畫
     std::thread::spawn(move || {
-        let steps = 12;
+        let steps = 8;
         for step in 1..=steps {
             let t_global = step as f32 / steps as f32;
 
@@ -1700,7 +1700,7 @@ pub unsafe fn collapse_cluster_animated(kind: WindowKind) {
                 }
             }
 
-            std::thread::sleep(std::time::Duration::from_millis(16));
+            std::thread::sleep(std::time::Duration::from_millis(11));
         }
 
         // 動畫結束：子視窗已完全滑入主視窗背後，執行靜默收納與位置保護
@@ -1864,8 +1864,8 @@ pub unsafe fn expand_cluster_animated(root: WindowKind, root_hwnd: HWND) {
             // 順向階梯延遲（內層先彈、外層後彈，與收攏鏡像倒序）
             let delay = match m {
                 WindowKind::MiniPlayer => 0.00,
-                WindowKind::Equalizer => 0.04,
-                WindowKind::Visualizer => 0.08,
+                WindowKind::Equalizer => 0.02,
+                WindowKind::Visualizer => 0.04,
                 _ => 0.0,
             };
 
@@ -1903,9 +1903,9 @@ pub unsafe fn expand_cluster_animated(root: WindowKind, root_hwnd: HWND) {
         return;
     }
 
-    // 3. 在背景執行緒執行 12 步（約 192ms）順向階梯彈簧外擴彈射動畫
+    // 3. 在背景執行緒執行 8 步（約 88ms）極速順向階梯彈簧外擴彈射動畫
     std::thread::spawn(move || {
-        let steps = 12;
+        let steps = 8;
         for step in 1..=steps {
             let t_global = step as f32 / steps as f32;
 
@@ -1930,7 +1930,7 @@ pub unsafe fn expand_cluster_animated(root: WindowKind, root_hwnd: HWND) {
                 }
             }
 
-            std::thread::sleep(std::time::Duration::from_millis(16));
+            std::thread::sleep(std::time::Duration::from_millis(11));
         }
 
         // 動畫結束：精準校正最終坐標並恢復全套群組狀態
@@ -2624,7 +2624,7 @@ where
             }
             let _guard = AnimGuard;
 
-            // 8 幀 × 14ms ≈ 112ms 極速磁吸折疊回核心視窗背後
+            // 8 幀 × 11ms ≈ 88ms 極速磁吸折疊回核心視窗背後
             let steps = 8;
             for step in 1..=steps {
                 let t = step as f32 / steps as f32;
@@ -2649,7 +2649,7 @@ where
                         }
                     }
                 }
-                std::thread::sleep(std::time::Duration::from_millis(14));
+                std::thread::sleep(std::time::Duration::from_millis(11));
             }
 
             // 塌縮吸入完成：子視窗已完全隱入核心主視窗背後，立即就地隱形，絕不彈回原位閃爍
