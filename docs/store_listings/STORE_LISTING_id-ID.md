@@ -1,9 +1,9 @@
 # Daftar Microsoft Store - Bahasa Indonesia (id-ID)
-# Win2Pod Bridge - Versi 0.1.20
+# Win2Pod Bridge - Versi 0.1.21
 
 ## 0. Yang Baru dalam Versi Ini (What's new in this version - Untuk Partner Center)
 ```text
-[Pembaruan Win2Pod Bridge 0.1.20 - Efek Jin Halus & Semi-Transparan Cerdas]
+[Pembaruan Win2Pod Bridge 0.1.21 - Efek Jin Halus & Semi-Transparan Cerdas]
 • 🧞 Efek Minimalkan Jin Bergaya macOS (Muelle Genie Effect):
   - Integrasi efek minimalkan Genie S-Curve per garis pemindaian yang terinspirasi oleh proyek sumber terbuka muelle. Jendela tersedot dengan mulus ke taskbar saat diminimalkan dan pulih seketika tanpa jeda.
 • 🪟 Semi-Transparansi Perangkat Keras Windows Asli (WS_EX_LAYERED) & Hover Peek Cerdas:

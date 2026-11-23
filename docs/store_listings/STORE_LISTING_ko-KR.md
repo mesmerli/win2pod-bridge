@@ -1,9 +1,9 @@
 # Microsoft Store 등록 정보 - 한국어 (ko-KR)
-# Win2Pod Bridge - 버전 0.1.20
+# Win2Pod Bridge - 버전 0.1.21
 
 ## 0. 이번 버전의 새로운 기능 (What's new in this version - 파트너 센터용)
 ```text
-【Win2Pod Bridge 0.1.20 대규모 업데이트 - Mac 스타일 지니 최소화 효과, 창 반투명화 및 스마트 호버 픽】
+【Win2Pod Bridge 0.1.21 대규모 업데이트 - Mac 스타일 지니 최소화 효과, 창 반투명화 및 스마트 호버 픽】
 • 🧞‍♂️ Mac 스타일 Muelle Genie S-Curve 지니 최소화 애니메이션：
   - macOS 고유의 유체 깔때기 수축 애니메이션을 완벽 구현! 스캔라인 단위(1px) 서브픽셀 안티앨리어싱 및 Hermite 3차 스플라인 수학 모델로 계단 현상 제거.
   - Windows 시스템 트레이의 Win2Pod 아이콘 좌표를 정밀 타겟팅하여 아이콘 속으로 자연스럽게 빨려 들어가는 몰입감 제공.

@@ -1,9 +1,9 @@
 # Microsoft Store Produktbeschreibung - Deutsch (de-DE)
-# Win2Pod Bridge - Version 0.1.20
+# Win2Pod Bridge - Version 0.1.21
 
 ## 0. Neuheiten in dieser Version (What's new in this version - Für Partner Center)
 ```text
-[Win2Pod Bridge 0.1.20 Großes Update - Mac-Genie-Effekt, Layered-Transparenz & Intelligentes Hover Peek]
+[Win2Pod Bridge 0.1.21 Großes Update - Mac-Genie-Effekt, Layered-Transparenz & Intelligentes Hover Peek]
 • 🧞‍♂️ Mac-Style Muelle Genie S-Curve Minimier-Animation:
   - Authentische macOS-Flüssigkeitstrichter-Animation mit zeilenweiser (1px) Sub-Pixel-Kantenglättung und kubischer Hermite-Spline-Mathematik ohne Treppeneffekte.
   - Zielt dynamisch exakt auf die physischen Koordinaten des Win2Pod-Tray-Icons in der Windows-Taskleiste.

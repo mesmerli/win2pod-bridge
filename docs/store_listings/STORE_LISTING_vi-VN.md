@@ -1,9 +1,9 @@
 # Danh sách Microsoft Store - Tiếng Việt (vi-VN)
-# Win2Pod Bridge - Phiên bản 0.1.20
+# Win2Pod Bridge - Phiên bản 0.1.21
 
 ## 0. Tính năng mới trong phiên bản này (What's new in this version - Dành cho Partner Center)
 ```text
-[Bản cập nhật Win2Pod Bridge 0.1.20 - Hiệu ứng Genie mượt mà & Bán trong suốt thông minh]
+[Bản cập nhật Win2Pod Bridge 0.1.21 - Hiệu ứng Genie mượt mà & Bán trong suốt thông minh]
 • 🧞 Hiệu ứng thu nhỏ Genie chuẩn phong cách macOS (Muelle Genie Effect):
   - Tích hợp hiệu ứng thu nhỏ Genie S-Curve quét từng dòng quét lấy cảm hứng từ dự án mã nguồn mở muelle. Cửa sổ được hút mượt mà vào thanh tác vụ (Taskbar) khi thu nhỏ và khôi phục tức thì mà không hề bị khựng.
 • 🪟 Độ bán trong suốt phần cứng Windows gốc (WS_EX_LAYERED) & Hover Peek thông minh:

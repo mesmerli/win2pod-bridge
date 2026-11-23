@@ -1,9 +1,9 @@
 # Microsoft Store Listing - English (en-US)
-# Win2Pod Bridge - Version 0.1.20
+# Win2Pod Bridge - Version 0.1.21
 
 ## 0. What's New in This Version (Release Notes - Paste into Partner Center)
 ```text
-[Win2Pod Bridge 0.1.20 Major Update - Mac-Style Genie Effect, Layered Opacity & Intelligent Hover Peek]
+[Win2Pod Bridge 0.1.21 Major Update - Mac-Style Genie Effect, Layered Opacity & Intelligent Hover Peek]
 • 🧞‍♂️ Mac-Style Muelle Genie S-Curve Minimize Effect:
   - Authentic macOS fluid funnel minimize animation powered by per-scanline (1px) sub-pixel anti-aliasing and Hermite cubic spline math, eliminating stepping artifacts.
   - Dynamically targets the exact physical coordinates of the Win2Pod system tray icon for a seamless, immersive tuck-away feel.

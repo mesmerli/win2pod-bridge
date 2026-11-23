@@ -1,9 +1,9 @@
 # Ficha da Microsoft Store - Português (pt-PT)
-# Win2Pod Bridge - Versão 0.1.20
+# Win2Pod Bridge - Versão 0.1.21
 
 ## 0. Novidades desta versão (What's new in this version - Para o Partner Center)
 ```text
-[Win2Pod Bridge 0.1.20 Atualização - Efeito Génio fluído e Translucidez inteligente]
+[Win2Pod Bridge 0.1.21 Atualização - Efeito Génio fluído e Translucidez inteligente]
 • 🧞 Efeito de minimização Génio estilo macOS (Muelle Genie Effect):
   - Integração do efeito S-Curve de varrimento linha a linha baseado no projeto de código aberto muelle. A janela é aspirada suavemente para a barra de tarefas ao minimizar e restaurada instantaneamente sem falhas.
 • 🪟 Translucidez nativa do Windows (WS_EX_LAYERED) e Hover Peek inteligente:

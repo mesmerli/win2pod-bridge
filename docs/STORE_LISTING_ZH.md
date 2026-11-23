@@ -1,9 +1,9 @@
 # 微軟商店產品描述 - 繁體中文 (zh-TW)
-# Win2Pod Bridge - 版本 0.1.20
+# Win2Pod Bridge - 版本 0.1.21
 
 ## 0. 此版本的新功能 (What's new in this version - 請貼入 Partner Center 發行說明)
 ```text
-【Win2Pod Bridge 0.1.20 重大功能更新 - Mac 風格神燈最小化特效、視窗原生半透明與智慧懸浮窺視】
+【Win2Pod Bridge 0.1.21 重大功能更新 - Mac 風格神燈最小化特效、視窗原生半透明與智慧懸浮窺視】
 • 🧞‍♂️ Mac 風格 Muelle Genie S-Curve 神燈最小化特效：
   - 完美復刻 macOS 經典水流漏斗收縮動畫！以逐掃描線（Per-Scanline 1px）次像素平滑光柵化與 Hermite 三次樣條數學模型驅動，徹底告別階梯橫條鋸齒。
   - 動態精確鎖定 Windows 系統匣 Win2Pod 圖示物理座標，呈現自圖示流出、吸回圖示隱沒的沉浸體驗。

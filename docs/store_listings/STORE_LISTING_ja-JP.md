@@ -1,9 +1,9 @@
 # Microsoft Store 掲載情報 - 日本語 (ja-JP)
-# Win2Pod Bridge - バージョン 0.1.20
+# Win2Pod Bridge - バージョン 0.1.21
 
 ## 0. 今回のバージョンの新機能 (What's new in this version - Partner Center に貼り付け)
 ```text
-【Win2Pod Bridge 0.1.20 大型アップデート - Mac 風ジーニーエフェクト最小化、透過ウィンドウ＆ホバーピーク】
+【Win2Pod Bridge 0.1.21 大型アップデート - Mac 風ジーニーエフェクト最小化、透過ウィンドウ＆ホバーピーク】
 • 🧞‍♂️ Mac 風 Muelle Genie S-Curve ジーニーエフェクト最小化：
   - macOS 伝統の流体じょうご最小化アニメーションを完全再現！スキャンライン単位（1px）のサブピクセルアンチエイリアスと Hermite 3次スプライン数学モデルにより、階段状のジャギーを徹底排除。
   - Windows システムトレイの Win2Pod アイコンの物理座標を動的に補足し、アイコンへ吸い込まれるような没入感を提供。
