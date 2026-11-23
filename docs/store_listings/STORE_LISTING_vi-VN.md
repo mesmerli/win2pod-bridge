@@ -1,20 +1,18 @@
 # Danh sách Microsoft Store - Tiếng Việt (vi-VN)
-# Win2Pod Bridge - Phiên bản 0.1.18
+# Win2Pod Bridge - Phiên bản 0.1.20
 
 ## 0. Tính năng mới trong phiên bản này (What's new in this version - Dành cho Partner Center)
 ```text
-[Bản cập nhật lớn Win2Pod Bridge 0.1.18 - Bộ nhận âm thanh AirPlay chính thức ra mắt!]
-• 📲 Tính năng mới "Bộ nhận âm thanh AirPlay (AirPlay Audio Receiver)":
-  - Biến máy tính Windows của bạn thành loa không dây AirPlay đích thực! Giờ đây bạn có thể truyền phát nhạc, podcast và âm thanh video trực tiếp từ Trung tâm điều khiển trên iPhone, iPad hoặc Mac ("AirPlay") tới loa hoặc tai nghe máy tính.
-  - Giải mã trực tiếp định dạng ALAC không nén (Lossless) 44.1 kHz / 16-bit mang đến chất lượng âm thanh trung thực chuẩn phòng thu.
-• ✨ Dải động tối đa (Passthrough Unity Gain):
-  - Vượt qua giới hạn suy giảm âm lượng từ Trung tâm điều khiển iOS. Bộ nhận trên PC giải mã trực tiếp ở mức 1.0 (0 dB Unity Gain) để đạt dải động tối đa, giữ trọn vẹn từng chi tiết âm thanh ngay cả khi thanh trượt âm lượng trên điện thoại bị hạ thấp.
-  - Hiển thị huy hiệu "✨ Dải động tối đa" với chú thích trực quan khi di chuột qua.
-• ⏯️ Tiếp tục phát lại thông minh khi chờ (DACP Target Caching):
-  - Khi nhạc tạm dừng trên iPhone, thẻ chờ trên PC vẫn giữ nút phát lại ▶ để đánh thức và tiếp tục phát nhạc từ xa không dây.
-• 🎛️ Điều khiển đa phương tiện hai chiều & Đồng bộ hình tiếng (A/V Lip-Sync):
-  - Điều khiển phát lại iPhone (Phát/Tạm dừng, Bài trước/kế tiếp) trực tiếp từ PC cùng ảnh bìa album và thông tin bài hát thời gian thực.
-  - Tích hợp 2 chế độ trễ: Tiêu chuẩn (1.5s) và Sâu (2.0s) giúp khớp chuẩn khẩu hình khi xem YouTube và phim ảnh.
+[Bản cập nhật Win2Pod Bridge 0.1.20 - Hiệu ứng Genie mượt mà & Bán trong suốt thông minh]
+• 🧞 Hiệu ứng thu nhỏ Genie chuẩn phong cách macOS (Muelle Genie Effect):
+  - Tích hợp hiệu ứng thu nhỏ Genie S-Curve quét từng dòng quét lấy cảm hứng từ dự án mã nguồn mở muelle. Cửa sổ được hút mượt mà vào thanh tác vụ (Taskbar) khi thu nhỏ và khôi phục tức thì mà không hề bị khựng.
+• 🪟 Độ bán trong suốt phần cứng Windows gốc (WS_EX_LAYERED) & Hover Peek thông minh:
+  - Cửa sổ trình trực quan hóa nổi hỗ trợ tùy chỉnh độ trong suốt phần cứng (20% ~ 100%), không che khuất không gian làm việc.
+  - Tính năng độc quyền Hover Peek: khi rê chuột lại gần, cửa sổ sẽ ngay lập tức khôi phục 100% độ mờ đục để thao tác chính xác và tiện lợi.
+• 🧲 Hút dính và hợp nhất cụm cửa sổ đa màn hình:
+  - Khắc phục lỗi lệch vị trí trên môi trường nhiều màn hình: cửa sổ chính và cửa sổ trực quan hóa sẽ tự động hút dính và đồng bộ mượt mà khi mở cùng lúc.
+  - Vòng sáng nhịp thở và chỉ dẫn trực quan cho người dùng mới:
+  - Bổ sung hiệu ứng hướng dẫn tinh tế giúp người dùng mới dễ dàng làm quen với tính năng ghim cửa sổ và chỉnh độ trong suốt ngay lần đầu khởi chạy.
 ```
 
 ## 1. Tên sản phẩm (Product Name)

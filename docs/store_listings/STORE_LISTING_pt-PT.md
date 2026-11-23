@@ -1,20 +1,18 @@
 # Ficha da Microsoft Store - Português (pt-PT)
-# Win2Pod Bridge - Versão 0.1.18
+# Win2Pod Bridge - Versão 0.1.20
 
 ## 0. Novidades desta versão (What's new in this version - Para o Partner Center)
 ```text
-[Win2Pod Bridge 0.1.18 Grande Atualização - O Recetor de Áudio AirPlay Chegou!]
-• 📲 Novo "Recetor de Áudio AirPlay (Audio Receiver)":
-  - Transforme o seu PC com Windows numa verdadeira coluna sem fios AirPlay! Transmita música e áudio de vídeos diretamente da Central de Controlo do iPhone, iPad ou Mac ("AirPlay") para os altifalantes ou auscultadores do seu computador.
-  - Descodificação ALAC sem perdas em tempo real a 44,1 kHz / 16 bits para uma fidelidade sonora impecável.
-• ✨ Alcance Dinâmico Máximo (Passthrough Unity Gain):
-  - Contorne as limitações de atenuação de volume do iOS. O recetor no PC descodifica a 1,0 (0 dB Unity Gain) em escala total digital, mantendo a dinâmica e a clareza mesmo se o volume do telemóvel estiver baixo.
-  - Novo selo "✨ Máx. Alcance Dinâmico" com exibição do volume do telemóvel ao passar o rato.
-• ⏯️ Retoma Inteligente em Espera (Cache de Sessão DACP):
-  - Quando a reprodução pausa no iPhone, o cartão de espera mantém o botão ▶ para retomar o áudio remotamente com um clique.
-• 🎛️ Controlo de Multimédia Bidirecional e Sincronia Labial:
-  - Controle a reprodução do iPhone (Play/Pause, Faixa ant./seg.) diretamente do PC com capas de álbum sincronizadas em tempo real.
-  - Modos de latência Padrão (1,5 s) e Profundo (2,0 s) para alinhar perfeitamente lábios e som no YouTube e vídeos.
+[Win2Pod Bridge 0.1.20 Atualização - Efeito Génio fluído e Translucidez inteligente]
+• 🧞 Efeito de minimização Génio estilo macOS (Muelle Genie Effect):
+  - Integração do efeito S-Curve de varrimento linha a linha baseado no projeto de código aberto muelle. A janela é aspirada suavemente para a barra de tarefas ao minimizar e restaurada instantaneamente sem falhas.
+• 🪟 Translucidez nativa do Windows (WS_EX_LAYERED) e Hover Peek inteligente:
+  - A janela flutuante do visualizador oferece opacidade ajustável (20% ~ 100%), permitindo trabalhar sem distrações visuais.
+  - Função exclusiva de foco ao passar o rato: a janela recupera instantaneamente 100% de opacidade assim que o cursor se aproxima, permitindo um controlo imediato.
+• 🧲 Atração magnética e acoplamento em múltiplos monitores:
+  - Correção de posicionamento em vários ecrãs: a janela principal e o visualizador atraem-se e unem-se perfeitamente quando abertos em conjunto.
+• 💡 Anel pulsante e dicas visuais para novos utilizadores:
+  - Introdução de animações e orientações intuitivas que mostram claramente como fixar a janela ou ajustar a transparência.
 ```
 
 ## 1. Nome do Produto (Product Name)

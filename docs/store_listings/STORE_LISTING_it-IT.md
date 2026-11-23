@@ -1,20 +1,18 @@
 # Scheda di Microsoft Store - Italiano (it-IT)
-# Win2Pod Bridge - Versione 0.1.18
+# Win2Pod Bridge - Versione 0.1.20
 
 ## 0. Novità di questa versione (What's new in this version - Per Partner Center)
 ```text
-[Win2Pod Bridge 0.1.18 Aggiornamento principale - Arriva il Ricevitore Audio AirPlay!]
-• 📲 Nuovissimo „Ricevitore Audio AirPlay (Audio Receiver)“:
-  - Trasforma il tuo PC Windows in un autentico altoparlante wireless AirPlay! Trasmetti musica e audio video direttamente dal Centro di controllo di iPhone, iPad o Mac («AirPlay») agli altoparlanti o cuffie del PC.
-  - Decodifica ALAC lossless a 44,1 kHz / 16 bit in tempo reale per un audio Hi-Fi cristallino.
-• ✨ Massima Gamma Dinamica (Passthrough Unity Gain):
-  - Bypassa i limiti del cursore volume di iOS. Il ricevitore decodifica a 1,0 (0 dB Unity Gain) a fondo scala digitale, preservando dinamica e dettagli anche se il volume dello smartphone è abbassato.
-  - Badge dedicato «✨ Max Gamma Dinamica» con tooltip del volume del telefono al passaggio del mouse.
-• ⏯️ Ripresa Smart dallo Standby (Caching sessione DACP):
-  - Se iPhone mette in pausa, la scheda di standby mantiene il pulsante ▶ per risvegliare la riproduzione da remoto con un clic.
-• 🎛️ Controllo multimediale bidirezionale e Lip-Sync:
-  - Controlla la riproduzione di iPhone (Play/Pausa, Brano succ./prec.) dal PC con copertine degli album sincronizzate in tempo reale.
-  - Modalità di latenza Standard (1,5 s) e Profonda (2,0 s) per sincronizzare perfettamente audio e video per YouTube e film in streaming.
+[Win2Pod Bridge 0.1.20 Aggiornamento - Effetto Genio fluido e Traslucenza intelligente]
+• 🧞 Effetto di riduzione a icona Genio stile macOS (Muelle Genie Effect):
+  - Integrazione dell'effetto S-Curve per riga di scansione ispirato al progetto open source muelle. La finestra viene aspirata elegantemente nella barra delle applicazioni durante la riduzione a icona e ripristinata istantaneamente.
+• 🪟 Traslucenza nativa di Windows (WS_EX_LAYERED) e Hover Peek intelligente:
+  - La finestra fluttuante del visualizzatore supporta l'opacità regolabile (20% ~ 100%), fondendosi delicatamente con lo sfondo.
+  - Funzione esclusiva al passaggio del mouse: la finestra torna istantaneamente opaca al 100% appena il cursore si avvicina, per un controllo comodo e intuitivo.
+• 🧲 Calibrazione e aggancio magnetico su configurazioni multi-monitor:
+  - Risolti i disallineamenti con monitor multipli: all'apertura simultanea, la finestra principale e il visualizzatore si attraggono e si uniscono perfettamente.
+• 💡 Cerchio pulsante e suggerimenti visivi per i nuovi utenti:
+  - Introdotte guide visive interattive per scoprire rapidamente come bloccare in primo piano o rendere trasparente la finestra.
 ```
 
 ## 1. Nome del prodotto (Product Name)

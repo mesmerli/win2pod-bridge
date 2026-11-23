@@ -1,20 +1,18 @@
 # Ficha de Microsoft Store - Español (es-ES)
-# Win2Pod Bridge - Versión 0.1.18
+# Win2Pod Bridge - Versión 0.1.20
 
 ## 0. Novedades de esta versión (What's new in this version - Para Partner Center)
 ```text
-[Win2Pod Bridge 0.1.18 Gran actualización - ¡Llega el receptor de audio AirPlay!]
-• 📲 Nuevo «Receptor de audio AirPlay (Audio Receiver)»:
-  - ¡Convierta su PC con Windows en un auténtico altavoz inalámbrico AirPlay! Transmita música y audio de vídeos directamente desde el Centro de control de iPhone, iPad o Mac («AirPlay») a sus altavoces o auriculares de PC.
-  - Decodificación ALAC sin pérdidas en tiempo real a 44,1 kHz / 16 bits para un sonido Hi-Fi cristalino.
-• ✨ Rango dinámico máximo (Passthrough Unity Gain):
-  - Evita las restricciones de volumen de iOS. El receptor de PC decodifica a 1,0 (0 dB Unity Gain) a escala completa digital, preservando el rango dinámico y los detalles aunque el volumen del móvil esté bajo.
-  - Nueva insignia «✨ Rango dinámico máx.» con información emergente del volumen del teléfono.
-• ⏯️ Reanudación inteligente en espera (Caché de sesión DACP):
-  - Si el iPhone pausa la reproducción, la tarjeta de espera conserva el botón ▶ para reanudar la reproducción de forma remota con un solo clic.
-• 🎛️ Control multimedia bidireccional y Lip-Sync:
-  - Controle la reproducción del iPhone (Reproducir/Pausar, Pista ant./sig.) desde el PC con carátulas sincronizadas en tiempo real.
-  - Modos de latencia Estándar (1,5 s) y Profunda (2,0 s) para sincronizar labios en YouTube y películas en streaming.
+[Win2Pod Bridge 0.1.20 Actualización - Efecto Genio fluido y Translucidez inteligente]
+• 🧞 Efecto de minimización Genio estilo macOS (Muelle Genie Effect):
+  - Integración del efecto de compresión S-Curve por línea de escaneo inspirado en el proyecto de código abierto muelle. La ventana se aspira suavemente hacia la barra de tareas al minimizar y se restaura al instante sin tirones.
+• 🪟 Translucidez nativa de Windows (WS_EX_LAYERED) e interacción inteligente al pasar el cursor:
+  - La ventana flotante del visualizador admite opacidad ajustable (20% ~ 100%) sin interferir con su flujo de trabajo.
+  - Función exclusiva «Hover Peek»: al pasar el ratón por encima, la ventana recupera el 100% de opacidad de inmediato para un control táctil y cómodo.
+• 🧲 Acoplamiento y atracción magnética de ventanas multimonitor:
+  - Corrección de desajustes en configuraciones con múltiples monitores. Al abrir ambas ventanas, se alinean y acoplan magnéticamente de forma natural.
+• 💡 Anillo de respiración y guía intuitiva para nuevos usuarios:
+  - Nuevas indicaciones visuales elegantes que enseñan a fijar la ventana y ajustar la transparencia en el primer uso.
 ```
 
 ## 1. Nombre del producto (Product Name)

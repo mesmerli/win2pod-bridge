@@ -1,20 +1,18 @@
 # Daftar Microsoft Store - Bahasa Indonesia (id-ID)
-# Win2Pod Bridge - Versi 0.1.18
+# Win2Pod Bridge - Versi 0.1.20
 
 ## 0. Yang Baru dalam Versi Ini (What's new in this version - Untuk Partner Center)
 ```text
-[Pembaruan Besar Win2Pod Bridge 0.1.18 - Penerima Audio AirPlay Telah Hadir!]
-• 📲 Fitur Baru "Penerima Audio AirPlay (Audio Receiver)":
-  - Ubah PC Windows Anda menjadi speaker nirkabel AirPlay sejati! Anda sekarang dapat melakukan streaming musik, podcast, dan video langsung dari Pusat Kontrol di iPhone, iPad, atau Mac ("AirPlay") ke speaker atau headphone PC Anda.
-  - Decoding ALAC Lossless asli 44.1 kHz / 16-bit menghadirkan kualitas audio tanpa penurunan mutu sekelas audiophile.
-• ✨ Rentang Dinamis Maksimum (Passthrough Unity Gain):
-  - Mengabaikan pembatasan atenuasi volume Pusat Kontrol iOS. Penerima PC mendekode audio langsung pada 1.0 (0 dB Unity Gain) untuk rentang dinamis maksimum, mempertahankan detail suara bahkan saat volume ponsel dikecilkan.
-  - Menampilkan lencana "✨ Rentang Dinamis Maks" dengan tooltip intuitif saat mengarahkan kursor.
-• ⏯️ Lanjutkan Siaga Cerdas (Cache Target DACP):
-  - Saat pemutaran dijeda di iPhone, kartu siaga PC mempertahankan tombol putar untuk melanjutkan pemutaran jarak jauh melalui nirkabel.
-• 🎛️ Kontrol Media Dua Arah & Sinkronisasi Bibir A/V:
-  - Kendalikan pemutaran iPhone (Putar/Jeda, Trek Berikutnya/Sebelumnya) langsung dari PC dengan sampul album dan metadata tersinkronisasi waktu nyata.
-  - Pilihan latensi Standar (1.5s) dan Dalam (2.0s) untuk sinkronisasi sempurna pada video dan YouTube.
+[Pembaruan Win2Pod Bridge 0.1.20 - Efek Jin Halus & Semi-Transparan Cerdas]
+• 🧞 Efek Minimalkan Jin Bergaya macOS (Muelle Genie Effect):
+  - Integrasi efek minimalkan Genie S-Curve per garis pemindaian yang terinspirasi oleh proyek sumber terbuka muelle. Jendela tersedot dengan mulus ke taskbar saat diminimalkan dan pulih seketika tanpa jeda.
+• 🪟 Semi-Transparansi Perangkat Keras Windows Asli (WS_EX_LAYERED) & Hover Peek Cerdas:
+  - Jendela visualizer mengambang mendukung transparansi yang dapat disesuaikan (20% ~ 100%), tidak mengganggu alur kerja Anda.
+  - Fitur eksklusif Hover Peek: saat kursor mouse mendekat, jendela langsung kembali ke opasitas 100% untuk kontrol yang mudah dan nyaman.
+• 🧲 Penyelarasan Magnetis & Penggabungan Jendela Multi-Monitor:
+  - Memperbaiki ketidaksejajaran pada pengaturan multi-layar: jendela utama dan visualizer saling menempel dan menyatu dengan mulus saat dibuka bersamaan.
+• 💡 Lingkaran Nafas & Panduan Visual Pengguna Baru:
+  - Menambahkan animasi panduan elegan untuk membantu pengguna baru menyematkan jendela dan menyesuaikan transparansi pada peluncuran pertama.
 ```
 
 ## 1. Nama Produk (Product Name)

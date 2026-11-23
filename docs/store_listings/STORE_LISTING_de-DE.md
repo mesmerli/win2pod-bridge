@@ -1,20 +1,21 @@
 # Microsoft Store Produktbeschreibung - Deutsch (de-DE)
-# Win2Pod Bridge - Version 0.1.18
+# Win2Pod Bridge - Version 0.1.20
 
 ## 0. Neuheiten in dieser Version (What's new in this version - Für Partner Center)
 ```text
-[Win2Pod Bridge 0.1.18 Großes Update - AirPlay Audio-Empfänger ist da!]
-• 📲 Brandneuer „AirPlay Audio-Empfänger (Audio Receiver)“:
-  - Verwandeln Sie Ihren Windows-PC in einen echten kabellosen AirPlay-Lautsprecher! Streamen Sie Audio von iPhone, iPad oder Mac („AirPlay“ im Kontrollzentrum) direkt auf Ihren PC.
-  - Native 44,1 kHz / 16-Bit verlustfreie ALAC-Echtzeit-Dekodierung für glasklaren Hi-Fi-Sound.
-• ✨ Maximaler Dynamikbereich (Unity Gain Passthrough):
-  - Umgeht Lautstärkebeschränkungen des iOS-Kontrollzentrums. Der Empfänger dekodiert direkt mit 1,0 (0 dB Unity Gain) digitalem Maximalpegel – volle Dynamik und Details bleiben auch bei leiserem Handy erhalten.
-  - Neues „✨ Max Dynamikbereich“-Badge mit Lautstärkeanzeige beim Darüberfahren.
-• ⏯️ Intelligente Standby-Reaktivierung (DACP-Target-Caching):
-  - Bei Wiedergabepause auf dem iPhone behält die Standby-Karte die ▶-Wiedergabetaste. Ein Klick weckt die Wiedergabe auf dem iPhone drahtlos auf.
-• 🎛️ Bidirektionale Mediensteuerung & Lip-Sync-Synchronisation:
-  - Steuern Sie Wiedergabe/Pause/Titelwechsel direkt vom PC aus, inklusive Albumcover-Synchronisation.
-  - Integrierte Dual-Latenz-Modi: Standard (1,5 s) und Tief (2,0 s) für lippensynchrones YouTube- & Videostreaming.
+[Win2Pod Bridge 0.1.20 Großes Update - Mac-Genie-Effekt, Layered-Transparenz & Intelligentes Hover Peek]
+• 🧞‍♂️ Mac-Style Muelle Genie S-Curve Minimier-Animation:
+  - Authentische macOS-Flüssigkeitstrichter-Animation mit zeilenweiser (1px) Sub-Pixel-Kantenglättung und kubischer Hermite-Spline-Mathematik ohne Treppeneffekte.
+  - Zielt dynamisch exakt auf die physischen Koordinaten des Win2Pod-Tray-Icons in der Windows-Taskleiste.
+• 🪟 Native Fenster-Transparenz (Layered Opacity) & Smart Hover Peek:
+  - GPU-beschleunigtes Win32 WS_EX_LAYERED Blending mit stufenloser 20% ~ 100% Transparenz.
+  - Hover Peek: Springt bei Mausberührung sofort auf 100% Kontrast und blendet beim Verlassen sanft zurück.
+  - Schnelle Gestensteuerung: Alt + Mausrad drehen für sofortige Anpassung in 5%-Schritten.
+• 🧲 Nahtlose Cluster-Zusammenführung & Rollenbasierte Titelleiste:
+  - Behebt das Aufspalten von Untergruppen beim Wiederherstellen des Hauptfensters aus dem Tray.
+  - Rollenaufteilung: Master (🧲) mit Leuchtbalken führt die Gruppe; Slaves (📎) blenden redundante Buttons aus. Shift+Klick für Solo-Minimieren und atomare Topmost-Synchronisierung.
+• 💡 Onboarding-Leuchtfeuer & Infoblase für die modulare Workstation:
+  - Dezenter blauer Puls-Effekt um das App-Icon mit Milchglas-Infokarte für Erstbenutzer.
 ```
 
 ## 1. Produktname (Product Name)

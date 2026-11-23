@@ -1,20 +1,18 @@
 # Fiche Microsoft Store - Français (fr-FR)
-# Win2Pod Bridge - Version 0.1.18
+# Win2Pod Bridge - Version 0.1.20
 
 ## 0. Nouveautés de cette version (What's new in this version - À coller dans Partner Center)
 ```text
-[Win2Pod Bridge 0.1.18 Mise à jour majeure - Le récepteur audio AirPlay est arrivé !]
-• 📲 Tout nouveau « Récepteur audio AirPlay (Audio Receiver) » :
-  - Transformez votre PC Windows en véritable enceinte sans fil AirPlay ! Diffusez la musique et l'audio de vos vidéos directement depuis le Centre de contrôle de votre iPhone, iPad ou Mac (« AirPlay ») vers vos haut-parleurs ou écouteurs PC.
-  - Décodage ALAC sans perte 44,1 kHz / 16 bits en temps réel pour un rendu audiophile cristallin.
-• ✨ Plage dynamique maximale (Pass-through Unity Gain) :
-  - Contourne les limites de volume d'iOS. Le récepteur PC décode directement à 1,0 (0 dB Unity Gain) sans compression de dynamique, même avec le curseur de l'iPhone abaissé.
-  - Badge dédié « ✨ Plage dynamique max » avec affichage du volume du téléphone au survol.
-• ⏯️ Reprise intelligente en veille (Mise en cache DACP) :
-  - Si l'iPhone met la lecture en pause, la carte de veille conserve le bouton ▶ pour relancer la lecture à distance d'un simple clic.
-• 🎛️ Contrôle multimédia bidirectionnel & Calibrage synchronisation labiale :
-  - Contrôlez la lecture de l'iPhone (Lecture/Pause, Suivant/Précédent) depuis le PC avec pochette d'album synchronisée en temps réel.
-  - Modes de latence Standard (1,5 s) et Profond (2,0 s) pour synchroniser parfaitement image et son sur YouTube et films.
+[Win2Pod Bridge 0.1.20 Mise à jour - Effet Génie fluide et Translucidité intelligente]
+• 🧞 Effet de réduction Génie inspiré de macOS (Muelle Genie Effect) :
+  - Intégration de l'effet de minimisation Genie S-Curve par balayage de lignes inspiré du projet open source muelle. La fenêtre se compresse élégamment dans la barre des tâches lors de la réduction, avec un retour instantané et fluide lors de la restauration.
+• 🪟 Translucidité native Windows (WS_EX_LAYERED) & Survol intelligent :
+  - La fenêtre flottante de visualisation prend en charge la translucidité matérielle ajustable (20% ~ 100%), éliminant toute distraction visuelle.
+  - Fonction exclusive de survol intelligent (Hover Peek) : dès que le curseur approche, la fenêtre redevient instantanément opaque à 100% pour un contrôle précis et sans effort.
+• 🧲 Fusion et ancrage automatique des fenêtres multi-écrans :
+  - Résolution des problèmes de positionnement sous plusieurs écrans : la fenêtre principale et la fenêtre de visualisation s'alignent et s'aimantent parfaitement lors de l'ouverture conjointe.
+• 💡 Anneau respirant et guidage visuel pour nouveaux utilisateurs :
+  - Ajout d'animations visuelles interactives guidant intuitivement les réglages d'épinglage et de transparence au premier lancement.
 ```
 
 ## 1. Nom du produit (Product Name)
