@@ -276,40 +276,42 @@ pub fn hide_main_window_only(hwnd: HWND, _ctx: &egui::Context) {
             capture_bmp = hbmp as usize;
         }
 
-        // Add WS_EX_TOOLWINDOW and delete taskbar tab so it disappears from Taskbar and Alt+Tab
-        let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
-        let new_ex = (ex | WS_EX_TOOLWINDOW as i32) & !(WS_EX_APPWINDOW as i32);
-        SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
-        crate::snapping::delete_taskbar_tab_pub(hwnd);
-
-        // Move far off-screen
-        SetWindowPos(
-            hwnd,
-            HWND_NOTOPMOST,
-            -32000,
-            -32000,
-            0,
-            0,
-            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-        );
-
         if !IS_APP_FLEET_HIDDEN.load(Ordering::SeqCst) {
             crate::snapping::handle_window_closed(crate::snapping::WindowKind::Main);
         }
         crate::snapping::sync_cluster_taskbar_ownership();
 
-        // 觸發基於 Muelle S-curve 數學模型的神燈精靈扭曲收縮效果 (完全解耦純視覺)
         if capture_bmp != 0 {
+            // Trigger macOS-style S-curve Genie effect with seamless atomic handover.
+            // The original window remains in place until frame 0 is rendered and displayed,
+            // preventing any blank flash or frame gap flicker.
             crate::genie_effect::play_genie_s_curve_effect(
                 capture_bmp,
+                hwnd as usize,
                 rect.left,
                 rect.top,
                 w,
                 h,
             );
+        } else {
+            // Fallback: If no screenshot bitmap available, hide and move immediately
+            let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
+            let new_ex = (ex | WS_EX_TOOLWINDOW as i32) & !(WS_EX_APPWINDOW as i32);
+            SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
+            crate::snapping::delete_taskbar_tab_pub(hwnd);
+
+            SetWindowPos(
+                hwnd,
+                HWND_NOTOPMOST,
+                -32000,
+                -32000,
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+            );
+            trim_working_set();
         }
     }
-    trim_working_set();
 }
 
 /// Backward compatibility alias for hide_main_window_only

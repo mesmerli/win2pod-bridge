@@ -69,6 +69,7 @@ impl Genie {
 /// Trigger the macOS-style S-curve Genie effect using window screenshot bitmap
 pub fn play_genie_s_curve_effect(
     hbmp_handle: usize,
+    orig_hwnd: usize,
     start_x: i32,
     start_y: i32,
     start_w: i32,
@@ -76,7 +77,7 @@ pub fn play_genie_s_curve_effect(
 ) {
     #[cfg(test)]
     {
-        let _ = (hbmp_handle, start_x, start_y, start_w, start_h);
+        let _ = (hbmp_handle, orig_hwnd, start_x, start_y, start_w, start_h);
         return;
     }
 
@@ -87,7 +88,7 @@ pub fn play_genie_s_curve_effect(
         std::thread::Builder::new()
             .name("genie-scurve-fx".into())
             .spawn(move || {
-                run_genie_s_curve_animation(hbmp_handle, start_x, start_y, start_w, start_h);
+                run_genie_s_curve_animation(hbmp_handle, orig_hwnd, start_x, start_y, start_w, start_h);
             })
             .ok();
     }
@@ -96,6 +97,7 @@ pub fn play_genie_s_curve_effect(
 #[cfg(not(test))]
 fn run_genie_s_curve_animation(
     hbmp_handle: usize,
+    orig_hwnd_val: usize,
     start_x: i32,
     start_y: i32,
     start_w: i32,
@@ -110,18 +112,45 @@ fn run_genie_s_curve_animation(
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DestroyWindow,
-        FindWindowExW, FindWindowW, GetSystemMetrics, GetWindowRect,
-        RegisterClassExW, ShowWindow,
+        FindWindowExW, FindWindowW, GetSystemMetrics, GetWindowLongW, GetWindowRect,
+        RegisterClassExW, SetWindowLongW, SetWindowPos, ShowWindow,
         UpdateLayeredWindow,
-        SM_CXSCREEN, SM_CYSCREEN,
-        SW_SHOWNOACTIVATE, ULW_ALPHA, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+        GWL_EXSTYLE, HWND_NOTOPMOST, SM_CXSCREEN, SM_CYSCREEN,
+        SW_SHOWNOACTIVATE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER,
+        ULW_ALPHA, WNDCLASSEXW, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
         WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
     };
 
     ABORT_FLAG.store(false, Ordering::SeqCst);
 
+    let hide_orig_window = |hwnd_val: usize| {
+        if hwnd_val != 0 {
+            let hwnd = hwnd_val as HWND;
+            unsafe {
+                if windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(hwnd) != 0 {
+                    let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
+                    let new_ex = (ex | WS_EX_TOOLWINDOW as i32) & !(WS_EX_APPWINDOW as i32);
+                    SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
+                    crate::snapping::delete_taskbar_tab_pub(hwnd);
+                    SetWindowPos(
+                        hwnd,
+                        HWND_NOTOPMOST,
+                        -32000,
+                        -32000,
+                        0,
+                        0,
+                        SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                    );
+                }
+            }
+        }
+    };
+
+    let mut orig_hidden = false;
+
     let hbmp_src: HBITMAP = hbmp_handle as HBITMAP;
     if hbmp_src.is_null() || start_w <= 10 || start_h <= 10 {
+        hide_orig_window(orig_hwnd_val);
         return;
     }
 
@@ -286,7 +315,8 @@ fn run_genie_s_curve_animation(
         }
 
         let old_rnd = SelectObject(hdc_render, hbmp_render);
-        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        // Note: Do NOT ShowWindow here yet! Wait until the 0-th frame is drawn and UpdateLayeredWindow is called.
+        // This ensures the animation window immediately matches the original window without a blank/black frame flicker.
 
         let pixels = std::slice::from_raw_parts_mut(pixel_ptr as *mut u32, (win_w * win_h) as usize);
 
@@ -410,7 +440,21 @@ fn run_genie_s_curve_animation(
                 ULW_ALPHA,
             );
 
+            // Seamless handover: On the 0-th frame, the layered window has drawn the exact 1:1 window screenshot
+            // and is positioned identically above the original window. Make it visible and immediately hide the
+            // original window to eliminate any frame gap, blank flicker, or border recalculation hitch!
+            if !orig_hidden {
+                ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                hide_orig_window(orig_hwnd_val);
+                orig_hidden = true;
+            }
+
             std::thread::sleep(std::time::Duration::from_millis(11));
+        }
+
+        // Safety fallback: ensure original window is hidden even if loop broke early (e.g. abort)
+        if !orig_hidden {
+            hide_orig_window(orig_hwnd_val);
         }
 
         // Cleanup resources
@@ -418,6 +462,9 @@ fn run_genie_s_curve_animation(
         DeleteDC(hdc_render);
         DeleteObject(hbmp_render);
         DestroyWindow(hwnd);
+
+        // Defer working set trimming until animation has completed
+        crate::tray::trim_working_set();
     }
 }
 
