@@ -1,23 +1,23 @@
 # Microsoft Store Listing - English (en-US)
-# Win2Pod Bridge - Version 0.1.19
+# Win2Pod Bridge - Version 0.1.20
 
 ## 0. What's New in This Version (Release Notes - Paste into Partner Center)
 ```text
-[Win2Pod Bridge 0.1.19 Major Update - Modular Workstation & Audiophile VFD Display]
-• 🗔 All-New "Modular Multi-Window Workstation" & Magnetic Dock Tree:
-  - Relive the classic Winamp docking magic! Freely snap and dock the Main Control Window, Mini Player, 10-Band Pro Equalizer, and 3D Motion Visualizer along any edge.
-  - New "Modular Workstation" caption button (◫) instantaneously deploys a perfectly aligned 3-column flagship audiophile command center.
-  - Directed Dock Tree Forest topology with Win32 subclassing enables master drag propagation, natural sub-window severing, and autonomous subcluster root promotion.
-• 📟 6-Line Audiophile VFD Matrix & Classical Movement Smart Wrapping:
-  - Authentic vintage hi-fi VFD display with high-density monospaced fonts and multi-tier fluorescent green and amber palettes.
-  - Classical Movement Smart Wrapping splits symphonic and classical movements cleanly across two balanced lines with zero awkward hyphenation.
-  - Clean 1:1 square album art and a dedicated "Source: App ↗" recall button permanently eliminate intrusive hovering tooltips.
-• 📐 Golden Half-Height Ratio (340px) & 50px Full-Height Spectrum:
-  - Mini Player and Equalizer default heights are calibrated to exactly half of the Main Window (340px), forming a flush, gapless side stack.
-  - Mini Player real-time visualizer spectrum elevated to 50px, delivering bit-perfect peak decay dynamics identical to the main player.
-• 🛡️ Win32 Z-Order SSOT & Ghost Topmost Protection:
-  - Single Source of Truth (SSOT): Cluster topmost hierarchy is anchored to the master pin state, eliminating desynchronized flags.
-  - Enforced Win32 HWND_NOTOPMOST demotion guarantees that unpinned windows never float stubbornly above desktop applications.
+[Win2Pod Bridge 0.1.20 Major Update - Mac-Style Genie Effect, Layered Opacity & Intelligent Hover Peek]
+• 🧞‍♂️ Mac-Style Muelle Genie S-Curve Minimize Effect:
+  - Authentic macOS fluid funnel minimize animation powered by per-scanline (1px) sub-pixel anti-aliasing and Hermite cubic spline math, eliminating stepping artifacts.
+  - Dynamically targets the exact physical coordinates of the Win2Pod system tray icon for a seamless, immersive tuck-away feel.
+• 🪟 Native Layered Window Opacity & Intelligent Hover Peek:
+  - GPU-accelerated Win32 WS_EX_LAYERED blending with smooth 20% ~ 100% opacity tuning that keeps windows out of your way while coding or browsing.
+  - Hover Peek: instantly springs to 100% solid contrast when the mouse hovers over the window, fading gently back to background opacity upon exit.
+  - Fast Gesture Control: hover and scroll Alt + Mouse Wheel to fluidly adjust opacity in 5% increments without opening settings.
+• 🧲 Seamless Home Summon Cluster Union & Role-Based Caption Buttons:
+  - Fully resolved cluster severance when summoning the Main window from tray into an active Mini Player group—all 4 windows now join harmoniously.
+  - Three-tier window roles: Master (🧲) commands the group with an ambient glow border, while Slave (📎) windows automatically streamline redundant title bar buttons.
+  - Dual-mode controls: click to minimize the entire cluster, or Shift+Click to solo minimize; atomic group-wide topmost pinning synchronization.
+• 💡 Discover Modular Workstation Onboarding Beacon & Balloon:
+  - App icon on the title bar pulses with an ambient cyan sine-wave halo beacon alongside a floating frosted-glass card to guide new users to the 3-column workstation.
+  - Self-healing dismissal: permanently silences future balloons once explored or dismissed for an unobtrusive experience.
 ```
 
 ## 1. Product Name
