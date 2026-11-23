@@ -14,9 +14,226 @@ use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 static VISUALIZER_HWND: AtomicIsize = AtomicIsize::new(0);
 static VISUALIZER_FULLSCREEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static VISUALIZER_HUD_MAIN_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static VISUALIZER_DEV_NAME: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 static VISUALIZER_LANG: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 static APPLIED_LANG: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+static HUD_SAVED_PIN_STATES: std::sync::Mutex<Vec<(crate::snapping::WindowKind, bool)>> =
+    std::sync::Mutex::new(Vec::new());
+
+pub fn restore_hud_pinned_states() {
+    if let Ok(mut saved_pins) = HUD_SAVED_PIN_STATES.lock() {
+        for (m, was_pinned) in saved_pins.drain(..) {
+            crate::snapping::set_window_pinned(m, was_pinned);
+            unsafe {
+                crate::snapping::apply_window_topmost(m, was_pinned);
+            }
+        }
+    }
+    if let Some(ctx) = crate::gui::get_egui_ctx() {
+        ctx.request_repaint();
+    }
+}
+
+pub fn reset_hud_main_shown() {
+    VISUALIZER_HUD_MAIN_SHOWN.store(false, Ordering::SeqCst);
+}
+
+pub fn is_hud_shown() -> bool {
+    VISUALIZER_HUD_MAIN_SHOWN.load(Ordering::SeqCst)
+}
+
+/// 取得當前全螢幕 HUD 浮層所涵蓋的所有視窗（包括主視窗，以及任何已開啟/可見的子視窗）。
+/// 不論它們是否吸附在一起，凡是在全螢幕之上運作的 HUD 浮層視窗，全體受 HUD 機制保護，
+/// 絕不因使用者將子視窗拖離主視窗而在點擊視覺特效時被全螢幕蓋過。
+pub fn get_all_hud_target_windows() -> Vec<crate::snapping::WindowKind> {
+    let mut targets = Vec::new();
+    targets.push(crate::snapping::WindowKind::Main);
+
+    for &k in &[crate::snapping::WindowKind::MiniPlayer, crate::snapping::WindowKind::Equalizer] {
+        let hwnd = crate::snapping::get_window_hwnd(k);
+        if !hwnd.is_null() && unsafe { IsWindow(hwnd) != 0 } {
+            targets.push(k);
+        }
+    }
+
+    #[cfg(test)]
+    {
+        let keys = crate::snapping::with_dock_tree(|t| t.keys().cloned().collect::<Vec<_>>());
+        for k in keys {
+            if k != crate::snapping::WindowKind::Visualizer && !targets.contains(&k) {
+                targets.push(k);
+            }
+        }
+    }
+
+    targets
+}
+
+pub fn hide_hud_cluster() {
+    VISUALIZER_HUD_MAIN_SHOWN.store(false, Ordering::SeqCst);
+
+    let vis_hwnd = get_visualizer_hwnd();
+
+    unsafe {
+        // 1. 全螢幕視覺視窗本身維持最高層級 HWND_TOPMOST 並取回焦點
+        if !vis_hwnd.is_null() && IsWindow(vis_hwnd) != 0 {
+            SetWindowPos(
+                vis_hwnd,
+                HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+            crate::tray::force_foreground(vis_hwnd);
+            PostMessageW(vis_hwnd, WM_USER_FOCUS_WEBVIEW, 0, 0);
+        }
+
+        // 2. 還原原始釘選狀態，並將所有 HUD 浮層視窗（無論黏著還是拉開）收納至全螢幕視覺視窗背後
+        let members = get_all_hud_target_windows();
+        let mut restored_pins = Vec::new();
+        if let Ok(mut saved_pins) = HUD_SAVED_PIN_STATES.lock() {
+            for &m in &members {
+                if let Some(pos) = saved_pins.iter().position(|(k, _)| *k == m) {
+                    restored_pins.push(saved_pins.remove(pos));
+                }
+            }
+        }
+
+        for &m in &members {
+            let was_pinned = restored_pins
+                .iter()
+                .find(|(k, _)| *k == m)
+                .map(|(_, p)| *p)
+                .unwrap_or_else(|| crate::snapping::is_window_pinned(m));
+            crate::snapping::set_window_pinned(m, was_pinned);
+
+            let hwnd = crate::snapping::get_window_hwnd(m);
+            if !hwnd.is_null() && IsWindow(hwnd) != 0 && !crate::tray::is_window_hidden_to_tray() {
+                if !was_pinned {
+                    SetWindowPos(
+                        hwnd,
+                        HWND_NOTOPMOST,
+                        0,
+                        0,
+                        0,
+                        0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                    );
+                }
+                if !vis_hwnd.is_null() && IsWindow(vis_hwnd) != 0 {
+                    SetWindowPos(
+                        hwnd,
+                        vis_hwnd,
+                        0,
+                        0,
+                        0,
+                        0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                    );
+                }
+            }
+        }
+    }
+
+    if let Some(ctx) = crate::gui::get_egui_ctx() {
+        ctx.request_repaint();
+    }
+}
+
+pub fn show_hud_cluster() {
+    VISUALIZER_HUD_MAIN_SHOWN.store(true, Ordering::SeqCst);
+
+    let members = get_all_hud_target_windows();
+
+    // 備份進入全螢幕 HUD 前的原始釘選狀態，供退出 HUD 或全螢幕時精確還原
+    if let Ok(mut saved_pins) = HUD_SAVED_PIN_STATES.lock() {
+        for &m in &members {
+            if !saved_pins.iter().any(|(k, _)| *k == m) {
+                saved_pins.push((m, crate::snapping::is_window_pinned(m)));
+            }
+        }
+    }
+
+    // 全體設為釘選（作用中）
+    for &m in &members {
+        crate::snapping::set_window_pinned(m, true);
+    }
+
+    let main_hwnd = crate::tray::get_main_hwnd();
+    if !main_hwnd.is_null() && unsafe { IsWindow(main_hwnd) != 0 } {
+        unsafe {
+            // 1. 若主視窗在托盤，先還原
+            if crate::tray::is_window_hidden_to_tray() {
+                crate::tray::bring_main_to_front();
+            }
+            if IsIconic(main_hwnd) != 0 {
+                ShowWindow(main_hwnd, SW_RESTORE);
+            }
+
+            // 2. 一次到位（Single-Shot）：以 SWP_NOACTIVATE 一步鎖定至 HWND_TOPMOST
+            for &m in &members {
+                let hwnd = crate::snapping::get_window_hwnd(m);
+                if !hwnd.is_null() && IsWindow(hwnd) != 0 && !crate::tray::is_window_hidden_to_tray() {
+                    if IsIconic(hwnd) != 0 {
+                        ShowWindow(hwnd, SW_RESTORE);
+                    }
+                    SetWindowPos(
+                        hwnd,
+                        HWND_TOPMOST,
+                        0,
+                        0,
+                        0,
+                        0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE,
+                    );
+                }
+            }
+
+            // 3. 維護群組內部相對幾何對齊
+            crate::snapping::restore_and_realign_all_children(crate::snapping::WindowKind::Main, main_hwnd);
+
+            // 提案一：全螢幕主控權保持制（HUD 召喚時焦點始終鎖定留在全螢幕視覺視窗上）
+            // 絕不調用 SetForegroundWindow(main_hwnd) 或 egui Focus 奪走焦點，
+            // 確保視覺視窗自始至終擁有鍵盤輸入焦點，按一次 W 展開、再按一次 W 即可瞬間收起。
+            let vis_hwnd = get_visualizer_hwnd();
+            if !vis_hwnd.is_null() && IsWindow(vis_hwnd) != 0 {
+                crate::tray::force_foreground(vis_hwnd);
+                PostMessageW(vis_hwnd, WM_USER_FOCUS_WEBVIEW, 0, 0);
+            }
+        }
+    }
+
+    if let Some(ctx) = crate::gui::get_egui_ctx() {
+        ctx.request_repaint();
+    }
+}
+
+pub fn exit_visualizer_fullscreen() {
+    if is_visualizer_fullscreen() {
+        let hwnd = get_visualizer_hwnd();
+        if !hwnd.is_null() && unsafe { IsWindow(hwnd) != 0 } {
+            unsafe {
+                PostMessageW(hwnd, WM_USER_TOGGLE_FULLSCREEN, 0, 0);
+            }
+        }
+    }
+}
+
+pub fn toggle_main_window_hud() {
+    let main_hwnd = crate::tray::get_main_hwnd();
+    let is_hidden = main_hwnd.is_null()
+        || unsafe { IsWindow(main_hwnd) == 0 || IsWindowVisible(main_hwnd) == 0 }
+        || crate::tray::is_window_hidden_to_tray();
+
+    if !is_hidden && VISUALIZER_HUD_MAIN_SHOWN.load(Ordering::SeqCst) {
+        hide_hud_cluster();
+    } else {
+        show_hud_cluster();
+    }
+}
 
 pub fn set_language(lang_code: &str) {
     if let Ok(mut lock) = VISUALIZER_LANG.lock() {
@@ -125,37 +342,111 @@ pub fn is_visualizer_fullscreen() -> bool {
     VISUALIZER_FULLSCREEN.load(Ordering::SeqCst)
 }
 
-/// Updates the caption buttons (minimize, maximize, close) on the visualizer titlebar.
-/// When magnetically docked to the main window, all three buttons disappear in unison,
-/// making the ensemble look like a sleek unified panel. When detached, they are restored.
-pub unsafe fn update_visualizer_dock_buttons(hwnd: HWND, is_docked: bool) {
-    let current_style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
-    let new_style = if is_docked {
-        // When docked to main window, remove WS_SYSMENU, WS_MINIMIZEBOX, WS_MAXIMIZEBOX
-        // so that all three titlebar buttons (_, □, X) completely disappear in unison.
-        current_style & !(WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX)
-    } else {
-        // When detached, restore standard caption buttons.
-        current_style | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX
+pub const VISUALIZER_WINDOW_STYLE: u32 = WS_POPUP
+    | WS_THICKFRAME
+    | WS_MINIMIZEBOX;
+
+/// 套用 Windows DWM 沉浸式深色標題列樣式，並設定標題列底色與文字顏色，使其外觀與主視窗及其他模組保持高度一致。
+pub unsafe fn apply_visualizer_theme(hwnd: HWND) {
+    if hwnd.is_null() || IsWindow(hwnd) == 0 {
+        return;
+    }
+    type DwmSetWindowAttributeFn = unsafe extern "system" fn(HWND, u32, *const std::ffi::c_void, u32) -> i32;
+    type DwmExtendFrameIntoClientAreaFn = unsafe extern "system" fn(HWND, *const MARGINS) -> i32;
+
+    #[allow(non_snake_case)]
+    #[repr(C)]
+    struct MARGINS {
+        cxLeftWidth: i32,
+        cxRightWidth: i32,
+        cyTopHeight: i32,
+        cyBottomHeight: i32,
+    }
+
+    let dwmapi = windows_sys::Win32::System::LibraryLoader::LoadLibraryA(b"dwmapi.dll\0".as_ptr());
+    if !dwmapi.is_null() {
+        let extend_proc = windows_sys::Win32::System::LibraryLoader::GetProcAddress(dwmapi, b"DwmExtendFrameIntoClientArea\0".as_ptr());
+        if let Some(extend_fn) = extend_proc {
+            let func: DwmExtendFrameIntoClientAreaFn = std::mem::transmute(extend_fn);
+            let m = MARGINS { cxLeftWidth: 1, cxRightWidth: 1, cyTopHeight: 1, cyBottomHeight: 1 };
+            func(hwnd, &m);
+        }
+
+        let proc = windows_sys::Win32::System::LibraryLoader::GetProcAddress(dwmapi, b"DwmSetWindowAttribute\0".as_ptr());
+        if let Some(dwm_set_attr) = proc {
+            let func: DwmSetWindowAttributeFn = std::mem::transmute(dwm_set_attr);
+
+            // 1. DWMWA_USE_IMMERSIVE_DARK_MODE (20 on Win10 20H1+ and Win11, 19 on older Win10)
+            let dark_mode: i32 = 1;
+            func(hwnd, 20, &dark_mode as *const _ as _, std::mem::size_of::<i32>() as u32);
+            func(hwnd, 19, &dark_mode as *const _ as _, std::mem::size_of::<i32>() as u32);
+
+            // 2. DWMWA_CAPTION_COLOR = 35 (Windows 11)
+            let caption_color: u32 = 0x001D1918;
+            func(hwnd, 35, &caption_color as *const _ as _, std::mem::size_of::<u32>() as u32);
+
+            // 3. DWMWA_TEXT_COLOR = 36 (Windows 11)
+            let text_color: u32 = 0x00F5DCB4;
+            func(hwnd, 36, &text_color as *const _ as _, std::mem::size_of::<u32>() as u32);
+        }
+    }
+}
+
+/// 更新視覺效果視窗的標題列文字，依據磁吸主從角色附加身分符號（主控 🧲、附屬 📎、獨立無符號）
+pub unsafe fn update_visualizer_title(hwnd: HWND) {
+    if hwnd.is_null() || IsWindow(hwnd) == 0 {
+        return;
+    }
+    let role = crate::snapping::get_window_role(crate::snapping::WindowKind::Visualizer);
+    let (title_str, badge_str) = match role {
+        crate::snapping::WindowRole::ClusterMaster => ("Win2Pod Motion - Paint Pulse 🧲\0", "🧲"),
+        crate::snapping::WindowRole::ClusterSlave => ("Win2Pod Motion - Paint Pulse 📎\0", "📎"),
+        crate::snapping::WindowRole::Standalone => ("Win2Pod Motion - Paint Pulse\0", ""),
     };
+    let title_wide: Vec<u16> = title_str.encode_utf16().collect();
+    SetWindowTextW(hwnd, title_wide.as_ptr());
+
+    // 檢查當前執行緒是否為視覺視窗所在的 Win32 訊息迴圈執行緒
+    let window_tid = GetWindowThreadProcessId(hwnd, std::ptr::null_mut());
+    let current_tid = windows_sys::Win32::System::Threading::GetCurrentThreadId();
+    if window_tid == current_tid {
+        let state_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut VisualizerState;
+        if !state_ptr.is_null() {
+            if let Some(ref wv) = (*state_ptr).webview {
+                let script = format!(
+                    "if (typeof window.updateTitleBadge === 'function') window.updateTitleBadge({:?});",
+                    badge_str
+                );
+                let _ = wv.evaluate_script(&script);
+            }
+        }
+    } else {
+        // 若來自其他執行緒（例如 egui 主執行緒拖曳迷你播放器完成吸附），透過視窗訊息安全非同步派送至視覺視窗執行緒執行
+        PostMessageW(hwnd, WM_USER_UPDATE_TITLE, 0, 0);
+    }
+}
+
+/// Updates the caption buttons (minimize, close) on the visualizer titlebar.
+/// Retains _ and X at all times per user specification, while excluding the maximize box.
+pub unsafe fn update_visualizer_dock_buttons(hwnd: HWND, _is_docked: bool) {
+    if hwnd.is_null() || IsWindow(hwnd) == 0 {
+        return;
+    }
+    let current_style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
+    let new_style = (current_style | WS_SYSMENU | WS_MINIMIZEBOX) & !WS_MAXIMIZEBOX;
     if new_style != current_style {
         SetWindowLongW(hwnd, GWL_STYLE, new_style as i32);
-    }
-
-    if !is_docked {
-        // Revert system menu back to default
         GetSystemMenu(hwnd, 1);
+        SetWindowPos(
+            hwnd,
+            std::ptr::null_mut(),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        );
     }
-
-    SetWindowPos(
-        hwnd,
-        std::ptr::null_mut(),
-        0,
-        0,
-        0,
-        0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-    );
 }
 
 /// Temporarily demotes the visualizer window from HWND_TOPMOST to HWND_NOTOPMOST,
@@ -229,6 +520,7 @@ const WM_USER_TOGGLE_PIN: u32 = WM_USER + 103;
 const WM_USER_SET_LANGUAGE: u32 = WM_USER + 104;
 const WM_USER_SET_PIN: u32 = WM_USER + 105;
 const WM_USER_FOCUS_WEBVIEW: u32 = WM_USER + 106;
+const WM_USER_UPDATE_TITLE: u32 = WM_USER + 107;
 
 pub fn focus_visualizer() {
     let hwnd = VISUALIZER_HWND.load(Ordering::SeqCst) as HWND;
@@ -237,6 +529,30 @@ pub fn focus_visualizer() {
             PostMessageW(hwnd, WM_USER_FOCUS_WEBVIEW, 0, 0);
         }
     }
+}
+
+static VIS_HOVERED: AtomicBool = AtomicBool::new(false);
+static VIS_SUPPRESS_PEEK: AtomicBool = AtomicBool::new(false);
+
+pub unsafe fn apply_visualizer_opacity(hwnd: HWND) {
+    if hwnd.is_null() || IsWindow(hwnd) == 0 {
+        return;
+    }
+    let is_fullscreen = is_visualizer_fullscreen();
+    let user_op = crate::snapping::get_window_opacity(crate::snapping::WindowKind::Visualizer);
+    let peek_enabled = crate::snapping::is_hover_peek_enabled();
+    let is_hovered = VIS_HOVERED.load(Ordering::Relaxed);
+    let suppress_peek = VIS_SUPPRESS_PEEK.load(Ordering::Relaxed);
+
+    let target_op = if is_fullscreen {
+        1.0
+    } else if peek_enabled && is_hovered && !suppress_peek {
+        1.0
+    } else {
+        user_op
+    };
+
+    crate::snapping::apply_native_window_opacity(hwnd, target_op);
 }
 
 struct VisualizerState {
@@ -249,15 +565,17 @@ struct VisualizerState {
 unsafe fn set_pin(hwnd: HWND, state: &mut VisualizerState, pinned: bool) {
     state.is_pinned = pinned;
     crate::controller::save_visualizer_pinned(state.is_pinned);
+    crate::snapping::set_window_pinned(crate::snapping::WindowKind::Visualizer, pinned);
     let target = if state.is_pinned || state.is_fullscreen {
         HWND_TOPMOST
     } else {
         HWND_NOTOPMOST
     };
     SetWindowPos(hwnd, target, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    apply_visualizer_opacity(hwnd);
 
     // If main window has always-on-top enabled, keep main window above visualizer
-    if crate::tray::IS_ALWAYS_ON_TOP.load(Ordering::SeqCst) && !crate::tray::is_window_hidden_to_tray() {
+    if crate::snapping::is_window_pinned(crate::snapping::WindowKind::Main) && !crate::tray::is_window_hidden_to_tray() {
         let main_hwnd = crate::tray::get_main_hwnd();
         if !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 {
             SetWindowPos(main_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -277,79 +595,72 @@ unsafe fn toggle_pin(hwnd: HWND, state: &mut VisualizerState) {
     let new_pinned = !state.is_pinned;
     set_pin(hwnd, state, new_pinned);
 
-    // If magnetically docked with main window, propagate new_pinned to main window!
-    let bond = crate::snapping::get_dock_bond();
-    if bond.is_bonded {
-        crate::tray::set_main_window_pinned(new_pinned);
+    // If magnetically docked with cluster, propagate new_pinned to cluster!
+    let role = crate::snapping::get_window_role(crate::snapping::WindowKind::Visualizer);
+    if role != crate::snapping::WindowRole::Standalone {
+        crate::snapping::set_cluster_pinned(crate::snapping::WindowKind::Visualizer, new_pinned);
     }
 }
 
 unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
     if !state.is_fullscreen {
         let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
-        if (style & WS_OVERLAPPEDWINDOW) != 0 {
-            let mut placement: WINDOWPLACEMENT = std::mem::zeroed();
-            placement.length = std::mem::size_of::<WINDOWPLACEMENT>() as u32;
-            GetWindowPlacement(hwnd, &mut placement);
-            state.saved_placement = placement;
+        let mut placement: WINDOWPLACEMENT = std::mem::zeroed();
+        placement.length = std::mem::size_of::<WINDOWPLACEMENT>() as u32;
+        GetWindowPlacement(hwnd, &mut placement);
+        state.saved_placement = placement;
 
-            let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-            let mut mi: MONITORINFO = std::mem::zeroed();
-            mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
-            if GetMonitorInfoW(monitor, &mut mi) != 0 {
-                // IMPORTANT: Break dock bond and set fullscreen flags BEFORE SetWindowPos!
-                // Otherwise, SetWindowPos triggers a synchronous WM_SIZE, which sees is_bonded=true
-                // and !is_fullscreen, recalculating bonded main window position relative to the
-                // fullscreen visualizer and throwing the main window completely off-screen!
-                state.is_fullscreen = true;
-                VISUALIZER_FULLSCREEN.store(true, Ordering::SeqCst);
-                crate::snapping::break_dock_bond();
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut mi: MONITORINFO = std::mem::zeroed();
+        mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        if GetMonitorInfoW(monitor, &mut mi) != 0 {
+            // IMPORTANT: Break dock bond and set fullscreen flags BEFORE SetWindowPos!
+            // Otherwise, SetWindowPos triggers a synchronous WM_SIZE, which sees is_bonded=true
+            // and !is_fullscreen, recalculating bonded main window position relative to the
+            // fullscreen visualizer and throwing the main window completely off-screen!
+            state.is_fullscreen = true;
+            VISUALIZER_FULLSCREEN.store(true, Ordering::SeqCst);
+            VISUALIZER_HUD_MAIN_SHOWN.store(false, Ordering::SeqCst);
+            crate::snapping::break_dock_bond();
 
-                SetWindowLongW(hwnd, GWL_STYLE, (style & !WS_OVERLAPPEDWINDOW) as i32);
-                SetWindowPos(
-                    hwnd,
-                    HWND_TOPMOST,
-                    mi.rcMonitor.left,
-                    mi.rcMonitor.top,
-                    mi.rcMonitor.right - mi.rcMonitor.left,
-                    mi.rcMonitor.bottom - mi.rcMonitor.top,
-                    SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
-                );
-                windows_sys::Win32::System::Power::SetThreadExecutionState(
-                    windows_sys::Win32::System::Power::ES_CONTINUOUS
-                        | windows_sys::Win32::System::Power::ES_SYSTEM_REQUIRED
-                        | windows_sys::Win32::System::Power::ES_DISPLAY_REQUIRED,
-                );
+            SetWindowLongW(hwnd, GWL_STYLE, (style & !WS_THICKFRAME) as i32);
+            SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                mi.rcMonitor.left,
+                mi.rcMonitor.top,
+                mi.rcMonitor.right - mi.rcMonitor.left,
+                mi.rcMonitor.bottom - mi.rcMonitor.top,
+                SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
+            );
+            apply_visualizer_opacity(hwnd);
+            windows_sys::Win32::System::Power::SetThreadExecutionState(
+                windows_sys::Win32::System::Power::ES_CONTINUOUS
+                    | windows_sys::Win32::System::Power::ES_SYSTEM_REQUIRED
+                    | windows_sys::Win32::System::Power::ES_DISPLAY_REQUIRED,
+            );
 
-                // If main window has always-on-top enabled, keep it above the fullscreen visualizer
-                if crate::tray::IS_ALWAYS_ON_TOP.load(Ordering::SeqCst) && !crate::tray::is_window_hidden_to_tray() {
-                    let main_hwnd = crate::tray::get_main_hwnd();
-                    if !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 {
-                        SetWindowPos(
-                            main_hwnd,
-                            HWND_TOPMOST,
-                            0,
-                            0,
-                            0,
-                            0,
-                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-                        );
-                    }
-                }
+            if let Some(ref wv) = state.webview {
+                let _ = wv.evaluate_script("document.body.classList.add('fullscreen');");
+            }
 
-                // Keep taskbar beneath the fullscreen visualizer
-                let taskbar_class: Vec<u16> = "Shell_TrayWnd\0".encode_utf16().collect();
-                let taskbar = FindWindowW(taskbar_class.as_ptr(), std::ptr::null());
-                if !taskbar.is_null() {
-                    SetWindowPos(taskbar, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                }
+            hide_hud_cluster();
+
+            // Keep taskbar beneath the fullscreen visualizer
+            let taskbar_class: Vec<u16> = "Shell_TrayWnd\0".encode_utf16().collect();
+            let taskbar = FindWindowW(taskbar_class.as_ptr(), std::ptr::null());
+            if !taskbar.is_null() {
+                SetWindowPos(taskbar, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
         }
     } else {
+        restore_hud_pinned_states();
+        VIS_SUPPRESS_PEEK.store(false, Ordering::SeqCst);
         state.is_fullscreen = false;
         VISUALIZER_FULLSCREEN.store(false, Ordering::SeqCst);
+        VISUALIZER_HUD_MAIN_SHOWN.store(false, Ordering::SeqCst);
         let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
-        SetWindowLongW(hwnd, GWL_STYLE, (style | WS_OVERLAPPEDWINDOW) as i32);
+        SetWindowLongW(hwnd, GWL_STYLE, (style | WS_THICKFRAME) as i32);
         SetWindowPlacement(hwnd, &state.saved_placement);
         let target = if state.is_pinned { HWND_TOPMOST } else { HWND_NOTOPMOST };
         SetWindowPos(
@@ -361,6 +672,12 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
             0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
         );
+        apply_visualizer_opacity(hwnd);
+        apply_visualizer_theme(hwnd);
+        update_visualizer_title(hwnd);
+        if let Some(ref wv) = state.webview {
+            let _ = wv.evaluate_script("document.body.classList.remove('fullscreen');");
+        }
         windows_sys::Win32::System::Power::SetThreadExecutionState(
             windows_sys::Win32::System::Power::ES_CONTINUOUS,
         );
@@ -369,9 +686,15 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
         if !main_hwnd.is_null() {
             const GWLP_HWNDPARENT: i32 = -8;
             SetWindowLongPtrW(main_hwnd, GWLP_HWNDPARENT, 0);
-            if !crate::tray::IS_ALWAYS_ON_TOP.load(Ordering::SeqCst) {
+            if !crate::snapping::is_window_pinned(crate::snapping::WindowKind::Main) {
                 SetWindowPos(main_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
+        }
+
+        if crate::tray::is_window_hidden_to_tray() {
+            crate::tray::bring_main_to_front();
+        } else {
+            crate::snapping::bring_fleet_to_top();
         }
     }
 
@@ -432,11 +755,12 @@ unsafe fn run_visualizer_window() {
 
     let (width, height, x, y, chosen_anchor) = if has_main {
         GetWindowRect(main_hwnd, &mut main_rect);
-        let main_h = (main_rect.bottom - main_rect.top).max(400);
-        let w = ((main_h as f32) * 16.0 / 9.0).round() as i32;
+        let main_h = (main_rect.bottom - main_rect.top).max(300);
+        let w = 720;
+        let h = main_h;
 
         let spawner = crate::snapping::get_window_spawner(crate::snapping::WindowKind::Visualizer);
-        let (best_rect, anchor) = crate::snapping::find_best_spawn_rect(crate::snapping::WindowKind::Visualizer, w, main_h, spawner);
+        let (best_rect, anchor) = crate::snapping::find_best_spawn_rect(crate::snapping::WindowKind::Visualizer, w, h, spawner);
         (
             best_rect.right - best_rect.left,
             best_rect.bottom - best_rect.top,
@@ -447,18 +771,18 @@ unsafe fn run_visualizer_window() {
     } else {
         let screen_w = GetSystemMetrics(SM_CXSCREEN);
         let screen_h = GetSystemMetrics(SM_CYSCREEN);
-        let w = 1280;
-        let h = 720;
+        let w = 720;
+        let h = 680;
         let init_x = (screen_w - w) / 2;
         let init_y = (screen_h - h) / 2;
         (w, h, init_x, init_y, None)
     };
 
     let hwnd = CreateWindowExW(
-        0,
+        WS_EX_APPWINDOW,
         class_name.as_ptr(),
         title.as_ptr(),
-        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+        VISUALIZER_WINDOW_STYLE | WS_VISIBLE,
         x,
         y,
         width,
@@ -473,6 +797,9 @@ unsafe fn run_visualizer_window() {
         tracing::error!("Failed to create visualizer window");
         return;
     }
+
+    apply_visualizer_theme(hwnd);
+    update_visualizer_title(hwnd);
 
     SendMessageW(hwnd, WM_SETICON, ICON_BIG as usize, icon as isize);
     SendMessageW(hwnd, WM_SETICON, ICON_SMALL as usize, icon as isize);
@@ -496,7 +823,12 @@ unsafe fn run_visualizer_window() {
     let mut placement: WINDOWPLACEMENT = std::mem::zeroed();
     placement.length = std::mem::size_of::<WINDOWPLACEMENT>() as u32;
 
-    let initial_pinned = crate::controller::load_visualizer_pinned();
+    let initial_pinned = if let Some(anchor) = chosen_anchor {
+        crate::snapping::is_window_pinned(anchor)
+    } else {
+        crate::controller::load_visualizer_pinned()
+    };
+    crate::snapping::set_window_pinned(crate::snapping::WindowKind::Visualizer, initial_pinned);
     let state = Box::into_raw(Box::new(VisualizerState {
         webview: None,
         is_fullscreen: false,
@@ -505,9 +837,10 @@ unsafe fn run_visualizer_window() {
     }));
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, state as isize);
 
+    let target_z = if initial_pinned { HWND_TOPMOST } else { HWND_NOTOPMOST };
+    SetWindowPos(hwnd, target_z, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     if initial_pinned {
-        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        if crate::tray::IS_ALWAYS_ON_TOP.load(Ordering::SeqCst) && !crate::tray::is_window_hidden_to_tray() {
+        if crate::snapping::is_window_pinned(crate::snapping::WindowKind::Main) && !crate::tray::is_window_hidden_to_tray() {
             let main_hwnd = crate::tray::get_main_hwnd();
             if !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 {
                 SetWindowPos(main_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -537,9 +870,24 @@ unsafe fn run_visualizer_window() {
         })
         .with_ipc_handler(move |msg| {
             let body = msg.body();
-            if body.contains("close") {
+            if body.contains("close_cluster") {
+                crate::gui::request_close_cluster(crate::snapping::WindowKind::Visualizer);
+            } else if body.contains("close") {
                 unsafe {
                     PostMessageW(hwnd_capture as HWND, WM_CLOSE, 0, 0);
+                }
+            } else if body.contains("minimize_solo") {
+                unsafe {
+                    crate::snapping::minimize_window_solo(crate::snapping::WindowKind::Visualizer);
+                }
+            } else if body.contains("minimize") {
+                unsafe {
+                    PostMessageW(hwnd_capture as HWND, WM_SYSCOMMAND, SC_MINIMIZE as usize, 0);
+                }
+            } else if body.contains("start_drag") {
+                unsafe {
+                    windows_sys::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture();
+                    SendMessageW(hwnd_capture as HWND, WM_NCLBUTTONDOWN, HTCAPTION as usize, 0);
                 }
             } else if body.contains("fullscreen") {
                 unsafe {
@@ -549,17 +897,52 @@ unsafe fn run_visualizer_window() {
                 unsafe {
                     PostMessageW(hwnd_capture as HWND, WM_USER_TOGGLE_PIN, 0, 0);
                 }
+            } else if body.contains("vis_ready") || body.contains("ready") {
+                tracing::info!("visualizer IPC: webview ready signal received");
+                unsafe {
+                    update_visualizer_title(hwnd_capture as HWND);
+                }
             } else if body.contains("show_main") {
                 tracing::info!("visualizer IPC: show_main received");
                 if crate::visualizer::is_visualizer_fullscreen() {
-                    tracing::info!("visualizer is fullscreen -> only bring fleet to front, skip dock stage 2");
-                    unsafe {
-                        crate::snapping::bring_fleet_to_top();
-                    }
+                    toggle_main_window_hud();
                     return;
                 }
                 unsafe {
                     crate::snapping::handle_home_summon_request(crate::snapping::WindowKind::Visualizer);
+                }
+            } else if body.starts_with("set_opacity:") {
+                let val_str = body.trim_start_matches("set_opacity:");
+                if let Ok(pct) = val_str.parse::<f32>() {
+                    let op = (pct / 100.0).clamp(0.2, 1.0);
+                    crate::snapping::set_window_opacity(crate::snapping::WindowKind::Visualizer, op);
+                    unsafe {
+                        apply_visualizer_opacity(hwnd_capture as HWND);
+                    }
+                }
+            } else if body.starts_with("set_hover_peek:") {
+                let val_str = body.trim_start_matches("set_hover_peek:");
+                let enabled = val_str == "1" || val_str == "true";
+                crate::snapping::set_hover_peek_enabled(enabled);
+                unsafe {
+                    apply_visualizer_opacity(hwnd_capture as HWND);
+                }
+            } else if body.starts_with("suppress_peek:") {
+                let val_str = body.trim_start_matches("suppress_peek:");
+                let suppress = val_str == "1" || val_str == "true";
+                VIS_SUPPRESS_PEEK.store(suppress, Ordering::SeqCst);
+                unsafe {
+                    apply_visualizer_opacity(hwnd_capture as HWND);
+                }
+            } else if body.contains("vis_mouse_enter") {
+                VIS_HOVERED.store(true, Ordering::SeqCst);
+                unsafe {
+                    apply_visualizer_opacity(hwnd_capture as HWND);
+                }
+            } else if body.contains("vis_mouse_leave") {
+                VIS_HOVERED.store(false, Ordering::SeqCst);
+                unsafe {
+                    apply_visualizer_opacity(hwnd_capture as HWND);
                 }
             }
         });
@@ -568,10 +951,21 @@ unsafe fn run_visualizer_window() {
             .ok()
             .and_then(|g| g.clone())
             .unwrap_or_else(|| crate::controller::load_language().code().to_string());
+        let role = crate::snapping::get_window_role(crate::snapping::WindowKind::Visualizer);
+        let badge_query = match role {
+            crate::snapping::WindowRole::ClusterMaster => "%F0%9F%A7%B2",
+            crate::snapping::WindowRole::ClusterSlave => "%F0%9F%93%8E",
+            crate::snapping::WindowRole::Standalone => "",
+        };
+        let init_opacity = crate::snapping::get_window_opacity(crate::snapping::WindowKind::Visualizer);
+        let init_peek = crate::snapping::is_hover_peek_enabled();
         let initial_url = format!(
-            "app://visualizer/index.html?lang={}&pinned={}",
+            "app://visualizer/index.html?lang={}&pinned={}&badge={}&opacity={}&peek={}",
             lang_code,
-            if initial_pinned { 1 } else { 0 }
+            if initial_pinned { 1 } else { 0 },
+            badge_query,
+            (init_opacity * 100.0).round() as i32,
+            if init_peek { 1 } else { 0 },
         );
         let builder = builder.with_url(&initial_url);
 
@@ -586,11 +980,19 @@ unsafe fn run_visualizer_window() {
                 size: Size::Physical(PhysicalSize::new(w, h)),
             });
 
+            let role = crate::snapping::get_window_role(crate::snapping::WindowKind::Visualizer);
+            let badge_str = match role {
+                crate::snapping::WindowRole::ClusterMaster => "🧲",
+                crate::snapping::WindowRole::ClusterSlave => "📎",
+                crate::snapping::WindowRole::Standalone => "",
+            };
             let script = format!(
                 "if (typeof window.setLanguage === 'function') window.setLanguage({:?});\
-                 if (typeof window.handleVisPinChanged === 'function') window.handleVisPinChanged({}, false);",
+                 if (typeof window.handleVisPinChanged === 'function') window.handleVisPinChanged({}, false);\
+                 if (typeof window.updateTitleBadge === 'function') window.updateTitleBadge({:?});",
                 lang_code,
-                initial_pinned
+                if initial_pinned { "true" } else { "false" },
+                badge_str
             );
             let _ = wv.evaluate_script(&script);
             if let Ok(mut applied) = APPLIED_LANG.lock() {
@@ -682,7 +1084,21 @@ unsafe extern "system" fn visualizer_wnd_proc(
             }
             0
         }
+        WM_USER_UPDATE_TITLE => {
+            unsafe {
+                update_visualizer_title(hwnd);
+            }
+            0
+        }
+        WM_SETCURSOR => {
+            if let Some(hcursor) = crate::custom_cursor::current_custom_cursor(crate::snapping::WindowKind::Visualizer) {
+                SetCursor(hcursor);
+                return 1;
+            }
+            DefWindowProcW(hwnd, msg, wparam, lparam)
+        }
         WM_MOVING => {
+            crate::custom_cursor::set_window_moving(crate::snapping::WindowKind::Visualizer, true);
             if !state_ptr.is_null() && !(*state_ptr).is_fullscreen {
                 let rect_ptr = lparam as *mut RECT;
                 unsafe {
@@ -697,6 +1113,7 @@ unsafe extern "system" fn visualizer_wnd_proc(
             0
         }
         WM_EXITSIZEMOVE => {
+            crate::custom_cursor::set_window_moving(crate::snapping::WindowKind::Visualizer, false);
             if !state_ptr.is_null() && !(*state_ptr).is_fullscreen {
                 unsafe {
                     crate::snapping::handle_window_exit_size_move(
@@ -707,33 +1124,102 @@ unsafe extern "system" fn visualizer_wnd_proc(
             }
             0
         }
+        WM_CAPTURECHANGED => {
+            crate::custom_cursor::set_window_moving(crate::snapping::WindowKind::Visualizer, false);
+            0
+        }
+        WM_WINDOWPOSCHANGING => {
+            if !state_ptr.is_null() && (*state_ptr).is_fullscreen && is_hud_shown() {
+                let wp = lparam as *mut WINDOWPOS;
+                if !wp.is_null() {
+                    // 全螢幕 HUD 作用中：視覺視窗作為最底層背景畫布，鎖死其在 Z-order 中的地位！
+                    // 嚴禁 Windows 點擊提升將視覺視窗提升至 HUD 浮層視窗之上，直接阻斷任何 Z-order 變更
+                    (*wp).flags |= SWP_NOZORDER;
+                }
+            }
+            DefWindowProcW(hwnd, msg, wparam, lparam)
+        }
         WM_MOUSEACTIVATE => {
-            if crate::snapping::SNAPPING_ENABLED.load(Ordering::Relaxed) {
+            if crate::snapping::SNAPPING_ENABLED.load(Ordering::Relaxed)
+                && !crate::snapping::is_cluster_minimizing()
+                && !crate::snapping::is_cluster_restoring()
+                && IsIconic(hwnd) == 0
+            {
+                let is_fs = !state_ptr.is_null() && (*state_ptr).is_fullscreen;
+                if is_fs && is_hud_shown() {
+                    // 全螢幕 HUD 開啟中：視覺視窗作為背景畫布，絕對不搶頂
+                    // 檢查滑鼠座標是否在右上角控制按鈕區（例如關閉 HUD 房子按鈕、全螢幕按鈕）：
+                    // 若在背景畫布，回傳 MA_NOACTIVATEANDEAT (4) 徹底丟棄啟用與點擊事件，
+                    // 杜絕 WebView2 獲取焦點或 Windows DWM 重排 Z-order，達成 100% 零閃爍！
+                    let mut pt: POINT = std::mem::zeroed();
+                    GetCursorPos(&mut pt);
+                    ScreenToClient(hwnd, &mut pt);
+                    let mut client_rect: RECT = std::mem::zeroed();
+                    GetClientRect(hwnd, &mut client_rect);
+                    let width = client_rect.right - client_rect.left;
+                    let is_top_right_controls = pt.y >= 0 && pt.y <= 70 && pt.x >= (width - 160);
+                    if is_top_right_controls {
+                        return 3; // MA_NOACTIVATE
+                    } else {
+                        return 4; // MA_NOACTIVATEANDEAT
+                    }
+                }
                 crate::snapping::bring_cluster_to_top(crate::snapping::WindowKind::Visualizer, hwnd);
             }
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         WM_NCLBUTTONDOWN => {
-            if crate::snapping::SNAPPING_ENABLED.load(Ordering::Relaxed) {
+            if crate::snapping::SNAPPING_ENABLED.load(Ordering::Relaxed)
+                && !crate::snapping::is_cluster_minimizing()
+                && !crate::snapping::is_cluster_restoring()
+                && IsIconic(hwnd) == 0
+            {
+                let is_fs = !state_ptr.is_null() && (*state_ptr).is_fullscreen;
+                if is_fs && is_hud_shown() {
+                    // 全螢幕 HUD 開啟中：禁止將視覺視窗提升至最頂層
+                    return 0;
+                }
                 crate::snapping::bring_cluster_to_top(crate::snapping::WindowKind::Visualizer, hwnd);
             }
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         WM_ACTIVATE => {
             let active_type = (wparam & 0xFFFF) as u32;
-            if active_type != 0 {
-                // WA_ACTIVE or WA_CLICKACTIVE: User focused or clicked on the visualizer.
+            let is_minimized = ((wparam >> 16) & 0xFFFF) != 0;
+            if active_type != 0
+                && !is_minimized
+                && IsIconic(hwnd) == 0
+                && !crate::snapping::is_cluster_minimizing()
+                && !crate::snapping::is_cluster_restoring()
+            {
+                let is_fs = !state_ptr.is_null() && (*state_ptr).is_fullscreen;
+                if is_fs && is_hud_shown() {
+                    // 全螢幕 HUD 作用中：視覺視窗獲得啟用時，加固維持所有 HUD 浮層視窗（無論黏著還是拉開）在最頂層
+                    let members = get_all_hud_target_windows();
+                    for &m in &members {
+                        let m_hwnd = crate::snapping::get_window_hwnd(m);
+                        if !m_hwnd.is_null() && IsWindow(m_hwnd) != 0 && !crate::tray::is_window_hidden_to_tray() {
+                            SetWindowPos(m_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        }
+                    }
+                    return 0;
+                }
                 if crate::snapping::SNAPPING_ENABLED.load(Ordering::Relaxed) {
                     crate::snapping::bring_cluster_to_top(crate::snapping::WindowKind::Visualizer, hwnd);
                 }
-                if !state_ptr.is_null() && ((*state_ptr).is_fullscreen || (*state_ptr).is_pinned) {
-                    let main_hwnd = crate::tray::get_main_hwnd();
-                    let main_active = !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 && !crate::tray::is_window_hidden_to_tray();
-                    if main_active {
-                        SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                        SetWindowPos(main_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                    } else {
-                        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                if !state_ptr.is_null() {
+                    let is_top = crate::snapping::is_window_pinned(crate::snapping::WindowKind::Main);
+                    if is_fs || ((*state_ptr).is_pinned && is_top) {
+                        let main_hwnd = crate::tray::get_main_hwnd();
+                        let main_active = !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 && !crate::tray::is_window_hidden_to_tray();
+                        if main_active {
+                            if is_fs {
+                                SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                            }
+                            SetWindowPos(main_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        } else {
+                            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        }
                     }
                 }
             }
@@ -745,11 +1231,26 @@ unsafe extern "system" fn visualizer_wnd_proc(
                     let _ = wv.focus();
                     let _ = wv.evaluate_script("window.focus();");
                 }
-                if (*state_ptr).is_fullscreen || (*state_ptr).is_pinned {
+                let is_fs = (*state_ptr).is_fullscreen;
+                if is_fs && is_hud_shown() {
+                    // 全螢幕 HUD 作用中：視覺視窗獲得焦點時，加固維持所有 HUD 浮層視窗（無論黏著還是拉開）在最頂層
+                    let members = get_all_hud_target_windows();
+                    for &m in &members {
+                        let m_hwnd = crate::snapping::get_window_hwnd(m);
+                        if !m_hwnd.is_null() && IsWindow(m_hwnd) != 0 && !crate::tray::is_window_hidden_to_tray() {
+                            SetWindowPos(m_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        }
+                    }
+                    return 0;
+                }
+                let is_top = crate::snapping::is_window_pinned(crate::snapping::WindowKind::Main);
+                if is_fs || ((*state_ptr).is_pinned && is_top) {
                     let main_hwnd = crate::tray::get_main_hwnd();
                     let main_active = !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 && !crate::tray::is_window_hidden_to_tray();
                     if main_active {
-                        SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        if is_fs {
+                            SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        }
                         SetWindowPos(main_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                     } else {
                         SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -758,16 +1259,61 @@ unsafe extern "system" fn visualizer_wnd_proc(
             }
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
+        WM_NCHITTEST => {
+            if !state_ptr.is_null() && (*state_ptr).is_fullscreen {
+                return HTCLIENT as isize;
+            }
+            let x = (lparam & 0xFFFF) as i16 as i32;
+            let y = ((lparam >> 16) & 0xFFFF) as i16 as i32;
+            let mut rect: RECT = std::mem::zeroed();
+            GetWindowRect(hwnd, &mut rect);
+            let b = 8; // 8-pixel border for mouse resizing
+
+            let on_left = x >= rect.left && x < rect.left + b;
+            let on_right = x <= rect.right && x > rect.right - b;
+            let on_top = y >= rect.top && y < rect.top + b;
+            let on_bottom = y <= rect.bottom && y > rect.bottom - b;
+
+            if on_top && on_left { return HTTOPLEFT as isize; }
+            if on_top && on_right { return HTTOPRIGHT as isize; }
+            if on_bottom && on_left { return HTBOTTOMLEFT as isize; }
+            if on_bottom && on_right { return HTBOTTOMRIGHT as isize; }
+            if on_left { return HTLEFT as isize; }
+            if on_right { return HTRIGHT as isize; }
+            if on_top { return HTTOP as isize; }
+            if on_bottom { return HTBOTTOM as isize; }
+
+            DefWindowProcW(hwnd, msg, wparam, lparam)
+        }
         WM_SYSCOMMAND => {
             let sc = (wparam & 0xFFF0) as u32;
-            let bond = crate::snapping::get_dock_bond();
-            if bond.is_bonded && (sc == SC_MINIMIZE || sc == SC_MAXIMIZE) {
-                // When magnetically docked, minimize/maximize are locked
+            if sc == SC_MINIMIZE {
+                let role = crate::snapping::get_window_role(crate::snapping::WindowKind::Visualizer);
+                if role == crate::snapping::WindowRole::ClusterMaster || role == crate::snapping::WindowRole::ClusterSlave {
+                    unsafe {
+                        crate::snapping::minimize_cluster(crate::snapping::WindowKind::Visualizer);
+                    }
+                    return 0;
+                }
+            }
+            if sc == SC_MAXIMIZE {
                 return 0;
             }
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         WM_SIZE => {
+            let resize_type = wparam as u32;
+            if resize_type == SIZE_RESTORED
+                && !crate::snapping::is_cluster_minimizing()
+                && !crate::snapping::is_cluster_restoring()
+            {
+                let role = crate::snapping::get_window_role(crate::snapping::WindowKind::Visualizer);
+                if role == crate::snapping::WindowRole::ClusterMaster || role == crate::snapping::WindowRole::ClusterSlave {
+                    unsafe {
+                        crate::snapping::restore_cluster(crate::snapping::WindowKind::Visualizer, hwnd);
+                    }
+                }
+            }
             if !state_ptr.is_null() && !VISUALIZER_CLOSING.load(Ordering::SeqCst) {
                 if let Some(ref wv) = (*state_ptr).webview {
                     let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
@@ -784,6 +1330,25 @@ unsafe extern "system" fn visualizer_wnd_proc(
         }
         WM_TIMER => {
             if wparam == TIMER_AUDIO_SPECTRUM {
+                let mut pt = POINT { x: 0, y: 0 };
+                if GetCursorPos(&mut pt) != 0 {
+                    let mut rc = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+                    if GetWindowRect(hwnd, &mut rc) != 0 {
+                        let in_rect = pt.x >= rc.left && pt.x < rc.right && pt.y >= rc.top && pt.y < rc.bottom;
+                        let inside = if in_rect {
+                            let w = WindowFromPoint(pt);
+                            !w.is_null() && (w == hwnd || GetAncestor(w, GA_ROOT) == hwnd)
+                        } else {
+                            false
+                        };
+                        let was_hovered = VIS_HOVERED.load(Ordering::Relaxed);
+                        if inside != was_hovered {
+                            VIS_HOVERED.store(inside, Ordering::SeqCst);
+                            apply_visualizer_opacity(hwnd);
+                        }
+                    }
+                }
+
                 if !state_ptr.is_null() && !VISUALIZER_CLOSING.load(Ordering::SeqCst) {
                     if let Some(ref wv) = (*state_ptr).webview {
                         if let Ok(guard) = VISUALIZER_LANG.lock() {
@@ -815,16 +1380,19 @@ unsafe extern "system" fn visualizer_wnd_proc(
             0
         }
         WM_CLOSE => {
-            let was_closing = VISUALIZER_CLOSING.swap(true, Ordering::SeqCst);
+            VISUALIZER_CLOSING.store(true, Ordering::SeqCst);
+            VIS_SUPPRESS_PEEK.store(false, Ordering::SeqCst);
             VISUALIZER_HWND.store(0, Ordering::SeqCst);
-            crate::spectrum::update_spectrum_needed_state();
-            if !was_closing {
-                let members = crate::snapping::get_cluster_members(crate::snapping::WindowKind::Visualizer);
-                if members.len() > 1 {
-                    crate::gui::request_close_cluster(crate::snapping::WindowKind::Visualizer);
-                }
+            if VISUALIZER_FULLSCREEN.swap(false, Ordering::SeqCst) {
+                VISUALIZER_HUD_MAIN_SHOWN.store(false, Ordering::SeqCst);
+                restore_hud_pinned_states();
+                crate::snapping::bring_fleet_to_top();
             }
-            crate::snapping::break_dock_bond();
+            crate::spectrum::update_spectrum_needed_state();
+            crate::snapping::handle_window_closed(crate::snapping::WindowKind::Visualizer);
+            if let Some(ctx) = crate::gui::get_egui_ctx() {
+                ctx.request_repaint();
+            }
             let main_hwnd = crate::tray::get_main_hwnd();
             if !main_hwnd.is_null() {
                 const GWLP_HWNDPARENT: i32 = -8;
@@ -843,6 +1411,7 @@ unsafe extern "system" fn visualizer_wnd_proc(
                 SetWindowLongPtrW(main_hwnd, GWLP_HWNDPARENT, 0);
             }
             crate::snapping::break_dock_bond();
+            restore_hud_pinned_states();
             VISUALIZER_FULLSCREEN.store(false, Ordering::SeqCst);
             windows_sys::Win32::System::Power::SetThreadExecutionState(
                 windows_sys::Win32::System::Power::ES_CONTINUOUS,
@@ -857,7 +1426,7 @@ unsafe extern "system" fn visualizer_wnd_proc(
                 SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
             }
             let main_hwnd = crate::tray::get_main_hwnd();
-            if !main_hwnd.is_null() && !crate::tray::IS_ALWAYS_ON_TOP.load(Ordering::SeqCst) {
+            if !main_hwnd.is_null() && !crate::snapping::is_window_pinned(crate::snapping::WindowKind::Main) {
                 SetWindowPos(main_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
             PostQuitMessage(0);

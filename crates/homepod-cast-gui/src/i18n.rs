@@ -188,6 +188,257 @@ impl Language {
         }
     }
 
+    pub fn tooltip_close_window(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "關閉此獨立視窗",
+            Self::SimplifiedChinese => "关闭此独立窗口",
+            Self::English => "Close this standalone window",
+            Self::French => "Fermer cette fenêtre",
+            Self::German => "Dieses Fenster schließen",
+            Self::Italian => "Chiudi questa finestra",
+            Self::Japanese => "このウィンドウを閉じる",
+            Self::Korean => "이 창 닫기",
+            Self::PortugueseBrazil => "Fechar esta janela",
+            Self::PortuguesePortugal => "Fechar esta janela",
+            Self::Indonesian => "Tutup jendela ini",
+            Self::Vietnamese => "Đóng cửa sổ này",
+            Self::Russian => "Закрыть это окно",
+            Self::Spanish => "Cerrar esta ventana",
+        }
+    }
+
+    pub fn badge_cluster_master(&self) -> &'static str {
+        "🧲"
+    }
+
+    pub fn tooltip_cluster_master(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "磁吸組合主控視窗（移動、最小化或關閉時連動全體組合成員）",
+            Self::SimplifiedChinese => "磁吸组合主控窗口（移动、最小化或关闭时联动全体成员）",
+            Self::English => "Master window of docked cluster (moving, minimizing, or closing affects all members)",
+            Self::French => "Fenêtre principale du groupe ancré (déplacer, réduire ou fermer affecte tous les membres)",
+            Self::German => "Hauptfenster der angedockten Gruppe (Verschieben, Minimieren oder Schließen betrifft alle)",
+            Self::Italian => "Finestra principale del gruppo agganciato (spostamento, riduzione o chiusura influisce su tutti)",
+            Self::Japanese => "ドッキンググループのマスターウィンドウ（移動・最小化・終了時に全メンバー連動）",
+            Self::Korean => "도킹 그룹의 마스터 창 (이동, 최소화, 닫기 시 전체 멤버 연동)",
+            Self::PortugueseBrazil => "Janela principal do grupo fixado (mover, minimizar ou fechar afeta todos)",
+            Self::PortuguesePortugal => "Janela principal do grupo fixado (mover, minimizar ou fechar afeta todos)",
+            Self::Indonesian => "Jendela utama dari grup yang terpasang (memindahkan, memperkecil, atau menutup memengaruhi semua anggota)",
+            Self::Vietnamese => "Cửa sổ chính của nhóm liên kết (di chuyển, thu nhỏ hoặc đóng sẽ ảnh hưởng đến tất cả các thành viên)",
+            Self::Russian => "Главное окно группы окон (перемещение, сворачивание или закрытие влияет на всю группу)",
+            Self::Spanish => "Ventana principal del grupo acoplado (mover, minimizar o cerrar afecta a todos)",
+        }
+    }
+
+    pub fn badge_cluster_slave(&self) -> &'static str {
+        "📎"
+    }
+
+    pub fn tooltip_cluster_slave(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "磁吸附屬視窗（跟隨主控視窗移動；關閉僅脫離並關閉自身）",
+            Self::SimplifiedChinese => "磁吸附属窗口（跟随主控窗口移动；关闭仅脱离并关闭自身）",
+            Self::English => "Slave window of docked cluster (follows master; closing only closes itself)",
+            Self::French => "Fenêtre rattachée (suit la principale ; fermer ferme uniquement celle-ci)",
+            Self::German => "Verbundenes Fenster (folgt dem Hauptfenster; Schließen schließt nur dieses)",
+            Self::Italian => "Finestra agganciata (segue la principale; la chiusura chiude solo questa)",
+            Self::Japanese => "ドッキングサブウィンドウ（マスターに追従；閉じると本ウィンドウのみ終了）",
+            Self::Korean => "도킹 보조 창 (마스터를 따름; 닫을 때 자신만 닫힘)",
+            Self::PortugueseBrazil => "Janela vinculada (segue a principal; fechar fecha apenas a si mesma)",
+            Self::PortuguesePortugal => "Janela vinculada (segue a principal; fechar fecha apenas a si mesma)",
+            Self::Indonesian => "Jendela terikat (mengikuti jendela utama; menutup hanya menutup jendela ini)",
+            Self::Vietnamese => "Cửa sổ phụ thuộc (đi theo cửa sổ chính; đóng chỉ đóng cửa sổ này)",
+            Self::Russian => "Дочернее окно (следует за главным; закрытие закрывает только его)",
+            Self::Spanish => "Ventana vinculada (sigue a la principal; cerrar solo cierra esta ventana)",
+        }
+    }
+
+    pub fn tooltip_minimize_window(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "最小化視窗",
+            Self::SimplifiedChinese => "最小化窗口",
+            Self::English => "Minimize window",
+            Self::French => "Réduire la fenêtre",
+            Self::German => "Fenster minimieren",
+            Self::Italian => "Riduci a icona la finestra",
+            Self::Japanese => "ウィンドウを最小化",
+            Self::Korean => "창 최소화",
+            Self::PortugueseBrazil => "Minimizar janela",
+            Self::PortuguesePortugal => "Minimizar janela",
+            Self::Indonesian => "Perkecil jendela",
+            Self::Vietnamese => "Thu nhỏ cửa sổ",
+            Self::Russian => "Свернуть окно",
+            Self::Spanish => "Minimizar ventana",
+        }
+    }
+
+    pub fn tooltip_minimize_cluster(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "最小化模組化工作站全體群組 (Shift+點擊僅最小化此視窗)",
+            Self::SimplifiedChinese => "最小化模块化工作站全体群组 (Shift+点击仅最小化此窗口)",
+            Self::English => "Minimize workstation cluster (Shift+Click to minimize solo)",
+            Self::French => "Réduire tout le groupe de la station (Maj+Clic pour réduire seul)",
+            Self::German => "Gesamte Workstation-Gruppe minimieren (Umschalt+Klick für Einzelfenster)",
+            Self::Italian => "Riduci l'intero gruppo workstation (Shift+Clic per ridurre singola)",
+            Self::Japanese => "モジュラーワークステーション全体を最小化 (Shift+クリックで単独最小化)",
+            Self::Korean => "워크스테이션 전체 그룹 최소화 (Shift+클릭 시 단독 최소화)",
+            Self::PortugueseBrazil => "Minimizar todo o grupo da estação (Shift+clique para janela individual)",
+            Self::PortuguesePortugal => "Minimizar todo o grupo da estação (Shift+clique para janela individual)",
+            Self::Indonesian => "Perkecil seluruh grup workstation (Shift+Klik untuk jendela tunggal)",
+            Self::Vietnamese => "Thu nhỏ toàn bộ nhóm không gian làm việc (Shift+Nhấp cho cửa sổ đơn)",
+            Self::Russian => "Свернуть всю группу рабочей станции (Shift+клик для одного окна)",
+            Self::Spanish => "Minimizar todo el grupo de la estación (Shift+clic para ventana individual)",
+        }
+    }
+
+    pub fn tooltip_minimize_cluster_all(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "僅最小化此視窗 (自工作站群組脫離)",
+            Self::SimplifiedChinese => "仅最小化此窗口 (自工作站群组脱离)",
+            Self::English => "Minimize this window only (detach from cluster)",
+            Self::French => "Réduire uniquement cette fenêtre (détacher du groupe)",
+            Self::German => "Nur dieses Fenster minimieren (aus Gruppe lösen)",
+            Self::Italian => "Riduci solo questa finestra (separa dal gruppo)",
+            Self::Japanese => "このウィンドウのみ最小化 (グループから分離)",
+            Self::Korean => "이 창만 최소화 (그룹에서 분리)",
+            Self::PortugueseBrazil => "Minimizar apenas esta janela (desacoplar do grupo)",
+            Self::PortuguesePortugal => "Minimizar apenas esta janela (desacoplar do grupo)",
+            Self::Indonesian => "Hanya perkecil jendela ini (lepas dari grup)",
+            Self::Vietnamese => "Chỉ thu nhỏ cửa sổ này (tách khỏi nhóm)",
+            Self::Russian => "Свернуть только это окно (отсоединить от группы)",
+            Self::Spanish => "Minimizar solo esta ventana (separar del grupo)",
+        }
+    }
+
+    pub fn tooltip_close_cluster(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "關閉模組化工作站全體群組 (Shift+點擊僅關閉此視窗)",
+            Self::SimplifiedChinese => "关闭模块化工作站全体群组 (Shift+点击仅关闭此窗口)",
+            Self::English => "Close workstation cluster (Shift+Click to close solo)",
+            Self::French => "Fermer tout le groupe de la station (Maj+Clic pour fermer seul)",
+            Self::German => "Gesamte Workstation-Gruppe schließen (Umschalt+Klick für Einzelfenster)",
+            Self::Italian => "Chiudi l'intero gruppo workstation (Shift+Clic per chiudere singola)",
+            Self::Japanese => "モジュラーワークステーション全体を閉じる (Shift+クリックで単独閉じる)",
+            Self::Korean => "워크스테이션 전체 그룹 닫기 (Shift+클릭 시 단독 닫기)",
+            Self::PortugueseBrazil => "Fechar todo o grupo da estação (Shift+clique para janela individual)",
+            Self::PortuguesePortugal => "Fechar todo o grupo da estação (Shift+clique para janela individual)",
+            Self::Indonesian => "Tutup seluruh grup workstation (Shift+Klik untuk jendela tunggal)",
+            Self::Vietnamese => "Đóng toàn bộ nhóm không gian làm việc (Shift+Nhấp cho cửa sổ đơn)",
+            Self::Russian => "Закрыть всю группу рабочей станции (Shift+клик для одного окна)",
+            Self::Spanish => "Cerrar todo el grupo de la estación (Shift+clic para ventana individual)",
+        }
+    }
+
+    pub fn tooltip_close_cluster_all(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "僅關閉此視窗 (自工作站群組脫離)",
+            Self::SimplifiedChinese => "仅关闭此窗口 (自工作站群组脱离)",
+            Self::English => "Close this window only (detach from cluster)",
+            Self::French => "Fermer uniquement cette fenêtre (détacher du groupe)",
+            Self::German => "Nur dieses Fenster schließen (aus Gruppe lösen)",
+            Self::Italian => "Chiudi solo questa finestra (separa dal gruppo)",
+            Self::Japanese => "このウィンドウのみ閉じる (グループから分離)",
+            Self::Korean => "이 창만 닫기 (그룹에서 분리)",
+            Self::PortugueseBrazil => "Fechar apenas esta janela (desacoplar do grupo)",
+            Self::PortuguesePortugal => "Fechar apenas esta janela (desacoplar do grupo)",
+            Self::Indonesian => "Hanya tutup jendela ini (lepas dari grup)",
+            Self::Vietnamese => "Chỉ đóng cửa sổ này (tách khỏi nhóm)",
+            Self::Russian => "Закрыть только это окно (отсоединить от группы)",
+            Self::Spanish => "Cerrar solo esta ventana (separar del grupo)",
+        }
+    }
+
+    pub fn tooltip_modular_workstation(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "呈現三欄模組化工作站（自動開啟並齊平磁吸：主視窗、迷你播放器、等化器與視覺效果）",
+            Self::SimplifiedChinese => "呈现三栏模块化工作站（自动开启并齐平磁吸：主窗口、迷你播放器、均衡器与视觉效果）",
+            Self::English => "3-Column Modular Workstation (open and snap: Main, MiniPlayer, Equalizer & Visualizer)",
+            Self::French => "Station modulaire à 3 colonnes (ouvrir et ancrer : Principal, MiniPlayer, Égaliseur et Visualiseur)",
+            Self::German => "3-Spalten-Workstation (Öffnen und Andocken: Hauptfenster, MiniPlayer, Equalizer & Visualizer)",
+            Self::Italian => "Workstation modulare a 3 colonne (apri e aggancia: Principale, MiniPlayer, Equalizzatore e Visualizzatore)",
+            Self::Japanese => "3列モジュラーワークステーション（メイン、ミニプレイヤー、イコライザー、ビジュアライザーを一括整列）",
+            Self::Korean => "3열 모듈형 워크스테이션 (메인 창, 미니 플레이어, 이퀄라이저 및 시각화 창 일괄 정렬)",
+            Self::PortugueseBrazil => "Estação de trabalho modular em 3 colunas (abrir e fixar: Principal, MiniPlayer, Equalizador e Visualizador)",
+            Self::PortuguesePortugal => "Estação de trabalho modular em 3 colunas (abrir e fixar: Principal, MiniPlayer, Equalizador e Visualizador)",
+            Self::Indonesian => "Workstation Modular 3 Kolom (buka dan pasang: Utama, MiniPlayer, Equalizer & Visualizer)",
+            Self::Vietnamese => "Trạm làm việc mô-đun 3 cột (mở và gắn: Cửa sổ chính, MiniPlayer, Bộ chỉnh âm & Trình hiển thị)",
+            Self::Russian => "3-колоночная модульная станция (открыть и прикрепить: Главное окно, MiniPlayer, Эквалайзер и Визуализатор)",
+            Self::Spanish => "Estación de trabajo modular de 3 columnas (abrir y acoplar: Principal, MiniPlayer, Ecualizador y Visualizador)",
+        }
+    }
+
+    pub fn onboarding_workstation_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "💡 推薦探索：模組化工作站",
+            Self::SimplifiedChinese => "💡 推荐探索：模块化工作站",
+            Self::English => "💡 Discover Modular Workstation",
+            Self::French => "💡 Découvrir la station modulaire",
+            Self::German => "💡 Entdecken Sie die modulare Workstation",
+            Self::Italian => "💡 Scopri la workstation modulare",
+            Self::Japanese => "💡 おすすめ機能：モジュラーワークステーション",
+            Self::Korean => "💡 추천 기능: 모듈형 워크스테이션",
+            Self::PortugueseBrazil | Self::PortuguesePortugal => "💡 Descubra a estação de trabalho modular",
+            Self::Indonesian => "💡 Temukan Workstation Modular",
+            Self::Vietnamese => "💡 Khám phá Trạm làm việc mô-đun",
+            Self::Russian => "💡 Рекомендуем: Модульная станция",
+            Self::Spanish => "💡 Descubre la estación de trabajo modular",
+        }
+    }
+
+    pub fn onboarding_workstation_desc(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "一鍵展開並自動磁吸：主控台 + 迷你播放器 + 等化器 + 音訊視覺特效。",
+            Self::SimplifiedChinese => "一键展开并自动磁吸：主控台 + 迷你播放器 + 均衡器 + 音频视觉特效。",
+            Self::English => "One-click open & snap: Main + MiniPlayer + Equalizer + Visualizer.",
+            Self::French => "Un clic pour ouvrir et ancrer : Principal + MiniPlayer + Égaliseur + Visualiseur.",
+            Self::German => "Mit einem Klick öffnen & andocken: Hauptfenster + MiniPlayer + Equalizer + Visualizer.",
+            Self::Italian => "Un clic per aprire e agganciare: Principale + MiniPlayer + Equalizzatore + Visualizzatore.",
+            Self::Japanese => "ワンクリックで一括展開・磁気吸着：メイン + ミニプレイヤー + イコライザー + 視覚効果。",
+            Self::Korean => "원클릭으로 일괄 열기 및 자석 정렬: 메인 + 미니 플레이어 + 이퀄라이저 + 시각 효과.",
+            Self::PortugueseBrazil | Self::PortuguesePortugal => "Um clique para abrir e fixar: Principal + MiniPlayer + Equalizador + Visualizador.",
+            Self::Indonesian => "Buka & pasang sekali klik: Utama + MiniPlayer + Equalizer + Visualizer.",
+            Self::Vietnamese => "Mở và gắn chỉ bằng một cú nhấp: Cửa sổ chính + MiniPlayer + Bộ chỉnh âm + Trình hiển thị.",
+            Self::Russian => "Один клик для открытия и стыковки: Главное окно + MiniPlayer + Эквалайзер + Визуализатор.",
+            Self::Spanish => "Un clic para abrir y acoplar: Principal + MiniPlayer + Ecualizador + Visualizador.",
+        }
+    }
+
+    pub fn onboarding_workstation_btn_try(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "◫ 立即展開",
+            Self::SimplifiedChinese => "◫ 立即展开",
+            Self::English => "◫ Open Now",
+            Self::French => "◫ Ouvrir",
+            Self::German => "◫ Jetzt öffnen",
+            Self::Italian => "◫ Apri ora",
+            Self::Japanese => "◫ 今すぐ展開",
+            Self::Korean => "◫ 지금 열기",
+            Self::PortugueseBrazil | Self::PortuguesePortugal => "◫ Abrir agora",
+            Self::Indonesian => "◫ Buka Sekarang",
+            Self::Vietnamese => "◫ Mở ngay",
+            Self::Russian => "◫ Открыть сейчас",
+            Self::Spanish => "◫ Abrir ahora",
+        }
+    }
+
+    pub fn onboarding_workstation_btn_dismiss(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "✕ 稍後",
+            Self::SimplifiedChinese => "✕ 稍后",
+            Self::English => "✕ Later",
+            Self::French => "✕ Plus tard",
+            Self::German => "✕ Später",
+            Self::Italian => "✕ Più tardi",
+            Self::Japanese => "✕ あとで",
+            Self::Korean => "✕ 나중에",
+            Self::PortugueseBrazil | Self::PortuguesePortugal => "✕ Mais tarde",
+            Self::Indonesian => "✕ Nanti",
+            Self::Vietnamese => "✕ Để sau",
+            Self::Russian => "✕ Позже",
+            Self::Spanish => "✕ Más tarde",
+        }
+    }
+
     pub fn tooltip_settings(&self) -> &'static str {
         match self {
             Self::TraditionalChinese => "開啟進階設定",
@@ -3452,20 +3703,20 @@ impl Language {
 
     pub fn tray_open_panel(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "開啟控制面板",
-            Self::SimplifiedChinese => "打开控制面板",
-            Self::English => "Open Control Panel",
-            Self::French => "Ouvrir le panneau de contrôle",
-            Self::German => "Bedienfeld öffnen",
-            Self::Italian => "Apri pannello di controllo",
-            Self::Japanese => "コントロールパネルを開く",
-            Self::Korean => "제어판 열기",
-            Self::PortugueseBrazil => "Abrir painel de controle",
-            Self::PortuguesePortugal => "Abrir painel de controlo",
-            Self::Indonesian => "Buka Panel Kontrol",
-            Self::Vietnamese => "Mở bảng điều khiển",
-            Self::Russian => "Открыть панель управления",
-            Self::Spanish => "Abrir panel de control",
+            Self::TraditionalChinese => "置中開啟控制面板",
+            Self::SimplifiedChinese => "居中打开控制面板",
+            Self::English => "Center & Open Control Panel",
+            Self::French => "Ouvrir le panneau au centre",
+            Self::German => "Bedienfeld zentriert öffnen",
+            Self::Italian => "Apri pannello di controllo al centro",
+            Self::Japanese => "中央にコントロールパネルを開く",
+            Self::Korean => "제어판 화면 중앙에 열기",
+            Self::PortugueseBrazil => "Abrir painel de controle centralizado",
+            Self::PortuguesePortugal => "Abrir painel de controlo centralizado",
+            Self::Indonesian => "Buka Panel Kontrol di Tengah",
+            Self::Vietnamese => "Mở bảng điều khiển ở giữa màn hình",
+            Self::Russian => "Открыть панель управления по центру",
+            Self::Spanish => "Abrir panel de control centrado",
         }
     }
 
@@ -3753,6 +4004,101 @@ impl Language {
             Self::Vietnamese => "Bỏ ghim khỏi trên cùng",
             Self::Russian => "Открепить от верха",
             Self::Spanish => "Desanclar del primer plano",
+        }
+    }
+
+    pub fn tooltip_pin_cluster(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "保持工作站叢集在最上層",
+            Self::SimplifiedChinese => "保持工作站集群在最顶层",
+            Self::English => "Keep Workstation Cluster on Top",
+            Self::French => "Garder le cluster au premier plan",
+            Self::German => "Cluster im Vordergrund halten",
+            Self::Italian => "Mantieni il cluster in primo piano",
+            Self::Japanese => "クラスタを常に最前面に表示",
+            Self::Korean => "클러스터 항상 위에 고정",
+            Self::PortugueseBrazil => "Manter o cluster no topo",
+            Self::PortuguesePortugal => "Manter o cluster no topo",
+            Self::Indonesian => "Tetap di Atas (Kluster)",
+            Self::Vietnamese => "Ghim cụm lên trên cùng",
+            Self::Russian => "Поверх остальных окон (кластер)",
+            Self::Spanish => "Mantener el grupo en primer plano",
+        }
+    }
+
+    pub fn tooltip_unpin_cluster(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "取消工作站叢集最上層",
+            Self::SimplifiedChinese => "取消工作站集群最顶层",
+            Self::English => "Unpin Workstation Cluster from Top",
+            Self::French => "Ne plus garder le cluster au premier plan",
+            Self::German => "Cluster nicht mehr im Vordergrund halten",
+            Self::Italian => "Non mantenere più il cluster in primo piano",
+            Self::Japanese => "クラスタの最前面固定を解除",
+            Self::Korean => "클러스터 항상 위 고정 해제",
+            Self::PortugueseBrazil => "Desafixar cluster do topo",
+            Self::PortuguesePortugal => "Desafixar cluster do topo",
+            Self::Indonesian => "Lepas Pin Kluster dari Atas",
+            Self::Vietnamese => "Bỏ ghim cụm khỏi trên cùng",
+            Self::Russian => "Открепить кластер от верха",
+            Self::Spanish => "Desanclar el grupo del primer plano",
+        }
+    }
+
+    pub fn opacity_menu_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "視窗透明度",
+            Self::SimplifiedChinese => "窗口透明度",
+            Self::English => "Window Opacity",
+            Self::French => "Opacité de la fenêtre",
+            Self::German => "Fenstertransparenz",
+            Self::Italian => "Opacità della finestra",
+            Self::Japanese => "ウィンドウの不透明度",
+            Self::Korean => "창 불투명도",
+            Self::PortugueseBrazil => "Opacidade da janela",
+            Self::PortuguesePortugal => "Opacidade da janela",
+            Self::Indonesian => "Opasitas Jendela",
+            Self::Vietnamese => "Độ mờ của cửa sổ",
+            Self::Russian => "Прозрачность окна",
+            Self::Spanish => "Opacidad de la ventana",
+        }
+    }
+
+    pub fn opacity_hover_peek(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "懸停時恢復實體 (Hover Peek)",
+            Self::SimplifiedChinese => "悬停时恢复实体 (Hover Peek)",
+            Self::English => "Restore on hover (Hover Peek)",
+            Self::French => "Restaurer au survol (Hover Peek)",
+            Self::German => "Beim Zeigen wiederherstellen (Hover Peek)",
+            Self::Italian => "Ripristina al passaggio (Hover Peek)",
+            Self::Japanese => "ホバー時に不透明に戻す (Hover Peek)",
+            Self::Korean => "호버 시 불투명 복원 (Hover Peek)",
+            Self::PortugueseBrazil => "Restaurar ao passar o mouse (Hover Peek)",
+            Self::PortuguesePortugal => "Restaurar ao passar o rato (Hover Peek)",
+            Self::Indonesian => "Pulihkan saat kursor di atasnya (Hover Peek)",
+            Self::Vietnamese => "Khôi phục khi di chuột (Hover Peek)",
+            Self::Russian => "Восстанавливать при наведении (Hover Peek)",
+            Self::Spanish => "Restaurar al pasar el ratón (Hover Peek)",
+        }
+    }
+
+    pub fn opacity_alt_wheel_hint(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "提示：按住 Alt + 滾輪可無級微調",
+            Self::SimplifiedChinese => "提示：按住 Alt + 滚轮可无级微调",
+            Self::English => "Tip: Hold Alt + Scroll to fine-tune",
+            Self::French => "Astuce : Alt + Molette pour ajuster",
+            Self::German => "Tipp: Alt + Mausrad zum Anpassen",
+            Self::Italian => "Suggerimento: Alt + Rotellina per regolare",
+            Self::Japanese => "ヒント: Alt + スクロールで無段階調整",
+            Self::Korean => "팁: Alt + 스크롤로 연속 미세 조정",
+            Self::PortugueseBrazil => "Dica: Alt + Rolagem para ajustar",
+            Self::PortuguesePortugal => "Dica: Alt + Roda para ajustar",
+            Self::Indonesian => "Tips: Alt + Gulir untuk menyesuaikan",
+            Self::Vietnamese => "Mẹo: Alt + Cuộn chuột để tinh chỉnh",
+            Self::Russian => "Alt + колесо мыши для точной настройки",
+            Self::Spanish => "Consejo: Alt + Rueda para ajustar",
         }
     }
 
@@ -6136,6 +6482,25 @@ impl Language {
         }
     }
 
+    pub fn mini_equalizer_window_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "Win2Pod - 迷你等化器",
+            Self::SimplifiedChinese => "Win2Pod - 迷你均衡器",
+            Self::English => "Win2Pod - Mini Equalizer",
+            Self::French => "Win2Pod - Mini Égaliseur",
+            Self::German => "Win2Pod - Mini-Equalizer",
+            Self::Italian => "Win2Pod - Mini Equalizzatore",
+            Self::Japanese => "Win2Pod - ミニイコライザー",
+            Self::Korean => "Win2Pod - 미니 이퀄라이저",
+            Self::PortugueseBrazil => "Win2Pod - Mini Equalizador",
+            Self::PortuguesePortugal => "Win2Pod - Mini Equalizador",
+            Self::Indonesian => "Win2Pod - Equalizer Mini",
+            Self::Vietnamese => "Win2Pod - Bộ cân bằng mini",
+            Self::Russian => "Win2Pod - Мини-эквалайзер",
+            Self::Spanish => "Win2Pod - Mini Ecualizador",
+        }
+    }
+
     pub fn setting_detach_equalizer_window(&self) -> &'static str {
         match self {
             Self::TraditionalChinese => "🪟 以獨立視窗開啟音訊等化器（支援視窗串右側磁吸）",
@@ -6176,20 +6541,20 @@ impl Language {
 
     pub fn btn_open_equalizer(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "🎚 等化器",
-            Self::SimplifiedChinese => "🎚 均衡器",
-            Self::English => "🎚 Equalizer",
-            Self::French => "🎚 Égaliseur",
-            Self::German => "🎚 Equalizer",
-            Self::Italian => "🎚 Equalizzatore",
-            Self::Japanese => "🎚 イコライザー",
-            Self::Korean => "🎚 이퀄라이저",
-            Self::PortugueseBrazil => "🎚 Equalizador",
-            Self::PortuguesePortugal => "🎚 Equalizador",
-            Self::Indonesian => "🎚 Equalizer",
-            Self::Vietnamese => "🎚 Bộ chỉnh âm",
-            Self::Russian => "🎚 Эквалайзер",
-            Self::Spanish => "🎚 Ecualizador",
+            Self::TraditionalChinese => "⦀ 等化器",
+            Self::SimplifiedChinese => "⦀ 均衡器",
+            Self::English => "⦀ Equalizer",
+            Self::French => "⦀ Égaliseur",
+            Self::German => "⦀ Equalizer",
+            Self::Italian => "⦀ Equalizzatore",
+            Self::Japanese => "⦀ イコライザー",
+            Self::Korean => "⦀ 이퀄라이저",
+            Self::PortugueseBrazil => "⦀ Equalizador",
+            Self::PortuguesePortugal => "⦀ Equalizador",
+            Self::Indonesian => "⦀ Equalizer",
+            Self::Vietnamese => "⦀ Bộ chỉnh âm",
+            Self::Russian => "⦀ Эквалайзер",
+            Self::Spanish => "⦀ Ecualizador",
         }
     }
 
@@ -6269,6 +6634,25 @@ impl Language {
         }
     }
 
+    pub fn mini_equalizer_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "迷你等化器",
+            Self::SimplifiedChinese => "迷你均衡器",
+            Self::English => "Mini Equalizer",
+            Self::French => "Mini Égaliseur",
+            Self::German => "Mini-Equalizer",
+            Self::Italian => "Mini Equalizzatore",
+            Self::Japanese => "ミニイコライザー",
+            Self::Korean => "미니 이퀄라이저",
+            Self::PortugueseBrazil => "Mini Equalizador",
+            Self::PortuguesePortugal => "Mini Equalizador",
+            Self::Indonesian => "Equalizer Mini",
+            Self::Vietnamese => "Bộ cân bằng mini",
+            Self::Russian => "Мини-эквалайзер",
+            Self::Spanish => "Mini Ecualizador",
+        }
+    }
+
     pub fn tooltip_show_main_window(&self) -> &'static str {
         match self {
             Self::TraditionalChinese => "叫出 Win2Pod 主視窗",
@@ -6304,6 +6688,25 @@ impl Language {
             Self::Vietnamese => "🧲 Hút dính Cửa sổ chính vào đây",
             Self::Russian => "🧲 Примагнитить главное окно сюда",
             Self::Spanish => "🧲 Acoplar la ventana principal aquí",
+        }
+    }
+
+    pub fn tooltip_main_window_docked_focus(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "主視窗已吸附至此群組（點擊聚焦）",
+            Self::SimplifiedChinese => "主窗口已吸附至此群组（点击聚焦）",
+            Self::English => "Main window is docked here (Click to focus)",
+            Self::French => "La fenêtre principale est aimantée ici (Cliquer pour focaliser)",
+            Self::German => "Hauptfenster ist hier angedockt (Klicken zum Fokussieren)",
+            Self::Italian => "La finestra principale è agganciata qui (Fai clic per mettere a fuoco)",
+            Self::Japanese => "メインウィンドウはここに磁着中（クリックでフォーカス）",
+            Self::Korean => "메인 창이 여기에 자석 결합됨 (클릭하여 포커스)",
+            Self::PortugueseBrazil => "A janela principal está encaixada aqui (Clique para focar)",
+            Self::PortuguesePortugal => "A janela principal está encaixada aqui (Clique para focar)",
+            Self::Indonesian => "Jendela utama telah ditempelkan di sini (Klik untuk fokus)",
+            Self::Vietnamese => "Cửa sổ chính đã được hút dính tại đây (Nhấp để lấy tiêu điểm)",
+            Self::Russian => "Главное окно примагничено сюда (Нажмите для фокуса)",
+            Self::Spanish => "La ventana principal está acoplada aquí (Haz clic para enfocar)",
         }
     }
 
@@ -6562,6 +6965,76 @@ impl NoticeKind {
             },
         }
     }
+
+    pub fn title(&self, lang: Language) -> &'static str {
+        match self {
+            Self::ConnectionRestored(_) | Self::ResumeRestored(_) => match lang {
+                Language::TraditionalChinese => "連線已成功恢復",
+                Language::SimplifiedChinese => "连接已成功恢复",
+                Language::English => "Connection Restored",
+                Language::French => "Connexion rétablie",
+                Language::German => "Verbindung wiederhergestellt",
+                Language::Italian => "Connessione ripristinata",
+                Language::Japanese => "接続が正常に復旧しました",
+                Language::Korean => "연결이 성공적으로 복구되었습니다",
+                Language::PortugueseBrazil => "Conexão restabelecida",
+                Language::PortuguesePortugal => "Ligação restabelecida",
+                Language::Indonesian => "Koneksi Berhasil Dipulihkan",
+                Language::Vietnamese => "Đã khôi phục kết nối thành công",
+                Language::Russian => "Связь успешно восстановлена",
+                Language::Spanish => "Conexión restablecida con éxito",
+            },
+            Self::Preempted(_) | Self::ResumePreempted(_) => lang.preempted_banner_title(),
+            Self::ConnectionLostReconnecting(_) | Self::ResumeReconnecting(_) => match lang {
+                Language::TraditionalChinese => "正在重新連線",
+                Language::SimplifiedChinese => "正在重新连接",
+                Language::English => "Reconnecting...",
+                Language::French => "Reconnexion en cours...",
+                Language::German => "Wiederverbindung...",
+                Language::Italian => "Riconnessione in corso...",
+                Language::Japanese => "再接続中...",
+                Language::Korean => "다시 연결 중...",
+                Language::PortugueseBrazil => "Reconectando...",
+                Language::PortuguesePortugal => "A religar...",
+                Language::Indonesian => "Menghubungkan kembali...",
+                Language::Vietnamese => "Đang kết nối lại...",
+                Language::Russian => "Переподключение...",
+                Language::Spanish => "Reconectando...",
+            },
+            Self::Disconnected(_) | Self::ResumeFailed(_) => match lang {
+                Language::TraditionalChinese => "音響連線中斷",
+                Language::SimplifiedChinese => "音响连接中断",
+                Language::English => "Connection Lost",
+                Language::French => "Connexion perdue",
+                Language::German => "Verbindung verloren",
+                Language::Italian => "Connessione persa",
+                Language::Japanese => "接続が切断されました",
+                Language::Korean => "연결이 끊어졌습니다",
+                Language::PortugueseBrazil => "Conexão perdida",
+                Language::PortuguesePortugal => "Ligação perdida",
+                Language::Indonesian => "Koneksi Terputus",
+                Language::Vietnamese => "Mất kết nối",
+                Language::Russian => "Связь потеряна",
+                Language::Spanish => "Conexión perdida",
+            },
+            Self::AirPodsOccupied | Self::AirPodsOccupiedFallbackHomePod => match lang {
+                Language::TraditionalChinese => "AirPods 狀態提示",
+                Language::SimplifiedChinese => "AirPods 状态提示",
+                Language::English => "AirPods Notice",
+                Language::French => "Notification AirPods",
+                Language::German => "AirPods Hinweis",
+                Language::Italian => "Avviso AirPods",
+                Language::Japanese => "AirPods のお知らせ",
+                Language::Korean => "AirPods 알림",
+                Language::PortugueseBrazil => "Aviso do AirPods",
+                Language::PortuguesePortugal => "Aviso dos AirPods",
+                Language::Indonesian => "Pemberitahuan AirPods",
+                Language::Vietnamese => "Thông báo AirPods",
+                Language::Russian => "Уведомление AirPods",
+                Language::Spanish => "Aviso de AirPods",
+            },
+        }
+    }
 }
 
 #[cfg(test)]
@@ -6645,6 +7118,7 @@ mod tests {
             assert!(!lang.btn_popout_equalizer().is_empty());
             assert!(!lang.btn_dock_equalizer().is_empty());
             assert!(!lang.eq_window_title().is_empty());
+            assert!(!lang.mini_equalizer_window_title().is_empty());
             assert!(!lang.setting_detach_equalizer_window().is_empty());
             assert!(!lang.btn_open_mini_player().is_empty());
             assert!(!lang.btn_open_equalizer().is_empty());
@@ -6652,21 +7126,30 @@ mod tests {
             assert!(!lang.tooltip_open_mini_player().is_empty());
             assert!(!lang.tooltip_open_equalizer().is_empty());
             assert!(!lang.mini_player_title().is_empty());
+            assert!(!lang.mini_equalizer_title().is_empty());
             assert!(!lang.tooltip_show_main_window().is_empty());
             assert!(!lang.tooltip_popout_mini_player().is_empty());
             assert!(!lang.tooltip_popout_open().is_empty());
             assert!(!lang.tooltip_popout_close().is_empty());
+            assert!(!lang.tooltip_modular_workstation().is_empty());
+            assert!(!lang.onboarding_workstation_title().is_empty());
+            assert!(!lang.onboarding_workstation_desc().is_empty());
+            assert!(!lang.onboarding_workstation_btn_try().is_empty());
+            assert!(!lang.onboarding_workstation_btn_dismiss().is_empty());
+            assert!(!lang.tooltip_main_window_docked_focus().is_empty());
             assert!(!lang.eq_profile_normal_hint().is_empty());
         }
         assert_eq!(Language::TraditionalChinese.btn_popout_equalizer(), "⧉ 獨立視窗");
         assert_eq!(Language::TraditionalChinese.btn_dock_equalizer(), "⤓ 嵌入主視窗");
         assert_eq!(Language::TraditionalChinese.btn_open_mini_player(), "♫ 迷你播放器");
-        assert_eq!(Language::TraditionalChinese.btn_open_equalizer(), "🎚 等化器");
+        assert_eq!(Language::TraditionalChinese.btn_open_equalizer(), "⦀ 等化器");
         assert_eq!(Language::TraditionalChinese.mini_player_title(), "迷你播放器");
+        assert_eq!(Language::TraditionalChinese.mini_equalizer_title(), "迷你等化器");
         assert_eq!(Language::English.btn_popout_equalizer(), "⧉ Pop out window");
         assert_eq!(Language::English.btn_dock_equalizer(), "⤓ Embed in main window");
         assert_eq!(Language::English.btn_open_mini_player(), "♫ Mini Player");
-        assert_eq!(Language::English.btn_open_equalizer(), "🎚 Equalizer");
+        assert_eq!(Language::English.btn_open_equalizer(), "⦀ Equalizer");
         assert_eq!(Language::English.mini_player_title(), "Mini Player");
+        assert_eq!(Language::English.mini_equalizer_title(), "Mini Equalizer");
     }
 }

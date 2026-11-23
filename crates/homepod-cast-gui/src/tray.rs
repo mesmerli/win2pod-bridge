@@ -95,6 +95,8 @@ pub static IS_ALWAYS_ON_TOP: AtomicBool = AtomicBool::new(false);
 pub static IS_APP_QUITTING: AtomicBool = AtomicBool::new(false);
 pub static LAST_POS_X: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(i32::MIN);
 pub static LAST_POS_Y: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(i32::MIN);
+pub static TRAY_ICON_RECT_X: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(i32::MIN);
+pub static TRAY_ICON_RECT_Y: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(i32::MIN);
 
 pub fn is_app_fleet_hidden() -> bool {
     IS_APP_FLEET_HIDDEN.load(Ordering::SeqCst)
@@ -174,7 +176,7 @@ pub fn set_main_hwnd(hwnd: isize) {
 }
 
 pub fn set_main_window_pinned(pinned: bool) {
-    IS_ALWAYS_ON_TOP.store(pinned, Ordering::SeqCst);
+    crate::snapping::set_window_pinned(crate::snapping::WindowKind::Main, pinned);
     crate::controller::save_always_on_top(pinned);
     let hwnd = get_main_hwnd();
     if !hwnd.is_null() {
@@ -248,10 +250,37 @@ pub fn hide_main_window_only(hwnd: HWND, _ctx: &egui::Context) {
         IS_TRAY_HIDDEN.store(true, Ordering::SeqCst);
         crate::spectrum::update_spectrum_needed_state();
 
-        // Add WS_EX_TOOLWINDOW so it disappears from Taskbar and Alt+Tab
+        // Capture window screenshot for Muelle Genie S-Curve effect before moving offscreen
+        let w = rect.right - rect.left;
+        let h = rect.bottom - rect.top;
+        let mut capture_bmp: usize = 0;
+        if w > 50 && h > 50 {
+            let screen_dc = windows_sys::Win32::Graphics::Gdi::GetDC(std::ptr::null_mut());
+            let mem_dc = windows_sys::Win32::Graphics::Gdi::CreateCompatibleDC(screen_dc);
+            let hbmp = windows_sys::Win32::Graphics::Gdi::CreateCompatibleBitmap(screen_dc, w, h);
+            let old_bmp = windows_sys::Win32::Graphics::Gdi::SelectObject(mem_dc, hbmp);
+            windows_sys::Win32::Graphics::Gdi::BitBlt(
+                mem_dc,
+                0,
+                0,
+                w,
+                h,
+                screen_dc,
+                rect.left,
+                rect.top,
+                windows_sys::Win32::Graphics::Gdi::SRCCOPY,
+            );
+            windows_sys::Win32::Graphics::Gdi::SelectObject(mem_dc, old_bmp);
+            windows_sys::Win32::Graphics::Gdi::DeleteDC(mem_dc);
+            windows_sys::Win32::Graphics::Gdi::ReleaseDC(std::ptr::null_mut(), screen_dc);
+            capture_bmp = hbmp as usize;
+        }
+
+        // Add WS_EX_TOOLWINDOW and delete taskbar tab so it disappears from Taskbar and Alt+Tab
         let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
         let new_ex = (ex | WS_EX_TOOLWINDOW as i32) & !(WS_EX_APPWINDOW as i32);
         SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
+        crate::snapping::delete_taskbar_tab_pub(hwnd);
 
         // Move far off-screen
         SetWindowPos(
@@ -263,6 +292,22 @@ pub fn hide_main_window_only(hwnd: HWND, _ctx: &egui::Context) {
             0,
             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
         );
+
+        if !IS_APP_FLEET_HIDDEN.load(Ordering::SeqCst) {
+            crate::snapping::handle_window_closed(crate::snapping::WindowKind::Main);
+        }
+        crate::snapping::sync_cluster_taskbar_ownership();
+
+        // 觸發基於 Muelle S-curve 數學模型的神燈精靈扭曲收縮效果 (完全解耦純視覺)
+        if capture_bmp != 0 {
+            crate::genie_effect::play_genie_s_curve_effect(
+                capture_bmp,
+                rect.left,
+                rect.top,
+                w,
+                h,
+            );
+        }
     }
     trim_working_set();
 }
@@ -297,6 +342,7 @@ pub fn hide_all_windows_to_tray(hwnd: HWND, ctx: &egui::Context) {
 
 /// Restore window from system tray back onto visible desktop screen
 pub fn show_window_from_tray(hwnd: HWND, ctx: &egui::Context) {
+    crate::genie_effect::abort_genie_effect();
     if hwnd.is_null() {
         return;
     }
@@ -317,6 +363,7 @@ pub fn show_window_from_tray(hwnd: HWND, ctx: &egui::Context) {
         let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
         let new_ex = (ex & !(WS_EX_TOOLWINDOW as i32)) | (WS_EX_APPWINDOW as i32);
         SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
+        crate::snapping::add_taskbar_tab_pub(hwnd);
 
         let mut x = LAST_POS_X.load(Ordering::SeqCst);
         let mut y = LAST_POS_Y.load(Ordering::SeqCst);
@@ -358,6 +405,7 @@ pub fn show_window_from_tray(hwnd: HWND, ctx: &egui::Context) {
 
         // Elevate all fleet windows (including detached ones) and preserve clustered relations
         crate::snapping::bring_fleet_to_top();
+        crate::snapping::sync_cluster_taskbar_ownership();
 
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         ctx.request_repaint();
@@ -473,6 +521,7 @@ pub unsafe fn force_foreground(hwnd: HWND) {
 }
 
 pub fn toggle_main_window(ctx: &egui::Context) {
+    crate::genie_effect::abort_genie_effect();
     let hwnd = get_main_hwnd();
     if !hwnd.is_null() {
         let is_hidden = is_window_hidden_to_tray();
@@ -535,7 +584,63 @@ pub fn toggle_main_window(ctx: &egui::Context) {
 pub fn show_and_focus_main_window(ctx: &egui::Context) {
     let hwnd = get_main_hwnd();
     if !hwnd.is_null() {
-        show_window_from_tray(hwnd, ctx);
+        if is_window_hidden_to_tray() {
+            show_window_from_tray(hwnd, ctx);
+        } else {
+            unsafe {
+                if windows_sys::Win32::UI::WindowsAndMessaging::IsIconic(hwnd) != 0 {
+                    windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(
+                        hwnd,
+                        windows_sys::Win32::UI::WindowsAndMessaging::SW_RESTORE,
+                    );
+                }
+                ensure_window_on_screen(hwnd);
+                force_foreground(hwnd);
+                crate::snapping::bring_fleet_to_top();
+            }
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            ctx.request_repaint();
+        }
+    }
+}
+
+pub fn center_and_open_main_window(ctx: &egui::Context) {
+    let hwnd = get_main_hwnd();
+    if !hwnd.is_null() && unsafe { windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(hwnd) != 0 } {
+        unsafe {
+            use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTOPRIMARY};
+            use windows_sys::Win32::UI::WindowsAndMessaging::{GetCursorPos, IsIconic, SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOSIZE, SW_RESTORE};
+
+            if is_window_hidden_to_tray() {
+                show_window_from_tray(hwnd, ctx);
+            }
+            if IsIconic(hwnd) != 0 {
+                ShowWindow(hwnd, SW_RESTORE);
+            }
+
+            let mut pt = std::mem::zeroed();
+            GetCursorPos(&mut pt);
+            let monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+            let mut mi: MONITORINFO = std::mem::zeroed();
+            mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+            let work = if GetMonitorInfoW(monitor, &mut mi) != 0 {
+                mi.rcWork
+            } else {
+                crate::snapping::get_monitor_work_area(hwnd)
+            };
+
+            let cx = work.left + (work.right - work.left - 460).max(0) / 2;
+            let cy = work.top + (work.bottom - work.top - 680).max(0) / 2;
+            LAST_POS_X.store(cx, Ordering::SeqCst);
+            LAST_POS_Y.store(cy, Ordering::SeqCst);
+
+            SetWindowPos(hwnd, HWND_TOPMOST, cx, cy, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+            ensure_window_on_screen(hwnd);
+            force_foreground(hwnd);
+            crate::snapping::bring_fleet_to_top();
+        }
+        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        ctx.request_repaint();
     }
 }
 
@@ -567,6 +672,7 @@ pub unsafe fn reset_all_windows_to_screen_center() {
 }
 
 pub fn bring_main_to_front() {
+    crate::genie_effect::abort_genie_effect();
     let hwnd = get_main_hwnd();
     if !hwnd.is_null() {
         let vis_hwnd = crate::visualizer::get_visualizer_hwnd();
@@ -591,6 +697,7 @@ pub fn bring_main_to_front() {
                 let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
                 let new_ex = (ex & !(WS_EX_TOOLWINDOW as i32)) | (WS_EX_APPWINDOW as i32);
                 SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
+                crate::snapping::add_taskbar_tab_pub(hwnd);
 
                 let anchor = if !vis_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0 {
                     vis_hwnd
@@ -629,15 +736,16 @@ pub fn bring_main_to_front() {
             }
             ensure_window_on_screen(hwnd);
 
-            // If visualizer is open, demote visualizer to HWND_NOTOPMOST so main window (HWND_TOPMOST)
+            // If visualizer is open, demote visualizer to HWND_NOTOPMOST so main window
             // is guaranteed by Windows DWM to stay above it, even when visualizer has keyboard focus!
             if !vis_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0 {
                 use windows_sys::Win32::UI::WindowsAndMessaging::HWND_NOTOPMOST;
                 SetWindowPos(vis_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
 
-            // Always bring main window topmost above the visualizer window without stealing focus
-            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            let is_top = IS_ALWAYS_ON_TOP.load(Ordering::SeqCst) || crate::visualizer::is_visualizer_fullscreen();
+            let target_tier = if is_top { HWND_TOPMOST } else { windows_sys::Win32::UI::WindowsAndMessaging::HWND_NOTOPMOST };
+            SetWindowPos(hwnd, target_tier, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
             // Elevate all fleet windows (including detached ones) and preserve clustered relations
             crate::snapping::bring_fleet_to_top();
@@ -656,44 +764,17 @@ pub fn bring_main_to_front() {
                 }
             }
 
-            // Keep focus on the visualizer window so keyboard shortcuts remain completely fluent
-            if !vis_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0 {
+            // Keep focus on the visualizer window only in fullscreen mode so keyboard shortcuts remain completely fluent
+            if crate::visualizer::is_visualizer_fullscreen()
+                && !vis_hwnd.is_null()
+                && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0
+            {
                 windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow(vis_hwnd);
             } else {
                 force_foreground(hwnd);
             }
 
-            if crate::snapping::SNAPPING_ENABLED.load(Ordering::Relaxed) {
-                let bond = crate::snapping::get_dock_bond();
-                if bond.is_bonded
-                    && !vis_hwnd.is_null()
-                    && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0
-                    && !crate::visualizer::is_visualizer_fullscreen()
-                {
-                    use windows_sys::Win32::Foundation::RECT;
-                    use windows_sys::Win32::UI::WindowsAndMessaging::{
-                        GetWindowRect, IsIconic, SetWindowPos, ShowWindow, SWP_NOACTIVATE,
-                        SWP_NOSIZE, SW_SHOWNOACTIVATE,
-                    };
-                    let mut main_rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
-                    GetWindowRect(hwnd, &mut main_rect);
-                    let mut vis_rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
-                    GetWindowRect(vis_hwnd, &mut vis_rect);
-                    if IsIconic(vis_hwnd) != 0 {
-                        ShowWindow(vis_hwnd, SW_SHOWNOACTIVATE);
-                    }
-                    let (new_vis_x, new_vis_y) = crate::snapping::calc_bonded_visualizer_pos(&bond, &vis_rect, &main_rect);
-                    SetWindowPos(
-                        vis_hwnd,
-                        hwnd,
-                        new_vis_x,
-                        new_vis_y,
-                        0,
-                        0,
-                        SWP_NOSIZE | SWP_NOACTIVATE,
-                    );
-                }
-            }
+            crate::snapping::sync_cluster_taskbar_ownership();
         }
         if let Some(ctx) = crate::gui::get_egui_ctx() {
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
@@ -707,10 +788,8 @@ pub struct TrayManager {
     pub _menu: Menu,
     pub quit_id: tray_icon::menu::MenuId,
     pub show_id: tray_icon::menu::MenuId,
-    pub reset_id: tray_icon::menu::MenuId,
     pub mute_id: tray_icon::menu::MenuId,
     pub show_item: MenuItem,
-    pub reset_item: MenuItem,
     pub quit_item: MenuItem,
     pub mute_item: CheckMenuItem,
     last_status: Option<DeviceStatus>,
@@ -730,10 +809,6 @@ impl TrayManager {
         let show_item = MenuItem::new(lang.tray_open_panel(), true, None);
         let show_id = show_item.id().clone();
         menu.append(&show_item)?;
-
-        let reset_item = MenuItem::new(lang.tray_reset_windows(), true, None);
-        let reset_id = reset_item.id().clone();
-        menu.append(&reset_item)?;
 
         let mute_item = CheckMenuItem::new(lang.tray_mute(), true, false, None);
         let mute_id = mute_item.id().clone();
@@ -757,6 +832,10 @@ impl TrayManager {
         {
             Ok(t) => {
                 let rect = t.rect();
+                if let Some(r) = rect {
+                    TRAY_ICON_RECT_X.store(r.position.x as i32 + (r.size.width / 2) as i32, Ordering::SeqCst);
+                    TRAY_ICON_RECT_Y.store(r.position.y as i32 + (r.size.height / 2) as i32, Ordering::SeqCst);
+                }
                 tracing::info!("[Tray] TrayIconBuilder::build() returned Ok(tray) - id={:?}, rect={:?}", t.id(), rect);
                 t
             }
@@ -771,10 +850,8 @@ impl TrayManager {
             _menu: menu,
             quit_id,
             show_id,
-            reset_id,
             mute_id,
             show_item,
-            reset_item,
             quit_item,
             mute_item,
             last_status: None,
@@ -844,7 +921,6 @@ impl TrayManager {
         if lang_changed {
             self.last_language = Some(state.language);
             self.show_item.set_text(state.language.tray_open_panel());
-            self.reset_item.set_text(state.language.tray_reset_windows());
             self.quit_item.set_text(state.language.tray_quit());
         }
 
@@ -968,6 +1044,10 @@ impl TrayManager {
                 tracing::warn!("[Tray] set_icon returned error: {e:#}");
             } else {
                 let rect = self.tray.rect();
+                if let Some(r) = rect {
+                    TRAY_ICON_RECT_X.store(r.position.x as i32 + (r.size.width / 2) as i32, Ordering::SeqCst);
+                    TRAY_ICON_RECT_Y.store(r.position.y as i32 + (r.size.height / 2) as i32, Ordering::SeqCst);
+                }
                 tracing::info!("[Tray] set_icon updated successfully (status={:?}, muted={}, rect={:?})", state.status, state.is_muted, rect);
             }
             if let Err(e) = self.tray.set_tooltip(Some(&tooltip)) {
@@ -1073,7 +1153,6 @@ pub fn spawn_tray_thread(
 
             let quit_id = tray_mgr.quit_id.clone();
             let show_id = tray_mgr.show_id.clone();
-            let reset_id = tray_mgr.reset_id.clone();
             let mute_id = tray_mgr.mute_id.clone();
 
             // Direct callback for right-click context menu clicks
@@ -1081,11 +1160,7 @@ pub fn spawn_tray_thread(
                 if event.id == quit_id {
                     trigger_app_quit(&cmd_tx_menu);
                 } else if event.id == show_id {
-                    show_and_focus_main_window(&egui_ctx_menu);
-                } else if event.id == reset_id {
-                    unsafe {
-                        reset_all_windows_to_screen_center();
-                    }
+                    center_and_open_main_window(&egui_ctx_menu);
                 } else if event.id == mute_id {
                     let new_muted = !is_muted_menu.load(Ordering::SeqCst);
                     is_muted_menu.store(new_muted, Ordering::SeqCst);

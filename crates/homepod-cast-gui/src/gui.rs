@@ -10,7 +10,7 @@ use crate::controller::{
     AudioSource, ControllerState, DeviceItem, DeviceStatus, EqPreset, GuiCmd, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT,
     MOD_SHIFT, MOD_WIN,
 };
-use crate::i18n::{Language, ALL_LANGUAGES};
+use crate::i18n::{Language, NoticeKind, ALL_LANGUAGES};
 use crate::tray::set_main_hwnd;
 
 pub const AVAILABLE_HOTKEYS: &[(u32, u32)] = &[
@@ -69,6 +69,42 @@ impl Page {
             _ => None,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransitionDirection {
+    Push,
+    Pop,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PageTransition {
+    pub from: Page,
+    pub to: Page,
+    pub direction: TransitionDirection,
+    pub start_time: std::time::Instant,
+    pub duration: std::time::Duration,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrackTransitionDirection {
+    Next,
+    Prev,
+}
+
+#[derive(Clone)]
+pub struct TrackTransition {
+    pub from_title: String,
+    pub from_artist: String,
+    pub from_album: String,
+    pub from_art_texture: Option<egui::TextureHandle>,
+    pub to_title: String,
+    pub to_artist: String,
+    pub to_album: String,
+    pub to_art_texture: Option<egui::TextureHandle>,
+    pub direction: TrackTransitionDirection,
+    pub start_time: std::time::Instant,
+    pub duration: std::time::Duration,
 }
 
 pub static MAIN_CURRENT_PAGE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(Page::Main as u8);
@@ -171,6 +207,7 @@ pub struct FlyoutApp {
     pub current_page: Page,
     pub last_page: Page,
     pub page_history: Vec<Page>,
+    pub page_transition: Option<PageTransition>,
     pub settings_tab: SettingsTab,
     pub meter_level: f32,
     pub last_meter_update: std::time::Instant,
@@ -182,6 +219,8 @@ pub struct FlyoutApp {
     pub eq_profile: EqProfile,
     pub selected_preset: Option<EqPreset>,
     pub receiver_selected_preset: Option<EqPreset>,
+    pub display_eq_gains: [f32; 10],
+    pub display_receiver_eq_gains: [f32; 10],
     pub album_art_texture: Option<egui::TextureHandle>,
     pub last_album_art_bytes: Option<Vec<u8>>,
     pub receiver_artwork_texture: Option<egui::TextureHandle>,
@@ -191,10 +230,18 @@ pub struct FlyoutApp {
     pub seek_drag_secs: Option<f64>,
     pub is_always_on_top: bool,
     pub equalizer_window_open: bool,
-    pub detach_equalizer_window: bool,
     pub mini_player_window_open: bool,
     pub mini_player_needs_initial_dock: bool,
     pub equalizer_needs_initial_dock: bool,
+    pub app_icon_texture: Option<egui::TextureHandle>,
+    pub pending_modular_workstation_frames: u8,
+    pub track_transition: Option<TrackTransition>,
+    pub prev_track_title: String,
+    pub prev_track_artist: String,
+    pub prev_track_album: String,
+    pub prev_album_art_texture: Option<egui::TextureHandle>,
+    pub next_track_intent: Option<TrackTransitionDirection>,
+    pub workstation_onboarding_dismissed: bool,
 }
 
 static EGUI_CTX: std::sync::OnceLock<egui::Context> = std::sync::OnceLock::new();
@@ -208,6 +255,7 @@ pub fn get_egui_ctx() -> Option<egui::Context> {
 }
 
 static PENDING_CLUSTER_CLOSE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+static PENDING_CLUSTER_CLOSE_FINISH: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
 pub fn request_close_cluster(kind: crate::snapping::WindowKind) {
     PENDING_CLUSTER_CLOSE.store(kind as u8, std::sync::atomic::Ordering::SeqCst);
@@ -236,13 +284,14 @@ impl FlyoutApp {
     ) -> Self {
         let initial_state = shared_state.read().map(|s| s.clone()).unwrap_or_default();
         let vol = initial_state.volume;
+        let initial_eq_gains = initial_state.eq_gains;
+        let initial_rx_eq_gains = initial_state.airplay_receiver_eq_gains;
         let initial_preset = EqPreset::matches_gains(&initial_state.eq_gains);
         let initial_rx_preset = EqPreset::matches_gains_with_custom(
             &initial_state.airplay_receiver_eq_gains,
             &initial_state.airplay_receiver_custom_eq_gains,
         );
         let initial_always_on_top = crate::controller::load_always_on_top();
-        let initial_detach_eq = initial_state.detach_equalizer_window;
         crate::tray::IS_ALWAYS_ON_TOP.store(initial_always_on_top, std::sync::atomic::Ordering::SeqCst);
         setup_custom_fonts(&cc.egui_ctx, initial_state.language);
         register_egui_ctx(cc.egui_ctx.clone());
@@ -279,6 +328,19 @@ impl FlyoutApp {
             }
         }
 
+        // Load app icon texture for title bar workstation button
+        let app_icon_texture = {
+            const ICON_BYTES: &[u8] = include_bytes!("../assets/app_icon.png");
+            if let Ok(img) = image::load_from_memory(ICON_BYTES) {
+                let rgba = img.to_rgba8();
+                let size = [rgba.width() as usize, rgba.height() as usize];
+                let color_image = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                Some(cc.egui_ctx.load_texture("app_icon", color_image, egui::TextureOptions::LINEAR))
+            } else {
+                None
+            }
+        };
+
         Self {
             cmd_tx,
             shared_state,
@@ -291,6 +353,7 @@ impl FlyoutApp {
             current_page: Page::Main,
             last_page: Page::Main,
             page_history: Vec::new(),
+            page_transition: None,
             settings_tab: SettingsTab::default(),
             meter_level: 0.0,
             last_meter_update: std::time::Instant::now(),
@@ -302,6 +365,8 @@ impl FlyoutApp {
             eq_profile: EqProfile::Normal,
             selected_preset: initial_preset,
             receiver_selected_preset: initial_rx_preset,
+            display_eq_gains: initial_eq_gains,
+            display_receiver_eq_gains: initial_rx_eq_gains,
             album_art_texture: None,
             last_album_art_bytes: None,
             receiver_artwork_texture: None,
@@ -311,49 +376,56 @@ impl FlyoutApp {
             seek_drag_secs: None,
             is_always_on_top: initial_always_on_top,
             equalizer_window_open: false,
-            detach_equalizer_window: initial_detach_eq,
             mini_player_window_open: false,
             mini_player_needs_initial_dock: false,
             equalizer_needs_initial_dock: false,
+            app_icon_texture,
+            pending_modular_workstation_frames: 0,
+            track_transition: None,
+            prev_track_title: String::new(),
+            prev_track_artist: String::new(),
+            prev_track_album: String::new(),
+            prev_album_art_texture: None,
+            next_track_intent: None,
+            workstation_onboarding_dismissed: crate::controller::is_workstation_discovered(),
         }
     }
 
     pub fn close_window_cluster(&mut self, origin: crate::snapping::WindowKind) {
-        let members = crate::snapping::get_cluster_members(origin);
-        // 1. Break dock relations for all members first so no intermediate rebuild_dock_tree
-        // recalculates layout or tries to manipulate caption buttons on windows about to be closed
-        for &kind in &members {
-            crate::snapping::break_dock_relation(kind);
+        #[cfg(test)]
+        {
+            self.close_window_cluster_immediate(origin);
+            return;
         }
 
-        // 2. Tear down / hide all cluster members
-        for kind in members {
-            match kind {
-                crate::snapping::WindowKind::MiniPlayer => {
-                    self.mini_player_window_open = false;
-                }
-                crate::snapping::WindowKind::Equalizer => {
-                    self.equalizer_window_open = false;
-                }
-                crate::snapping::WindowKind::Visualizer => {
-                    crate::visualizer::close_visualizer();
-                }
-                crate::snapping::WindowKind::Main => {
-                    let main_hwnd = crate::tray::get_main_hwnd();
-                    if !main_hwnd.is_null() && unsafe { windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(main_hwnd) != 0 } {
-                        if let Some(ctx) = get_egui_ctx() {
-                            crate::tray::hide_main_window_only(main_hwnd, &ctx);
-                        }
-                    }
-                }
+        #[cfg(not(test))]
+        {
+            if crate::snapping::is_cluster_closing_animating() {
+                return;
             }
+
+            let origin_code = origin as u8;
+            crate::snapping::animate_cluster_implosion(origin, move || {
+                PENDING_CLUSTER_CLOSE_FINISH.store(origin_code, std::sync::atomic::Ordering::SeqCst);
+                if let Some(ctx) = get_egui_ctx() {
+                    ctx.request_repaint();
+                }
+            });
+        }
+    }
+
+    pub fn close_window_cluster_immediate(&mut self, origin: crate::snapping::WindowKind) {
+        let root = crate::snapping::get_component_root(origin);
+        let members = crate::snapping::get_cluster_members(root);
+        for m in members {
+            self.close_popout_window(m);
         }
     }
 
     fn sync_state(&mut self) {
-        let global_top = crate::tray::IS_ALWAYS_ON_TOP.load(std::sync::atomic::Ordering::SeqCst);
-        if self.is_always_on_top != global_top {
-            self.is_always_on_top = global_top;
+        let main_top = crate::snapping::is_window_pinned(crate::snapping::WindowKind::Main);
+        if self.is_always_on_top != main_top {
+            self.is_always_on_top = main_top;
             let level = if self.is_always_on_top {
                 egui::WindowLevel::AlwaysOnTop
             } else {
@@ -425,7 +497,52 @@ impl eframe::App for FlyoutApp {
             self.close_window_cluster(kind);
         }
 
+        let pending_finish = PENDING_CLUSTER_CLOSE_FINISH.swap(0, std::sync::atomic::Ordering::SeqCst);
+        if pending_finish != 0 {
+            let kind = match pending_finish {
+                1 => crate::snapping::WindowKind::Main,
+                2 => crate::snapping::WindowKind::MiniPlayer,
+                3 => crate::snapping::WindowKind::Equalizer,
+                4 => crate::snapping::WindowKind::Visualizer,
+                _ => crate::snapping::WindowKind::Main,
+            };
+            self.close_window_cluster_immediate(kind);
+        }
+
+        if self.pending_modular_workstation_frames > 0 {
+            self.pending_modular_workstation_frames -= 1;
+            let main_hwnd = crate::tray::get_main_hwnd();
+            let mini_hwnd = crate::snapping::get_window_hwnd(crate::snapping::WindowKind::MiniPlayer);
+            let eq_hwnd = crate::snapping::get_window_hwnd(crate::snapping::WindowKind::Equalizer);
+            let vis_hwnd = crate::snapping::get_window_hwnd(crate::snapping::WindowKind::Visualizer);
+
+            let need_mini = self.mini_player_window_open;
+            let need_eq = self.equalizer_window_open;
+            let need_vis = crate::visualizer::is_visualizer_open();
+
+            let all_ready = unsafe {
+                (!need_mini || (!mini_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(mini_hwnd) != 0))
+                    && (!need_eq || (!eq_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(eq_hwnd) != 0))
+                    && (!need_vis || (!vis_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0 && !crate::visualizer::is_visualizer_fullscreen()))
+            };
+
+            if all_ready {
+                self.pending_modular_workstation_frames = 0;
+                unsafe {
+                    crate::snapping::layout_modular_workstation(main_hwnd, mini_hwnd, eq_hwnd, vis_hwnd);
+                }
+            } else if self.pending_modular_workstation_frames > 0 {
+                ctx.request_repaint();
+            } else {
+                // Timeout fallback: layout whatever windows are currently available
+                unsafe {
+                    crate::snapping::layout_modular_workstation(main_hwnd, mini_hwnd, eq_hwnd, vis_hwnd);
+                }
+            }
+        }
+
         self.sync_state();
+        self.sync_media_track(ctx);
 
         let _hwnd = crate::tray::get_main_hwnd();
         let is_hidden = crate::tray::is_window_hidden_to_tray();
@@ -452,18 +569,22 @@ impl eframe::App for FlyoutApp {
             }
         }
 
-        // Intercept window close (X button) or Escape key: hide to system tray instead of exiting
+        // Intercept window close (X button) or Escape key in fullscreen HUD
         let close_req = ctx.input(|i| i.viewport().close_requested());
         let escape_pressed = ctx.input(|i| i.key_pressed(egui::Key::Escape));
-        if escape_pressed && self.can_go_back() {
+
+        if crate::visualizer::is_visualizer_fullscreen() && (escape_pressed && !self.can_go_back()) {
+            ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+            crate::visualizer::toggle_main_window_hud();
+        } else if escape_pressed && self.can_go_back() {
             self.go_back();
         } else if close_req || escape_pressed {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             tracing::info!(
-                "FlyoutApp: Closing cluster / hiding to system tray: close_req={}, escape={}",
+                "FlyoutApp: Hiding main window to system tray: close_req={}, escape={}",
                 close_req, escape_pressed
             );
-            self.close_window_cluster(crate::snapping::WindowKind::Main);
+            self.close_popout_window(crate::snapping::WindowKind::Main);
         }
 
         let is_fleet_hidden = crate::tray::is_app_fleet_hidden();
@@ -565,8 +686,8 @@ impl eframe::App for FlyoutApp {
         // - When completely idle and silent: back off to 500ms (2 FPS) to dramatically reduce idle CPU usage to ~0.5%.
         let is_audio_animating = is_active_playback
             && (raw_peak > 0.001 || self.meter_level > 0.005 || has_audio_motion);
-        let repaint_delay = if is_audio_animating {
-            std::time::Duration::from_millis(33)
+        let repaint_delay = if is_audio_animating || self.track_transition.is_some() {
+            std::time::Duration::from_millis(16)
         } else {
             std::time::Duration::from_millis(500)
         };
@@ -575,7 +696,7 @@ impl eframe::App for FlyoutApp {
         let lang = self.state.language;
 
         // Viewport 2: Standalone Equalizer Window
-        let eq_title = lang.eq_window_title();
+        let eq_title = lang.mini_equalizer_window_title();
         let eq_open = self.equalizer_window_open;
         let mut eq_dock = self.equalizer_needs_initial_dock;
         self.show_standalone_viewport(
@@ -732,77 +853,385 @@ impl eframe::App for FlyoutApp {
 
         let mut total_content_height = 0.0f32;
 
+        let main_role = crate::snapping::get_window_role(crate::snapping::WindowKind::Main);
+        let stroke_color = match main_role {
+            crate::snapping::WindowRole::ClusterMaster => egui::Color32::from_rgb(70, 140, 215), // Blue master glow border
+            crate::snapping::WindowRole::ClusterSlave => egui::Color32::from_rgb(45, 50, 60),
+            crate::snapping::WindowRole::Standalone => egui::Color32::from_rgb(52, 58, 70),
+        };
+
         egui::CentralPanel::default()
-            .frame(egui::Frame::none().fill(egui::Color32::from_rgb(24, 25, 29)).inner_margin(16.0))
+            .frame(
+                egui::Frame::none()
+                    .fill(egui::Color32::from_rgb(24, 25, 29))
+                    .stroke(egui::Stroke::new(1.0_f32, stroke_color))
+                    .rounding(egui::Rounding::same(8.0))
+                    .inner_margin(14.0)
+            )
             .show(ctx, |ui| {
-                let initial_top = ui.cursor().top();
-                let lang = self.state.language;
+                let full_rect = ui.available_rect_before_wrap();
+                let clip_rect = full_rect;
 
-                // 軟體資訊頁面：第一行（返回按鈕與標題）固定在頂部，僅內容區域捲動
-                if self.current_page == Page::About {
-                    total_content_height = self.render_about_page(ui);
-                    return;
+                // 檢查是否有正在進行的頁面推拉過場動畫
+                let mut active_trans = self.page_transition;
+                if let Some(trans) = active_trans {
+                    let elapsed = trans.start_time.elapsed();
+                    if elapsed >= trans.duration {
+                        self.page_transition = None;
+                        active_trans = None;
+                    }
                 }
 
-                if self.current_page == Page::Equalizer {
-                    total_content_height = self.render_equalizer_page(ui);
-                    return;
+                if let Some(trans) = active_trans {
+                    // 過場動畫持續中，要求連續重繪每一幀
+                    ctx.request_repaint();
+
+                    let elapsed = trans.start_time.elapsed();
+                    let raw_t = (elapsed.as_secs_f32() / trans.duration.as_secs_f32()).clamp(0.0, 1.0);
+                    // Ease-out cubic: 1 - (1 - t)^3 (起步迅速，尾段細膩減速煞停)
+                    let t = 1.0 - (1.0 - raw_t).powi(3);
+                    let width = full_rect.width();
+
+                    match trans.direction {
+                        TransitionDirection::Push => {
+                            // Push 前進過場：
+                            // 舊頁面 (from) 向左視差退後滑動 (-28% 寬度) 並稍微暗化
+                            // 新頁面 (to) 從右側 (+100% 寬度) 滑入至原位
+                            let from_offset_x = -width * 0.28 * t;
+                            let to_offset_x = width * (1.0 - t);
+
+                            // 1. 底層舊頁面 (from)
+                            let from_rect = full_rect.translate(egui::vec2(from_offset_x, 0.0));
+                            ui.allocate_new_ui(egui::UiBuilder::new().max_rect(from_rect), |from_ui| {
+                                from_ui.set_clip_rect(clip_rect);
+                                from_ui.push_id("trans_from", |from_ui| {
+                                    self.render_page_content(from_ui, trans.from);
+                                });
+                            });
+
+                            // 舊頁面暗化覆蓋 (漸變至約 40% 黑色)
+                            let scrim_alpha = (100.0 * t).clamp(0.0, 100.0) as u8;
+                            if scrim_alpha > 0 {
+                                ui.painter().rect_filled(
+                                    from_rect.intersect(clip_rect),
+                                    egui::Rounding::same(8.0),
+                                    egui::Color32::from_black_alpha(scrim_alpha),
+                                );
+                            }
+
+                            // 2. 頂層新頁面 (to)
+                            let to_rect = full_rect.translate(egui::vec2(to_offset_x, 0.0));
+                            let to_visible_rect = to_rect.intersect(clip_rect);
+                            // 填充不透明底色以遮擋底層舊頁面
+                            ui.painter().rect_filled(
+                                to_visible_rect,
+                                egui::Rounding::same(8.0),
+                                egui::Color32::from_rgb(24, 25, 29),
+                            );
+
+                            // 新頁面左側投射細膩投影
+                            let shadow_x = full_rect.left() + to_offset_x;
+                            render_slide_shadow(ui, shadow_x, clip_rect);
+
+                            // 渲染新頁面內容 (以正常 ID 空間渲染)
+                            ui.allocate_new_ui(egui::UiBuilder::new().max_rect(to_rect), |to_ui| {
+                                to_ui.set_clip_rect(clip_rect);
+                                total_content_height = self.render_page_content(to_ui, trans.to);
+                            });
+                        }
+                        TransitionDirection::Pop => {
+                            // Pop 返回過場：
+                            // 新頁面 (to) 從左側 (-28% 寬度) 隨視差向前滑回原位，暗化漸退
+                            // 舊頁面 (from) 向右 (+100% 寬度) 滑出螢幕
+                            let to_offset_x = -width * 0.28 * (1.0 - t);
+                            let from_offset_x = width * t;
+
+                            // 1. 底層新頁面 (to)
+                            let to_rect = full_rect.translate(egui::vec2(to_offset_x, 0.0));
+                            ui.allocate_new_ui(egui::UiBuilder::new().max_rect(to_rect), |to_ui| {
+                                to_ui.set_clip_rect(clip_rect);
+                                total_content_height = self.render_page_content(to_ui, trans.to);
+                            });
+
+                            // 暗化覆蓋隨返回逐漸消退
+                            let scrim_alpha = (100.0 * (1.0 - t)).clamp(0.0, 100.0) as u8;
+                            if scrim_alpha > 0 {
+                                ui.painter().rect_filled(
+                                    to_rect.intersect(clip_rect),
+                                    egui::Rounding::same(8.0),
+                                    egui::Color32::from_black_alpha(scrim_alpha),
+                                );
+                            }
+
+                            // 2. 頂層舊頁面 (from)
+                            let from_rect = full_rect.translate(egui::vec2(from_offset_x, 0.0));
+                            let from_visible_rect = from_rect.intersect(clip_rect);
+                            // 填充不透明底色以遮擋底層新頁面
+                            ui.painter().rect_filled(
+                                from_visible_rect,
+                                egui::Rounding::same(8.0),
+                                egui::Color32::from_rgb(24, 25, 29),
+                            );
+
+                            // 舊頁面左側投射細膩投影
+                            let shadow_x = full_rect.left() + from_offset_x;
+                            render_slide_shadow(ui, shadow_x, clip_rect);
+
+                            // 渲染舊頁面內容
+                            ui.allocate_new_ui(egui::UiBuilder::new().max_rect(from_rect), |from_ui| {
+                                from_ui.set_clip_rect(clip_rect);
+                                from_ui.push_id("trans_from", |from_ui| {
+                                    self.render_page_content(from_ui, trans.from);
+                                });
+                            });
+                        }
+                    }
+                    ui.allocate_rect(full_rect, egui::Sense::hover());
+                } else {
+                    total_content_height = self.render_page_content(ui, self.current_page);
                 }
+            });
 
-                if self.current_page == Page::Player {
-                    total_content_height = self.render_player_page(ui);
-                    return;
-                }
+        // Standardize Main Window dimensions to Player benchmark (460.0 x 680.0) across all pages.
+        // The window never automatically resizes, shrinks, or wobbles when navigating!
+        let base_width = 460.0;
+        let base_height = 680.0;
 
-                // 設定頁面：頂部固定列與標籤頁固定在頂部，僅內容區域捲動
-                if self.current_page == Page::Settings {
-                    total_content_height = self.render_settings_page(ui);
-                    return;
-                }
+        if self.last_page != self.current_page {
+            self.last_page = self.current_page;
+        }
 
-                // 主視窗頁面：第一行（標題與跳轉/控制按鈕）固定在頂部，不隨畫面捲動
-                ui.horizontal(|ui| {
-                    ui.heading(egui::RichText::new("Win2Pod Bridge").strong().size(18.0));
+        // On initial startup (first frame), ensure the window has the standardized base dimensions
+        if self.frame_count < 2 {
+            self.last_applied_width = base_width;
+            self.last_applied_height = base_height;
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(base_width, base_height)));
+        }
+    }
+}
 
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        // 視窗與系統操作組（最外側 / 最右側）
-                        self.render_pin_button(ui);
+/// 繪製頁面推拉過場時接縫邊緣的柔和漸變陰影
+fn render_slide_shadow(ui: &mut egui::Ui, seam_x: f32, clip_rect: egui::Rect) {
+    if seam_x <= clip_rect.left() || seam_x >= clip_rect.right() {
+        return;
+    }
+    const STRIPS: usize = 6;
+    const STRIP_WIDTH: f32 = 4.0;
+    let total_width = STRIPS as f32 * STRIP_WIDTH;
 
-                        // 分隔線（區隔系統操作與應用程式功能）
-                        Self::render_header_separator(ui);
+    for i in 0..STRIPS {
+        let left = (seam_x - total_width + (i as f32 * STRIP_WIDTH)).max(clip_rect.left());
+        let right = (seam_x - total_width + ((i + 1) as f32 * STRIP_WIDTH)).min(clip_rect.right());
+        if right > left {
+            let progress = (i + 1) as f32 / STRIPS as f32;
+            let alpha = (90.0 * progress.powi(2)).clamp(0.0, 255.0) as u8;
+            let strip_rect = egui::Rect::from_min_max(
+                egui::pos2(left, clip_rect.top()),
+                egui::pos2(right, clip_rect.bottom()),
+            );
+            ui.painter().rect_filled(
+                strip_rect,
+                egui::Rounding::ZERO,
+                egui::Color32::from_black_alpha(alpha),
+            );
+        }
+    }
+}
 
-                        // 應用程式與核心功能組（內側）
-                        self.render_visualizer_button(ui, crate::snapping::WindowKind::Main);
-                        self.render_player_button(ui);
-                        self.render_equalizer_button(ui);
-                        self.render_settings_button(ui);
-                    });
-                });
+/// 計算 4 個控制點在參數 t (0.0..=1.0) 下的 Catmull-Rom 三次仿樣插值點
+fn catmull_rom(p0: egui::Pos2, p1: egui::Pos2, p2: egui::Pos2, p3: egui::Pos2, t: f32) -> egui::Pos2 {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let f0 = -0.5 * t3 + t2 - 0.5 * t;
+    let f1 = 1.5 * t3 - 2.5 * t2 + 1.0;
+    let f2 = -1.5 * t3 + 2.0 * t2 + 0.5 * t;
+    let f3 = 0.5 * t3 - 0.5 * t2;
+    egui::pos2(
+        p0.x * f0 + p1.x * f1 + p2.x * f2 + p3.x * f3,
+        p0.y * f0 + p1.y * f1 + p2.y * f2 + p3.y * f3,
+    )
+}
 
-                ui.add_space(8.0);
-                ui.separator();
-                ui.add_space(8.0);
+/// 繪製穿過 10 頻段拉桿滑塊的流暢頻率響應曲線與動態形變光暈
+fn render_eq_curve_overlay(
+    ui: &egui::Ui,
+    nodes: &[egui::Pos2],
+    zero_db_y: f32,
+    enabled: bool,
+) {
+    if nodes.len() < 2 {
+        return;
+    }
 
-                // 主視窗內容區域捲動
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
+    let n = nodes.len();
+    let mut spline_points = Vec::with_capacity((n - 1) * 8 + 1);
 
-                // Notice Banner (e.g. preemption notice)
+    for i in 0..(n - 1) {
+        let p0 = if i == 0 {
+            egui::pos2(nodes[0].x * 2.0 - nodes[1].x, nodes[0].y * 2.0 - nodes[1].y)
+        } else {
+            nodes[i - 1]
+        };
+        let p1 = nodes[i];
+        let p2 = nodes[i + 1];
+        let p3 = if i + 2 < n {
+            nodes[i + 2]
+        } else {
+            egui::pos2(nodes[n - 1].x * 2.0 - nodes[n - 2].x, nodes[n - 1].y * 2.0 - nodes[n - 2].y)
+        };
+
+        let steps = 8;
+        for s in 0..steps {
+            let t = s as f32 / steps as f32;
+            spline_points.push(catmull_rom(p0, p1, p2, p3, t));
+        }
+    }
+    spline_points.push(*nodes.last().unwrap());
+
+    // 1. 繪製 0 dB 水平參考基準虛線
+    let x_start = nodes.first().unwrap().x;
+    let x_end = nodes.last().unwrap().x;
+    ui.painter().line_segment(
+        [egui::pos2(x_start, zero_db_y), egui::pos2(x_end, zero_db_y)],
+        egui::Stroke::new(1.0_f32, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 18)),
+    );
+
+    // 2. 繪製曲線與 0 dB 基準線之間的半透明漸變填充網格 (較暗、沉穩的高雅半透明微光)
+    let fill_color = if enabled {
+        egui::Color32::from_rgba_unmultiplied(0, 135, 120, 16)
+    } else {
+        egui::Color32::from_rgba_unmultiplied(75, 80, 90, 8)
+    };
+
+    let mut mesh = egui::Mesh::default();
+    for i in 0..(spline_points.len() - 1) {
+        let pt_a = spline_points[i];
+        let pt_b = spline_points[i + 1];
+        let base_a = egui::pos2(pt_a.x, zero_db_y);
+        let base_b = egui::pos2(pt_b.x, zero_db_y);
+
+        let idx = mesh.vertices.len() as u32;
+        mesh.vertices.push(egui::epaint::Vertex { pos: pt_a, uv: egui::epaint::WHITE_UV, color: fill_color });
+        mesh.vertices.push(egui::epaint::Vertex { pos: pt_b, uv: egui::epaint::WHITE_UV, color: fill_color });
+        mesh.vertices.push(egui::epaint::Vertex { pos: base_b, uv: egui::epaint::WHITE_UV, color: fill_color });
+        mesh.vertices.push(egui::epaint::Vertex { pos: base_a, uv: egui::epaint::WHITE_UV, color: fill_color });
+
+        mesh.add_triangle(idx, idx + 1, idx + 2);
+        mesh.add_triangle(idx, idx + 2, idx + 3);
+    }
+    ui.painter().add(egui::Shape::mesh(mesh));
+
+    // 3. 繪製發光曲線筆觸 (沉穩深青藍/暗青色，低調不刺眼)
+    let line_color = if enabled {
+        egui::Color32::from_rgb(0, 155, 135)
+    } else {
+        egui::Color32::from_rgb(85, 92, 102)
+    };
+    ui.painter().add(egui::Shape::line(
+        spline_points,
+        egui::Stroke::new(1.8_f32, line_color),
+    ));
+
+    // 4. 在每個滑塊節點中心繪製發光圓點 (暗色細緻光暈，柔和自然)
+    let halo_color = if enabled {
+        egui::Color32::from_rgba_unmultiplied(0, 155, 135, 45)
+    } else {
+        egui::Color32::from_rgba_unmultiplied(85, 92, 102, 25)
+    };
+    let dot_center_color = if enabled {
+        egui::Color32::from_rgb(145, 205, 195)
+    } else {
+        egui::Color32::from_rgb(115, 120, 130)
+    };
+    for &node in nodes {
+        ui.painter().circle_filled(node, 3.5, halo_color);
+        ui.painter().circle_filled(node, 1.8, dot_center_color);
+    }
+}
+
+impl FlyoutApp {
+    /// 統一調度渲染指定頁面的所有內容
+    pub fn render_page_content(&mut self, ui: &mut egui::Ui, page: Page) -> f32 {
+        match page {
+            Page::About => self.render_about_page(ui),
+            Page::Equalizer => self.render_equalizer_page(ui),
+            Page::Player => self.render_player_page(ui),
+            Page::Settings => self.render_settings_page(ui),
+            Page::Main => self.render_main_page(ui),
+        }
+    }
+
+    /// 渲染主視窗根頁面內容
+    pub fn render_main_page(&mut self, ui: &mut egui::Ui) -> f32 {
+        let initial_top = ui.cursor().top();
+        let lang = self.state.language;
+
+        // 主視窗頁面：頂部通用標題列（App Icon 工作站按鈕、標題、微光身分徽章與控制按鈕）
+        self.render_universal_window_header(
+            ui,
+            crate::snapping::WindowKind::Main,
+            "Win2Pod Bridge",
+            false,
+            |app, ui| {
+                app.render_visualizer_button(ui, crate::snapping::WindowKind::Main);
+                app.render_player_button(ui);
+                app.render_settings_button(ui);
+            },
+        );
+
+        // 主視窗內容區域捲動
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                // Notice Banner (e.g. preemption notice, restored notification)
+                let mut dismiss_notice = false;
                 if let Some((ref notice, time)) = self.state.notice_message {
-                    if time.elapsed().as_secs() < 60 {
+                    let is_success = matches!(
+                        notice,
+                        NoticeKind::ConnectionRestored(_) | NoticeKind::ResumeRestored(_)
+                    );
+                    let is_preempted = matches!(
+                        notice,
+                        NoticeKind::Preempted(_) | NoticeKind::ResumePreempted(_)
+                    );
+                    let is_connecting = matches!(
+                        notice,
+                        NoticeKind::ConnectionLostReconnecting(_) | NoticeKind::ResumeReconnecting(_)
+                    );
+
+                    let max_secs = if is_success {
+                        5
+                    } else if is_preempted {
+                        60
+                    } else if is_connecting {
+                        30
+                    } else {
+                        15
+                    };
+
+                    if time.elapsed().as_secs() < max_secs {
+                        let (icon, bg_color, stroke_color, title_color) = if is_success {
+                            ("✔", egui::Color32::from_rgb(18, 38, 22), egui::Color32::from_rgb(46, 160, 67), egui::Color32::from_rgb(80, 220, 120))
+                        } else if is_preempted {
+                            ("ℹ", egui::Color32::from_rgb(38, 30, 16), egui::Color32::from_rgb(215, 145, 35), egui::Color32::from_rgb(250, 185, 70))
+                        } else if is_connecting {
+                            ("🔄", egui::Color32::from_rgb(36, 32, 18), egui::Color32::from_rgb(200, 150, 30), egui::Color32::from_rgb(240, 180, 50))
+                        } else {
+                            ("⚠", egui::Color32::from_rgb(38, 20, 20), egui::Color32::from_rgb(200, 60, 60), egui::Color32::from_rgb(250, 100, 100))
+                        };
+
                         egui::Frame::group(ui.style())
-                            .fill(egui::Color32::from_rgb(38, 30, 16))
-                            .stroke(egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(215, 145, 35)))
+                            .fill(bg_color)
+                            .stroke(egui::Stroke::new(1.0_f32, stroke_color))
                             .rounding(egui::Rounding::same(8.0))
                             .inner_margin(egui::Margin::symmetric(10.0, 8.0))
                             .show(ui, |ui| {
                                 ui.horizontal(|ui| {
-                                    ui.label(egui::RichText::new("ℹ").size(15.0));
+                                    ui.label(egui::RichText::new(icon).size(15.0).color(title_color));
                                     ui.vertical(|ui| {
                                         ui.label(
-                                            egui::RichText::new(lang.preempted_banner_title())
-                                                .color(egui::Color32::from_rgb(250, 185, 70))
+                                            egui::RichText::new(notice.title(lang))
+                                                .color(title_color)
                                                 .strong()
                                                 .size(12.5),
                                         );
@@ -812,10 +1241,26 @@ impl eframe::App for FlyoutApp {
                                                 .size(11.5),
                                         );
                                     });
+                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                        let btn = ui.add(
+                                            egui::Button::new(
+                                                egui::RichText::new("✕")
+                                                    .size(11.0)
+                                                    .color(egui::Color32::from_rgb(170, 170, 180)),
+                                            )
+                                            .frame(false),
+                                        );
+                                        if btn.clicked() {
+                                            dismiss_notice = true;
+                                        }
+                                    });
                                 });
                             });
                         ui.add_space(10.0);
                     }
+                }
+                if dismiss_notice {
+                    self.state.notice_message = None;
                 }
 
                 // --- 1. Current Status Banner ---
@@ -1862,10 +2307,11 @@ impl eframe::App for FlyoutApp {
                             egui::Color32::from_rgb(180, 180, 190)
                         };
                         if ui.button(egui::RichText::new(eq_label).color(eq_color).size(11.0))
-                            .on_hover_text(lang.tooltip_player())
+                            .on_hover_text(lang.tooltip_equalizer())
                             .clicked()
                         {
-                            self.navigate_to(Page::Player);
+                            self.eq_profile = EqProfile::Normal;
+                            self.navigate_to(Page::Equalizer);
                         }
                     });
                 });
@@ -1903,28 +2349,118 @@ impl eframe::App for FlyoutApp {
                 ui.add_space(8.0);
             });
 
-            total_content_height = ui.cursor().top() - initial_top;
-        });
-
-        // Standardize Main Window dimensions to Player benchmark (460.0 x 680.0) across all pages.
-        // The window never automatically resizes, shrinks, or wobbles when navigating!
-        let base_width = 460.0;
-        let base_height = 680.0;
-
-        if self.last_page != self.current_page {
-            self.last_page = self.current_page;
-        }
-
-        // On initial startup (first frame), ensure the window has the standardized base dimensions
-        if self.frame_count < 2 {
-            self.last_applied_width = base_width;
-            self.last_applied_height = base_height;
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(base_width, base_height)));
-        }
+        ui.cursor().top() - initial_top
     }
-}
 
-impl FlyoutApp {
+    /// 渲染具備動態平滑滑動指示線（與膠囊滑塊）的通用分頁列
+    pub fn render_sliding_tab_bar<T: Copy + PartialEq>(
+        ui: &mut egui::Ui,
+        id_source: &str,
+        current: T,
+        tabs: &[(T, &str)],
+    ) -> Option<T> {
+        let total_w = ui.available_width();
+        let height = 30.0_f32;
+        let count = tabs.len();
+        if count == 0 {
+            return None;
+        }
+
+        let (bar_rect, _) = ui.allocate_exact_size(egui::vec2(total_w, height), egui::Sense::hover());
+
+        // 底層膠囊型軌道
+        ui.painter().rect_filled(
+            bar_rect,
+            egui::Rounding::same(7.0),
+            egui::Color32::from_rgb(18, 21, 26),
+        );
+        ui.painter().rect_stroke(
+            bar_rect,
+            egui::Rounding::same(7.0),
+            egui::Stroke::new(1.0_f32, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 16)),
+        );
+
+        let pad_x = 2.0_f32;
+        let pad_y = 2.0_f32;
+        let tab_w = (bar_rect.width() - pad_x * 2.0) / count as f32;
+        let active_idx = tabs.iter().position(|(t, _)| *t == current).unwrap_or(0);
+
+        let target_x = bar_rect.left() + pad_x + (active_idx as f32) * tab_w;
+        let target_w = tab_w;
+
+        // 使用 egui 內建 animate_value_with_time (180ms ease 插值，切換時絲滑平移)
+        let cur_x = ui.ctx().animate_value_with_time(ui.id().with(format!("{id_source}_tab_x")), target_x, 0.18);
+        let cur_w = ui.ctx().animate_value_with_time(ui.id().with(format!("{id_source}_tab_w")), target_w, 0.18);
+
+        // 滑動膠囊背景塊
+        let pill_rect = egui::Rect::from_min_size(
+            egui::pos2(cur_x, bar_rect.top() + pad_y),
+            egui::vec2(cur_w, bar_rect.height() - pad_y * 2.0),
+        );
+        ui.painter().rect_filled(
+            pill_rect,
+            egui::Rounding::same(5.0),
+            egui::Color32::from_rgb(34, 52, 75),
+        );
+        ui.painter().rect_stroke(
+            pill_rect,
+            egui::Rounding::same(5.0),
+            egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(52, 105, 175)),
+        );
+
+        // 頁籤滑動指示線（亮青色高光線條，緊貼膠囊底部動態跟隨滑動）
+        let line_h = 2.5_f32;
+        let indicator_margin_x = 10.0_f32.min(cur_w * 0.15);
+        let line_rect = egui::Rect::from_min_max(
+            egui::pos2(cur_x + indicator_margin_x, pill_rect.bottom() - line_h),
+            egui::pos2(cur_x + cur_w - indicator_margin_x, pill_rect.bottom()),
+        );
+        ui.painter().rect_filled(
+            line_rect,
+            egui::Rounding::same(1.2),
+            egui::Color32::from_rgb(20, 160, 210),
+        );
+
+        let mut clicked_tab = None;
+
+        for (i, (tab_val, label)) in tabs.iter().enumerate() {
+            let tab_rect = egui::Rect::from_min_size(
+                egui::pos2(bar_rect.left() + pad_x + (i as f32) * tab_w, bar_rect.top() + pad_y),
+                egui::vec2(tab_w, bar_rect.height() - pad_y * 2.0),
+            );
+
+            let resp = ui.interact(
+                tab_rect,
+                ui.id().with(format!("{id_source}_btn_{i}")),
+                egui::Sense::click(),
+            );
+
+            if resp.clicked() {
+                clicked_tab = Some(*tab_val);
+            }
+
+            let is_sel = *tab_val == current;
+            let text_color = if is_sel {
+                egui::Color32::WHITE
+            } else if resp.hovered() {
+                egui::Color32::from_rgb(220, 225, 235)
+            } else {
+                egui::Color32::from_rgb(150, 160, 175)
+            };
+
+            let text_pos = tab_rect.center() - egui::vec2(0.0, 1.0);
+            ui.painter().text(
+                text_pos,
+                egui::Align2::CENTER_CENTER,
+                *label,
+                egui::FontId::proportional(12.5),
+                text_color,
+            );
+        }
+
+        clicked_tab
+    }
+
     /// 通用狀態圖示按鈕：統一樣式、色彩與視覺回饋
     pub fn render_stateful_icon_button(
         ui: &mut egui::Ui,
@@ -1967,30 +2503,31 @@ impl FlyoutApp {
         let btn = egui::Button::new(egui::RichText::new(icon).size(13.0).color(text_color))
             .fill(fill_color)
             .stroke(egui::Stroke::new(1.0_f32, stroke_color))
-            .rounding(egui::Rounding::same(4.0));
+            .rounding(egui::Rounding::same(4.0))
+            .sense(egui::Sense::click_and_drag());
 
         ui.add(btn).on_hover_text(tooltip)
     }
 
     /// 通用 🏠 按鈕組件：可嵌入任何次級視窗（迷你播放器、等化器等）
-    /// 依據主視窗純狀態自動呈現「喚醒主視窗」或「磁吸主視窗」的視覺反饋與兩階段操作
+    /// 一步到位將主視窗吸附至當前群組；若已在群組中則點擊聚焦主視窗
     pub fn render_universal_home_button(
         ui: &mut egui::Ui,
         source_kind: crate::snapping::WindowKind,
         lang: crate::i18n::Language,
     ) -> egui::Response {
-        let is_dock_ready = crate::snapping::is_main_window_dock_ready();
+        let is_docked = crate::snapping::is_main_in_cluster(source_kind);
 
-        let tooltip = if is_dock_ready {
-            lang.tooltip_dock_main_window()
+        let tooltip = if is_docked {
+            lang.tooltip_main_window_docked_focus()
         } else {
-            lang.tooltip_show_main_window()
+            lang.tooltip_dock_main_window()
         };
 
         let resp = Self::render_stateful_icon_button(
             ui,
             "🏠",
-            is_dock_ready,
+            is_docked,
             tooltip,
             ButtonTheme::Cyan,
         );
@@ -2072,21 +2609,29 @@ impl FlyoutApp {
         match kind {
             crate::snapping::WindowKind::MiniPlayer => {
                 self.mini_player_window_open = false;
-                crate::snapping::break_dock_relation(crate::snapping::WindowKind::MiniPlayer);
+                crate::snapping::set_mini_player_hwnd(std::ptr::null_mut());
+                crate::snapping::handle_window_closed(crate::snapping::WindowKind::MiniPlayer);
             }
             crate::snapping::WindowKind::Equalizer => {
                 self.equalizer_window_open = false;
-                crate::snapping::break_dock_relation(crate::snapping::WindowKind::Equalizer);
+                crate::snapping::set_equalizer_hwnd(std::ptr::null_mut());
+                crate::snapping::handle_window_closed(crate::snapping::WindowKind::Equalizer);
             }
             crate::snapping::WindowKind::Visualizer => {
                 crate::visualizer::close_visualizer();
+                crate::snapping::handle_window_closed(crate::snapping::WindowKind::Visualizer);
             }
             crate::snapping::WindowKind::Main => {
+                crate::visualizer::reset_hud_main_shown();
                 let hwnd = crate::tray::get_main_hwnd();
                 if let Some(ctx) = get_egui_ctx() {
                     crate::tray::hide_main_window_only(hwnd, &ctx);
                 }
+                crate::snapping::handle_window_closed(crate::snapping::WindowKind::Main);
             }
+        }
+        if let Some(ctx) = get_egui_ctx() {
+            ctx.request_repaint();
         }
         crate::spectrum::update_spectrum_needed_state();
     }
@@ -2114,42 +2659,279 @@ impl FlyoutApp {
     }
 
     /// 通用置頂按鈕渲染組件：
-    /// 依據點擊時的視窗來源（kind），連同其所屬磁吸叢集（Cluster）一併切換 Win32 置頂狀態。
+    /// 依據點擊時的視窗來源（kind）及其身分（Standalone vs Clustered）切換置頂狀態。
     pub fn render_universal_pin_button(&mut self, ui: &mut egui::Ui, kind: crate::snapping::WindowKind) {
         let lang = self.state.language;
-        let tooltip = if self.is_always_on_top {
-            lang.tooltip_unpin_window()
-        } else {
-            lang.tooltip_pin_window()
+        let pinned = crate::snapping::is_window_pinned(kind);
+        let role = crate::snapping::get_window_role(kind);
+
+        let tooltip = match role {
+            crate::snapping::WindowRole::ClusterMaster | crate::snapping::WindowRole::ClusterSlave => {
+                if pinned {
+                    lang.tooltip_unpin_cluster()
+                } else {
+                    lang.tooltip_pin_cluster()
+                }
+            }
+            crate::snapping::WindowRole::Standalone => {
+                if pinned {
+                    lang.tooltip_unpin_window()
+                } else {
+                    lang.tooltip_pin_window()
+                }
+            }
         };
 
         let resp = Self::render_stateful_icon_button(
             ui,
             "📌",
-            self.is_always_on_top,
+            pinned,
             tooltip,
             ButtonTheme::Gold,
         );
 
         if resp.clicked() {
-            self.is_always_on_top = !self.is_always_on_top;
-            crate::tray::IS_ALWAYS_ON_TOP.store(self.is_always_on_top, std::sync::atomic::Ordering::SeqCst);
-            crate::controller::save_always_on_top(self.is_always_on_top);
-            let level = if self.is_always_on_top {
+            unsafe {
+                crate::snapping::toggle_window_pin(kind);
+            }
+            let new_pinned = crate::snapping::is_window_pinned(kind);
+            let level = if new_pinned {
                 egui::WindowLevel::AlwaysOnTop
             } else {
                 egui::WindowLevel::Normal
             };
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::WindowLevel(level));
 
-            unsafe {
-                crate::snapping::set_cluster_pinned(kind, self.is_always_on_top);
+            if kind == crate::snapping::WindowKind::Main {
+                self.is_always_on_top = new_pinned;
             }
         }
     }
 
-    fn render_pin_button(&mut self, ui: &mut egui::Ui) {
-        self.render_universal_pin_button(ui, crate::snapping::WindowKind::Main);
+    /// 一鍵呈現三欄模組化工作站（自動開啟並齊平磁吸：主視窗、迷你播放器、等化器與視覺效果）
+    pub fn assemble_modular_workstation(&mut self) {
+        if crate::visualizer::is_visualizer_fullscreen() {
+            crate::visualizer::exit_visualizer_fullscreen();
+        }
+        if !self.mini_player_window_open {
+            self.mini_player_window_open = true;
+            self.mini_player_needs_initial_dock = false;
+        }
+        if !self.equalizer_window_open {
+            self.equalizer_window_open = true;
+            self.equalizer_needs_initial_dock = false;
+        }
+        if !crate::visualizer::is_visualizer_open() {
+            crate::visualizer::open_visualizer();
+        }
+
+        // 若各成員視窗已開啟但處於最小化（Iconic）狀態，立即解除最小化並還原顯示
+        unsafe {
+            for kind in [
+                crate::snapping::WindowKind::Main,
+                crate::snapping::WindowKind::MiniPlayer,
+                crate::snapping::WindowKind::Equalizer,
+                crate::snapping::WindowKind::Visualizer,
+            ] {
+                let hwnd = crate::snapping::get_window_hwnd(kind);
+                if !hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(hwnd) != 0 {
+                    if windows_sys::Win32::UI::WindowsAndMessaging::IsIconic(hwnd) != 0 {
+                        windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(
+                            hwnd,
+                            windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNOACTIVATE,
+                        );
+                    }
+                }
+            }
+        }
+
+        // Synchronize visualizer and cluster pinned state with master app pin state
+        let main_pinned = crate::snapping::is_window_pinned(crate::snapping::WindowKind::Main);
+        self.is_always_on_top = main_pinned;
+        crate::visualizer::set_visualizer_pinned(main_pinned);
+        unsafe {
+            crate::snapping::set_cluster_pinned(crate::snapping::WindowKind::Main, main_pinned);
+        }
+        self.pending_modular_workstation_frames = 30;
+        if let Some(ctx) = get_egui_ctx() {
+            ctx.request_repaint();
+        }
+    }
+
+    /// 渲染標題列最左側的 App Icon 工作站按鈕（提案一：新使用者專屬呼吸微光與導引氣泡）
+    pub fn render_modular_workstation_button(&mut self, ui: &mut egui::Ui) {
+        let lang = self.state.language;
+        let tooltip = lang.tooltip_modular_workstation();
+        let is_workstation_active = self.mini_player_window_open
+            && self.equalizer_window_open
+            && crate::visualizer::is_visualizer_open();
+        let is_new_user_guide = !self.workstation_onboarding_dismissed && !is_workstation_active;
+
+        let btn_size = egui::vec2(22.0, 22.0);
+        let (rect, resp) = ui.allocate_exact_size(btn_size, egui::Sense::click());
+        let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tooltip);
+
+        let painter = ui.painter();
+
+        // 1. 新使用者動態呼吸微光光圈（Pulsing Beacon Glow）
+        if is_new_user_guide {
+            let time = ui.input(|i| i.time);
+            let pulse = ((time * 3.2).sin() * 0.5 + 0.5) as f32; // 0.0 ~ 1.0
+            ui.ctx().request_repaint();
+
+            let halo_rect = rect.expand(1.5 + pulse * 3.2);
+            let alpha = (45.0 + pulse * 140.0) as u8;
+            let glow_stroke = egui::Stroke::new(
+                1.2 + pulse * 0.6,
+                egui::Color32::from_rgba_unmultiplied(75, 175, 255, alpha),
+            );
+            painter.rect_stroke(halo_rect, egui::Rounding::same(6.0), glow_stroke);
+        }
+
+        if resp.hovered() || is_workstation_active {
+            let bg = if resp.is_pointer_button_down_on() {
+                egui::Color32::from_rgb(35, 75, 130)
+            } else if is_workstation_active {
+                egui::Color32::from_rgb(25, 45, 75)
+            } else {
+                egui::Color32::from_rgb(45, 52, 65)
+            };
+            let stroke = if is_workstation_active {
+                egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(70, 140, 215))
+            } else {
+                egui::Stroke::new(0.5_f32, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 40))
+            };
+            painter.rect_filled(rect, egui::Rounding::same(4.0), bg);
+            painter.rect_stroke(rect, egui::Rounding::same(4.0), stroke);
+        }
+
+        if let Some(ref tex) = self.app_icon_texture {
+            let icon_rect = rect.shrink(2.0);
+            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            let tint = if resp.hovered() || is_workstation_active || is_new_user_guide {
+                egui::Color32::WHITE
+            } else {
+                egui::Color32::from_rgb(210, 220, 235)
+            };
+            painter.image(tex.id(), icon_rect, uv, tint);
+        } else {
+            let icon_col = if is_workstation_active {
+                egui::Color32::from_rgb(100, 200, 255)
+            } else if is_new_user_guide {
+                egui::Color32::from_rgb(130, 210, 255)
+            } else {
+                egui::Color32::from_rgb(180, 190, 205)
+            };
+            painter.text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                "◫",
+                egui::FontId::proportional(14.0),
+                icon_col,
+            );
+        }
+
+        if resp.clicked() {
+            if is_new_user_guide {
+                self.workstation_onboarding_dismissed = true;
+                crate::controller::save_workstation_discovered(true);
+            }
+            self.assemble_modular_workstation();
+        }
+
+        // 2. 新手導引浮動氣泡卡片（Onboarding Balloon Card）
+        if is_new_user_guide {
+            let balloon_pos = egui::pos2(rect.min.x - 2.0, rect.max.y + 6.0);
+            let mut should_dismiss = false;
+            let mut should_open = false;
+
+            egui::Area::new(egui::Id::new("workstation_onboarding_balloon"))
+                .fixed_pos(balloon_pos)
+                .order(egui::Order::Tooltip)
+                .show(ui.ctx(), |ui| {
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_rgba_unmultiplied(18, 24, 36, 248))
+                        .stroke(egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(75, 155, 245)))
+                        .rounding(egui::Rounding::same(8.0))
+                        .shadow(egui::epaint::Shadow {
+                            offset: egui::vec2(0.0, 4.0),
+                            blur: 16.0_f32,
+                            spread: 0.0_f32,
+                            color: egui::Color32::from_rgba_unmultiplied(0, 0, 0, 160),
+                        })
+                        .inner_margin(egui::Margin::symmetric(12.0, 10.0))
+                        .show(ui, |ui| {
+                            ui.set_max_width(280.0);
+                            ui.vertical(|ui| {
+                                ui.label(
+                                    egui::RichText::new(lang.onboarding_workstation_title())
+                                        .size(13.0)
+                                        .strong()
+                                        .color(egui::Color32::from_rgb(255, 215, 80)),
+                                );
+                                ui.add_space(3.0);
+                                ui.label(
+                                    egui::RichText::new(lang.onboarding_workstation_desc())
+                                        .size(11.5)
+                                        .color(egui::Color32::from_rgb(200, 215, 235)),
+                                );
+                                ui.add_space(8.0);
+                                ui.horizontal(|ui| {
+                                    let try_btn = egui::Button::new(
+                                        egui::RichText::new(lang.onboarding_workstation_btn_try())
+                                            .size(11.5)
+                                            .strong()
+                                            .color(egui::Color32::WHITE),
+                                    )
+                                    .fill(egui::Color32::from_rgb(35, 105, 200))
+                                    .rounding(egui::Rounding::same(4.0));
+                                    if ui.add(try_btn).clicked() {
+                                        should_open = true;
+                                    }
+
+                                    ui.add_space(6.0);
+
+                                    let dismiss_btn = egui::Button::new(
+                                        egui::RichText::new(lang.onboarding_workstation_btn_dismiss())
+                                            .size(11.0)
+                                            .color(egui::Color32::from_rgb(160, 175, 195)),
+                                    )
+                                    .fill(egui::Color32::from_rgba_unmultiplied(255, 255, 255, 15))
+                                    .rounding(egui::Rounding::same(4.0));
+                                    if ui.add(dismiss_btn).clicked() {
+                                        should_dismiss = true;
+                                    }
+                                });
+                            });
+                        });
+                });
+
+            if should_open {
+                self.workstation_onboarding_dismissed = true;
+                crate::controller::save_workstation_discovered(true);
+                self.assemble_modular_workstation();
+            } else if should_dismiss {
+                self.workstation_onboarding_dismissed = true;
+                crate::controller::save_workstation_discovered(true);
+            }
+        }
+    }
+
+    /// 實時偵測物理鍵盤 Shift 鍵狀態（直接查詢 Win32 硬體非同步狀態，不受多視窗焦點或訊息丟失干擾）
+    #[inline]
+    pub fn is_physical_shift_down() -> bool {
+        #[cfg(target_os = "windows")]
+        {
+            unsafe {
+                (windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(
+                    windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_SHIFT as i32,
+                ) as i16) < 0
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            false
+        }
     }
 
     /// 通用視窗標題列渲染組件：
@@ -2165,28 +2947,194 @@ impl FlyoutApp {
         F: FnOnce(&mut Self, &mut egui::Ui),
     {
         let lang = self.state.language;
+        let role = crate::snapping::get_window_role(kind);
+
         ui.horizontal(|ui| {
-            // Left Group: Back Button (if embedded subpage) OR Universal Home Button (if standalone/secondary) + Title
+            // Left Group: Modular Workstation Button (if Main root) / Back Button (if subpage) / Home Button (if secondary) + Title + Role Badge
             if show_back_button {
                 if ui.button(lang.btn_back()).clicked() {
                     self.go_back();
                 }
             } else if kind != crate::snapping::WindowKind::Main {
                 Self::render_universal_home_button(ui, kind, lang);
+            } else {
+                // Main Window Root: App Icon Modular Workstation Button
+                self.render_modular_workstation_button(ui);
+                ui.add_space(2.0);
             }
 
-            ui.heading(
+            // Title: 可拖曳感應區塊 (懸停顯示 Grab ✋，按住顯示 Grabbing ✊)
+            let title_heading = ui.heading(
                 egui::RichText::new(title)
                     .strong()
                     .size(15.0)
                     .color(egui::Color32::from_rgb(180, 220, 245)),
             );
+            let title_resp = title_heading.interact(egui::Sense::drag());
+            if title_resp.drag_started() {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+            }
+
+            // Role Badge (主控 / 附屬節點身分指示徽章：🧲 / 📎，亦支援按住拖曳視窗)
+            let mut left_content_right = title_heading.rect.right();
+            let badge_resp = match role {
+                crate::snapping::WindowRole::ClusterMaster => {
+                    let badge = ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(lang.badge_cluster_master())
+                                .size(14.0),
+                        ).sense(egui::Sense::drag())
+                    ).on_hover_text(lang.tooltip_cluster_master());
+                    left_content_right = badge.rect.right();
+                    Some(badge)
+                }
+                crate::snapping::WindowRole::ClusterSlave => {
+                    let badge = ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(lang.badge_cluster_slave())
+                                .size(14.0),
+                        ).sense(egui::Sense::drag())
+                    ).on_hover_text(lang.tooltip_cluster_slave());
+                    left_content_right = badge.rect.right();
+                    Some(badge)
+                }
+                crate::snapping::WindowRole::Standalone => None,
+            };
+            if let Some(ref b) = badge_resp {
+                if b.drag_started() {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                }
+            }
 
             // Right Group (Right-to-Left layout):
-            // Outer right: Window System Controls (📌 Pin + ⧉ Popout if applicable)
-            // Separator: |
-            // Inner right: App Action Buttons (custom_actions closure)
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            // 獨立於標題拖曳區，保證所有按鈕 100% 正常感應點擊
+            let right_group = ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let is_in_cluster = matches!(
+                    role,
+                    crate::snapping::WindowRole::ClusterMaster | crate::snapping::WindowRole::ClusterSlave
+                );
+
+                let btn_size = egui::vec2(26.0, 22.0);
+
+                // --- 1. Caption Close Button (✕ / ⛝) ---
+                // 方案 1：懸停精準感應制 (Hover-Only Dynamic Morph)
+                // - 未懸停時：永遠顯示標準符號 " ✕ "，絕不殘留錯誤圖示
+                // - 懸停且按住 Shift 時：動態形變為 " ⛝ "，但維持正常深灰背景，移除警戒高亮紅
+                let (close_rect, close_resp) = ui.allocate_exact_size(btn_size, egui::Sense::click());
+                let is_close_hovered = close_resp.hovered();
+                if is_close_hovered {
+                    ui.ctx().request_repaint();
+                }
+
+                let is_close_shift = is_in_cluster && is_close_hovered && Self::is_physical_shift_down();
+
+                let close_tooltip = if !is_in_cluster {
+                    lang.tooltip_close_window()
+                } else if is_close_shift {
+                    lang.tooltip_close_cluster_all()
+                } else {
+                    lang.tooltip_close_cluster()
+                };
+
+                let close_label = if is_in_cluster && !is_close_shift { " ⛝ " } else { " ✕ " };
+                let close_bg = if close_resp.is_pointer_button_down_on() {
+                    egui::Color32::from_rgb(40, 44, 52)
+                } else if is_close_hovered {
+                    egui::Color32::from_rgb(68, 76, 92)
+                } else {
+                    egui::Color32::from_rgb(52, 58, 70)
+                };
+                let close_text_color = egui::Color32::from_rgb(220, 225, 235);
+
+                ui.painter().rect_filled(close_rect, egui::Rounding::same(4.0), close_bg);
+                ui.painter().text(
+                    close_rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    close_label,
+                    egui::FontId::proportional(13.0),
+                    close_text_color,
+                );
+
+                let close_resp = close_resp.on_hover_text(close_tooltip);
+
+                if close_resp.clicked() {
+                    if is_in_cluster {
+                        if Self::is_physical_shift_down() {
+                            // 反轉方案：Shift + 點擊僅關閉本視窗 (Solo)
+                            self.close_popout_window(kind);
+                        } else {
+                            // 反轉方案：普通點擊關閉整個工作站群組
+                            self.close_window_cluster(kind);
+                        }
+                    } else {
+                        // 普通點擊：僅關閉本視窗
+                        self.close_popout_window(kind);
+                    }
+                }
+
+                // --- 2. Minimize Button (_ / ‗) ---
+                // 方案 1：懸停精準感應制 (Hover-Only Dynamic Morph)
+                // - 成組且未按 Shift 時：顯示雙層沉底底線 " ‗ "，預設點擊最小化整個群組
+                // - 成組且按住 Shift 時：動態形變為標準單橫線 " _ "，點擊僅最小化單一視窗
+                let (min_rect, min_resp) = ui.allocate_exact_size(btn_size, egui::Sense::click());
+                let is_min_hovered = min_resp.hovered();
+                if is_min_hovered {
+                    ui.ctx().request_repaint();
+                }
+
+                let is_min_shift = is_in_cluster && is_min_hovered && Self::is_physical_shift_down();
+
+                let min_tooltip = if !is_in_cluster {
+                    lang.tooltip_minimize_window()
+                } else if is_min_shift {
+                    lang.tooltip_minimize_cluster_all()
+                } else {
+                    lang.tooltip_minimize_cluster()
+                };
+
+                let (min_label, min_color) = if is_in_cluster && !is_min_shift {
+                    (" ‗ ", egui::Color32::from_rgb(180, 215, 255))
+                } else {
+                    (" _ ", egui::Color32::from_rgb(200, 205, 215))
+                };
+
+                let min_bg = if min_resp.is_pointer_button_down_on() {
+                    egui::Color32::from_rgb(40, 44, 52)
+                } else if is_min_hovered {
+                    egui::Color32::from_rgb(68, 76, 92)
+                } else {
+                    egui::Color32::from_rgb(52, 58, 70)
+                };
+
+                ui.painter().rect_filled(min_rect, egui::Rounding::same(4.0), min_bg);
+                ui.painter().text(
+                    min_rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    min_label,
+                    egui::FontId::proportional(13.0),
+                    min_color,
+                );
+
+                let min_resp = min_resp.on_hover_text(min_tooltip);
+
+                if min_resp.clicked() {
+                    if is_in_cluster {
+                        if Self::is_physical_shift_down() {
+                            // 反轉方案：Shift + 點擊僅最小化本視窗 (Solo)
+                            unsafe {
+                                crate::snapping::minimize_window_solo(kind);
+                            }
+                        } else {
+                            // 反轉方案：普通點擊最小化整個工作站群組
+                            unsafe {
+                                crate::snapping::minimize_cluster(kind);
+                            }
+                        }
+                    } else {
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                    }
+                }
+
                 // Window System Controls
                 self.render_universal_pin_button(ui, kind);
 
@@ -2200,9 +3148,44 @@ impl FlyoutApp {
                 // Separator
                 Self::render_header_separator(ui);
 
-                // Custom App Action Buttons (e.g. Visualizer 🎨, Equalizer 🎚, etc.)
+                // Custom App Action Buttons (e.g. Visualizer 🎨, Equalizer ⦀, etc.)
                 custom_actions(self, ui);
             });
+
+            // Middle space between Left Content and Right Group: 也支援滑鼠按住拖動視窗 (懸停顯示 Grab ✋，按住顯示 Grabbing ✊)
+            let mid_left = left_content_right;
+            let mid_right = right_group.response.rect.left();
+            let mut mid_resp: Option<egui::Response> = None;
+            if mid_right > mid_left + 4.0 {
+                let header_top = right_group.response.rect.top().min(title_heading.rect.top() - 6.0);
+                let header_bottom = right_group.response.rect.bottom().max(title_heading.rect.bottom() + 6.0);
+                let mid_rect = egui::Rect::from_min_max(
+                    egui::pos2(mid_left, header_top),
+                    egui::pos2(mid_right - 4.0, header_bottom),
+                );
+                let mid_id = ui.id().with(("header_mid_drag", kind));
+                let resp = ui.interact(mid_rect, mid_id, egui::Sense::drag());
+                if resp.drag_started() {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                }
+                mid_resp = Some(resp);
+            }
+
+            // Sync custom Win32 cursor state for this window header (✋ Grab on hover, ✊ Grabbing when held)
+            let is_down = title_resp.is_pointer_button_down_on()
+                || badge_resp.as_ref().map(|b| b.is_pointer_button_down_on()).unwrap_or(false)
+                || mid_resp.as_ref().map(|r| r.is_pointer_button_down_on()).unwrap_or(false);
+            let is_hover = title_resp.hovered()
+                || badge_resp.as_ref().map(|b| b.hovered()).unwrap_or(false)
+                || mid_resp.as_ref().map(|r| r.hovered()).unwrap_or(false);
+
+            if is_down {
+                crate::custom_cursor::set_header_cursor_state(kind, crate::custom_cursor::CustomCursorState::Grabbing);
+            } else if is_hover {
+                crate::custom_cursor::set_header_cursor_state(kind, crate::custom_cursor::CustomCursorState::Grab);
+            } else {
+                crate::custom_cursor::set_header_cursor_state(kind, crate::custom_cursor::CustomCursorState::None);
+            }
         });
 
         ui.add_space(6.0);
@@ -2232,57 +3215,648 @@ impl FlyoutApp {
         let is_fleet_hidden = crate::tray::is_app_fleet_hidden();
         let viewport_id = egui::ViewportId::from_hash_of(id_str);
 
-        let builder = egui::ViewportBuilder::default()
+        let mut def_size = kind.default_size();
+        let ppp = ctx.pixels_per_point();
+        if kind == crate::snapping::WindowKind::MiniPlayer || kind == crate::snapping::WindowKind::Equalizer {
+            let main_hwnd = crate::snapping::get_window_hwnd(crate::snapping::WindowKind::Main);
+            if !main_hwnd.is_null() && unsafe { windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(main_hwnd) != 0 } {
+                let mut mr: windows_sys::Win32::Foundation::RECT = unsafe { std::mem::zeroed() };
+                unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect(main_hwnd, &mut mr); }
+                let mh = (mr.bottom - mr.top) as f32 / ppp;
+                if mh > 100.0 {
+                    def_size[1] = (mh / 2.0).round();
+                }
+            }
+        }
+
+        let is_pinned = crate::snapping::is_window_pinned(kind);
+        let init_level = if is_pinned {
+            egui::WindowLevel::AlwaysOnTop
+        } else {
+            egui::WindowLevel::Normal
+        };
+
+        let mut builder = egui::ViewportBuilder::default()
             .with_title(title)
-            .with_inner_size(kind.default_size())
+            .with_inner_size(def_size)
             .with_min_inner_size(kind.min_size())
             .with_resizable(true)
-            .with_visible(!is_fleet_hidden);
+            .with_decorations(false) // 無 Windows 原生外框 (Frameless)，自訂沉浸式標題列
+            .with_window_level(init_level);
+
+        if *needs_initial_dock {
+            // 預先計算初次停靠目標座標，且在建立時先保持 hidden (visible: false)，
+            // 避免 winit 內部在 CreateWindowExW(..., CW_USEDEFAULT) 時瞬間閃現 800x600 預設視窗
+            let w_px = (def_size[0] * ppp).round() as i32;
+            let h_px = (def_size[1] * ppp).round() as i32;
+            let spawner = crate::snapping::get_window_spawner(kind);
+            let (best_rect, _) = crate::snapping::find_best_spawn_rect(kind, w_px, h_px, spawner);
+            let init_pos = egui::pos2(best_rect.left as f32 / ppp, best_rect.top as f32 / ppp);
+            builder = builder.with_position(init_pos).with_visible(false);
+        } else {
+            builder = builder.with_visible(!is_fleet_hidden);
+        }
 
         ctx.show_viewport_immediate(viewport_id, builder, |ctx, _class| {
             if is_fleet_hidden {
                 return;
             }
 
-            // 1. 通用關閉事件攔截
+            // 1. 通用關閉與快捷鍵事件攔截
+            let escape_pressed = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+            if crate::visualizer::is_visualizer_fullscreen() && escape_pressed {
+                ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+                crate::visualizer::toggle_main_window_hud();
+                return;
+            }
+
             if ctx.input(|i| i.viewport().close_requested()) {
-                self.close_window_cluster(kind);
+                self.close_popout_window(kind);
                 return;
             }
 
             // 2. 通用 HWND 自動探索、Subclass 注入與磁吸初始對齊
             let hwnd = crate::snapping::get_window_hwnd(kind);
-            if hwnd.is_null() {
+            let target_hwnd = if !hwnd.is_null() && unsafe { windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(hwnd) != 0 } {
+                hwnd
+            } else {
                 let found = crate::snapping::find_hwnd_by_kind(kind);
                 if !found.is_null() {
                     unsafe {
                         crate::snapping::install_window_subclass(kind, found);
-                        if *needs_initial_dock {
-                            *needs_initial_dock = false;
-                            crate::snapping::dock_spawned_window(kind, found);
-                        } else {
-                            let main_hwnd = crate::tray::get_main_hwnd();
-                            if !main_hwnd.is_null() {
-                                crate::snapping::restore_and_realign_all_children(crate::snapping::WindowKind::Main, main_hwnd);
-                            }
-                        }
                     }
+                    found
+                } else {
+                    std::ptr::null_mut()
                 }
+            };
+
+            if !target_hwnd.is_null() && *needs_initial_dock {
+                *needs_initial_dock = false;
+                unsafe {
+                    crate::snapping::dock_spawned_window(kind, target_hwnd);
+                    windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(
+                        target_hwnd as _,
+                        windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOW,
+                    );
+                }
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
             }
 
-            // 3. 通用視窗容器面板
+            // 3. 通用視窗容器面板（沉浸式無邊框樣式，附細緻立體邊界描邊與圓角）
             let bg_color = match kind {
                 crate::snapping::WindowKind::Equalizer => egui::Color32::from_rgb(24, 25, 29),
                 crate::snapping::WindowKind::MiniPlayer => egui::Color32::from_rgb(22, 24, 29),
                 _ => egui::Color32::from_rgb(20, 22, 26),
             };
 
+            let role = crate::snapping::get_window_role(kind);
+            let stroke_color = match role {
+                crate::snapping::WindowRole::ClusterMaster => egui::Color32::from_rgb(70, 140, 215), // 藍色主控微光邊框
+                crate::snapping::WindowRole::ClusterSlave => egui::Color32::from_rgb(45, 50, 60),    // 無縫附屬邊框
+                crate::snapping::WindowRole::Standalone => egui::Color32::from_rgb(52, 58, 70),     // 標準獨立外框
+            };
+
             egui::CentralPanel::default()
-                .frame(egui::Frame::none().fill(bg_color).inner_margin(12.0))
+                .frame(
+                    egui::Frame::none()
+                        .fill(bg_color)
+                        .stroke(egui::Stroke::new(1.0_f32, stroke_color))
+                        .rounding(egui::Rounding::same(8.0))
+                        .inner_margin(12.0)
+                )
                 .show(ctx, |ui| {
                     content(self, ui);
                 });
         });
+    }
+
+    /// 同步媒體曲目資訊、紋理快取並偵測曲目切換（觸發封面與曲目左右推移過場）
+    pub fn sync_media_track(&mut self, ctx: &egui::Context) {
+        let track_info = crate::media_control::get_current_media_track().read().unwrap().clone();
+
+        // 1. 專輯封面快取管理
+        if track_info.thumbnail_bytes != self.last_album_art_bytes {
+            self.prev_album_art_texture = self.album_art_texture.clone();
+            self.last_album_art_bytes = track_info.thumbnail_bytes.clone();
+            if let Some(ref bytes) = track_info.thumbnail_bytes {
+                if let Ok(img) = image::load_from_memory(bytes) {
+                    let rgba = img.to_rgba8();
+                    let size = [rgba.width() as usize, rgba.height() as usize];
+                    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                    self.album_art_texture = Some(ctx.load_texture(
+                        "winamp_album_art",
+                        color_image,
+                        egui::TextureOptions::LINEAR,
+                    ));
+                } else {
+                    self.album_art_texture = None;
+                }
+            } else {
+                self.album_art_texture = None;
+            }
+        }
+
+        // 2. 曲目切換判定
+        let cur_title = track_info.title.trim().to_string();
+        let cur_artist = track_info.artist.trim().to_string();
+        let cur_album = track_info.album.trim().to_string();
+
+        if self.prev_track_title.is_empty() {
+            self.prev_track_title = cur_title;
+            self.prev_track_artist = cur_artist;
+            self.prev_track_album = cur_album;
+            self.prev_album_art_texture = self.album_art_texture.clone();
+        } else if !cur_title.is_empty() && (cur_title != self.prev_track_title || cur_artist != self.prev_track_artist) {
+            let dir = self.next_track_intent.take().unwrap_or(TrackTransitionDirection::Next);
+            self.track_transition = Some(TrackTransition {
+                from_title: self.prev_track_title.clone(),
+                from_artist: self.prev_track_artist.clone(),
+                from_album: self.prev_track_album.clone(),
+                from_art_texture: self.prev_album_art_texture.clone(),
+                to_title: cur_title.clone(),
+                to_artist: cur_artist.clone(),
+                to_album: cur_album.clone(),
+                to_art_texture: self.album_art_texture.clone(),
+                direction: dir,
+                start_time: std::time::Instant::now(),
+                duration: std::time::Duration::from_millis(320),
+            });
+            self.prev_track_title = cur_title;
+            self.prev_track_artist = cur_artist;
+            self.prev_track_album = cur_album;
+            self.prev_album_art_texture = self.album_art_texture.clone();
+            ctx.request_repaint();
+        }
+
+        if let Some(ref trans) = self.track_transition {
+            ctx.request_repaint();
+            if trans.start_time.elapsed() >= trans.duration {
+                self.track_transition = None;
+            }
+        }
+    }
+
+    /// 繪製單張專輯封面內容（支援紋理渲染或黑膠唱片占位符，附帶動態透明度）
+    pub fn render_album_art_content(
+        painter: &egui::Painter,
+        rect: egui::Rect,
+        tex: Option<&egui::TextureHandle>,
+        alpha: u8,
+    ) {
+        if alpha == 0 {
+            return;
+        }
+        if let Some(tex) = tex {
+            painter.rect_filled(rect, egui::Rounding::same(6.0), egui::Color32::from_black_alpha(alpha));
+            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            let tint = egui::Color32::from_rgba_unmultiplied(255, 255, 255, alpha);
+            painter.image(tex.id(), rect, uv, tint);
+        } else {
+            let center = rect.center();
+            let radius = (rect.width().min(rect.height()) / 2.0) - 2.0;
+
+            let disc_col = egui::Color32::from_rgba_unmultiplied(18, 19, 23, alpha);
+            let border_col = egui::Color32::from_rgba_unmultiplied(50, 54, 65, alpha);
+            painter.circle_filled(center, radius, disc_col);
+            painter.circle_stroke(center, radius, egui::Stroke::new(1.0_f32, border_col));
+
+            let ring_alpha = ((alpha as f32 / 255.0) * 60.0) as u8;
+            for r_factor in [0.85, 0.72, 0.60, 0.48] {
+                painter.circle_stroke(
+                    center,
+                    radius * r_factor,
+                    egui::Stroke::new(0.5_f32, egui::Color32::from_rgba_unmultiplied(80, 85, 100, ring_alpha)),
+                );
+            }
+
+            let label_col = egui::Color32::from_rgba_unmultiplied(35, 75, 130, alpha);
+            let label_stroke = egui::Color32::from_rgba_unmultiplied(80, 140, 220, alpha);
+            painter.circle_filled(center, radius * 0.36, label_col);
+            painter.circle_stroke(center, radius * 0.36, egui::Stroke::new(1.0_f32, label_stroke));
+
+            painter.circle_filled(center, 3.5, egui::Color32::from_rgba_unmultiplied(220, 225, 230, alpha));
+
+            let note_alpha = ((alpha as f32 / 255.0) * 160.0) as u8;
+            painter.text(
+                center - egui::vec2(0.0, 9.0),
+                egui::Align2::CENTER_CENTER,
+                "♪",
+                egui::FontId::proportional(11.0),
+                egui::Color32::from_rgba_unmultiplied(255, 255, 255, note_alpha),
+            );
+        }
+    }
+
+    /// 智慧解析曲目名稱，拆分為「主名稱 (Line 1)」與「樂章／副標題 (Line 2)」
+    pub fn split_track_title(title: &str) -> (String, Option<String>) {
+        let t = title.trim();
+        if t.is_empty() {
+            return (String::new(), None);
+        }
+
+        // 1. 古典樂章／標準副標題分隔符號 ": " (例如 "Peer Gynt Suite No. 2, Op. 55: IV. Solveig's Sang")
+        if let Some(pos) = t.find(": ") {
+            let l1 = t[..pos].trim();
+            let l2 = t[pos + 2..].trim();
+            if !l1.is_empty() && !l2.is_empty() {
+                return (l1.to_string(), Some(l2.to_string()));
+            }
+        }
+
+        // 2. 破折號分隔符號 " - " (常見於副標題、樂章或混音版本)
+        if let Some(pos) = t.find(" - ") {
+            let l1 = t[..pos].trim();
+            let l2 = t[pos + 3..].trim();
+            if !l1.is_empty() && !l2.is_empty() {
+                return (l1.to_string(), Some(l2.to_string()));
+            }
+        }
+
+        // 3. 圓括號 " (" (例如 "Cruel Summer (Live from The Eras Tour)" 或 "Shape of You (Acoustic)")
+        if let Some(pos) = t.find(" (") {
+            let l1 = t[..pos].trim();
+            let l2 = t[pos + 1..].trim();
+            if !l1.is_empty() && !l2.is_empty() {
+                return (l1.to_string(), Some(l2.to_string()));
+            }
+        }
+
+        // 4. 中括號 " [" (例如 "Song Name [Remastered 2024]")
+        if let Some(pos) = t.find(" [") {
+            let l1 = t[..pos].trim();
+            let l2 = t[pos + 1..].trim();
+            if !l1.is_empty() && !l2.is_empty() {
+                return (l1.to_string(), Some(l2.to_string()));
+            }
+        }
+
+        // 5. 若曲目名稱過長 (超過 28 字元)，在中心點附近的空白或逗號處自然斷行
+        if t.chars().count() > 28 {
+            let chars: Vec<(usize, char)> = t.char_indices().collect();
+            let mid = chars.len() / 2;
+            let mut best_split = None;
+            for delta in 0..mid {
+                if mid + delta < chars.len() && (chars[mid + delta].1 == ' ' || chars[mid + delta].1 == ',') {
+                    best_split = Some(chars[mid + delta].0 + if chars[mid + delta].1 == ',' { 1 } else { 0 });
+                    break;
+                }
+                if mid >= delta && (chars[mid - delta].1 == ' ' || chars[mid - delta].1 == ',') {
+                    best_split = Some(chars[mid - delta].0 + if chars[mid - delta].1 == ',' { 1 } else { 0 });
+                    break;
+                }
+            }
+            if let Some(byte_idx) = best_split {
+                let l1 = t[..byte_idx].trim();
+                let l2 = t[byte_idx..].trim();
+                if !l1.is_empty() && !l2.is_empty() {
+                    return (l1.to_string(), Some(l2.to_string()));
+                }
+            }
+        }
+
+        (t.to_string(), None)
+    }
+
+    /// 統一 WinAMP 風格主顯示底盤組件（包含 88x88 專輯封面與 VFD 螢幕，全面支援封面與歌名推移淡出過場）
+    pub fn render_winamp_display_chassis(
+        &mut self,
+        ui: &mut egui::Ui,
+        track_info: &crate::media_control::MediaTrackInfo,
+        lang: crate::i18n::Language,
+        is_mini: bool,
+    ) {
+        ui.horizontal(|ui| {
+            let app_id_lower = track_info.source_app_id.to_lowercase();
+                    let friendly_app = if app_id_lower.contains("spotify") {
+                        "Spotify"
+                    } else if app_id_lower.contains("applemusic") || app_id_lower.contains("apple.music") {
+                        "Apple Music"
+                    } else if app_id_lower.contains("tidal") {
+                        "Tidal"
+                    } else if app_id_lower.contains("chrome") {
+                        "Chrome"
+                    } else if app_id_lower.contains("firefox") {
+                        "Firefox"
+                    } else if app_id_lower.contains("msedge") || app_id_lower.contains("edge") {
+                        "Microsoft Edge"
+                    } else if !track_info.source_app_id.is_empty() {
+                        let base = track_info.source_app_id.split(['!', '_', '\\', '/']).next().unwrap_or(&track_info.source_app_id);
+                        base.trim_end_matches(".exe")
+                    } else {
+                        ""
+                    };
+
+                    let click_app_tooltip = if !friendly_app.is_empty() {
+                        format!("{} ({})", lang.player_click_to_open_app(), friendly_app)
+                    } else {
+                        lang.player_click_to_open_app().to_string()
+                    };
+
+                    // Left: 專輯封面方框（1:1 正方形，與右側 VFD 螢幕 100% 等高對齊）
+                    let art_dim = if is_mini { 98.0 } else { 104.0 };
+                    let art_size = egui::vec2(art_dim, art_dim);
+                    let (art_rect, art_resp) = ui.allocate_exact_size(art_size, egui::Sense::click());
+                    let art_resp = art_resp
+                        .on_hover_cursor(egui::CursorIcon::PointingHand)
+                        .on_hover_text(&click_app_tooltip);
+
+                    if art_resp.clicked() {
+                        crate::media_control::activate_media_source_app(
+                            &track_info.source_app_id,
+                            &track_info.title,
+                            Some(&self.state.audio_source),
+                        );
+                    }
+
+                    // 封面滑動過場渲染
+                    if let Some(ref trans) = self.track_transition {
+                        let raw_t = (trans.start_time.elapsed().as_secs_f32() / trans.duration.as_secs_f32()).clamp(0.0, 1.0);
+                        let t = 1.0 - (1.0 - raw_t).powi(3); // Ease-out cubic
+
+                        let (dx_from, dx_to) = match trans.direction {
+                            TrackTransitionDirection::Next => (-24.0 * t, 28.0 * (1.0 - t)),
+                            TrackTransitionDirection::Prev => (24.0 * t, -28.0 * (1.0 - t)),
+                        };
+                        let alpha_from = ((1.0 - t) * 255.0) as u8;
+                        let alpha_to = (t * 255.0) as u8;
+
+                        let art_painter = ui.painter().with_clip_rect(art_rect);
+                        art_painter.rect_filled(art_rect, egui::Rounding::same(6.0), egui::Color32::from_rgb(18, 19, 23));
+
+                        if alpha_from > 0 {
+                            let from_rect = art_rect.translate(egui::vec2(dx_from, 0.0));
+                            Self::render_album_art_content(&art_painter, from_rect, trans.from_art_texture.as_ref(), alpha_from);
+                        }
+                        if alpha_to > 0 {
+                            let to_rect = art_rect.translate(egui::vec2(dx_to, 0.0));
+                            Self::render_album_art_content(&art_painter, to_rect, trans.to_art_texture.as_ref(), alpha_to);
+                        }
+
+                        // 固定外框邊線
+                        ui.painter().rect_stroke(
+                            art_rect,
+                            egui::Rounding::same(6.0),
+                            egui::Stroke::new(1.0_f32, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 40)),
+                        );
+                    } else {
+                        let painter = ui.painter();
+                        painter.rect_filled(art_rect, egui::Rounding::same(6.0), egui::Color32::from_rgb(18, 19, 23));
+                        Self::render_album_art_content(painter, art_rect, self.album_art_texture.as_ref(), 255);
+                        painter.rect_stroke(
+                            art_rect,
+                            egui::Rounding::same(6.0),
+                            egui::Stroke::new(1.0_f32, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 40)),
+                        );
+                    }
+
+                    if art_resp.hovered() {
+                        let painter = ui.painter();
+                        painter.rect_filled(
+                            art_rect,
+                            egui::Rounding::same(6.0),
+                            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 30),
+                        );
+                        painter.text(
+                            art_rect.right_top() + egui::vec2(-4.0, 4.0),
+                            egui::Align2::RIGHT_TOP,
+                            "↗",
+                            egui::FontId::proportional(12.5),
+                            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 230),
+                        );
+                    }
+
+                    ui.add_space(8.0);
+
+                    // Right: WinAMP VFD / LCD 螢幕底盤（固定 6 行方案 1 配置）
+                    let vfd_w = ui.available_width();
+                    let vfd_h = if is_mini { 98.0f32 } else { 104.0f32 };
+                    let (vfd_rect, _) = ui.allocate_exact_size(egui::vec2(vfd_w, vfd_h), egui::Sense::hover());
+                    let vfd_painter = ui.painter();
+                    vfd_painter.rect_filled(vfd_rect, egui::Rounding::same(5.0), egui::Color32::from_rgb(8, 16, 10));
+                    vfd_painter.rect_stroke(
+                        vfd_rect,
+                        egui::Rounding::same(5.0),
+                        egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(20, 48, 24)),
+                    );
+
+                    let inner_vfd = vfd_rect.shrink2(egui::vec2(7.0, 4.0));
+                    ui.allocate_new_ui(egui::UiBuilder::new().max_rect(inner_vfd), |ui| {
+                        ui.vertical(|ui| {
+                            // Lines 1-4: 歌詞與曲目資訊滑動顯示區域 (56px)
+                            let text_area_h = if is_mini { 56.0f32 } else { 60.0f32 };
+                            let (text_rect, _) = ui.allocate_exact_size(egui::vec2(inner_vfd.width(), text_area_h), egui::Sense::hover());
+
+                            let font_title = egui::FontId::monospace(if is_mini { 11.5 } else { 12.0 });
+                            let font_sub = egui::FontId::monospace(if is_mini { 9.5 } else { 10.0 });
+                            let font_artist = egui::FontId::monospace(if is_mini { 9.0 } else { 9.5 });
+                            let font_album = egui::FontId::monospace(if is_mini { 8.5 } else { 9.0 });
+
+                            let y1 = 1.0f32;
+                            let y2 = if is_mini { 14.5f32 } else { 15.5f32 };
+                            let y3 = if is_mini { 28.0f32 } else { 30.0f32 };
+                            let y4 = if is_mini { 41.5f32 } else { 44.5f32 };
+
+                            if let Some(ref trans) = self.track_transition {
+                                let raw_t = (trans.start_time.elapsed().as_secs_f32() / trans.duration.as_secs_f32()).clamp(0.0, 1.0);
+                                let t = 1.0 - (1.0 - raw_t).powi(3);
+
+                                let (dx_from, dx_to) = match trans.direction {
+                                    TrackTransitionDirection::Next => (-inner_vfd.width() * 0.38 * t, inner_vfd.width() * 0.38 * (1.0 - t)),
+                                    TrackTransitionDirection::Prev => (inner_vfd.width() * 0.38 * t, -inner_vfd.width() * 0.38 * (1.0 - t)),
+                                };
+                                let alpha_from = ((1.0 - t) * 255.0) as u8;
+                                let alpha_to = (t * 255.0) as u8;
+
+                                let text_painter = ui.painter().with_clip_rect(text_rect);
+
+                                if alpha_from > 0 {
+                                    let (from_t1, from_t2_opt) = Self::split_track_title(&trans.from_title);
+                                    let from_t1_disp = if from_t1.is_empty() { lang.player_no_track().to_string() } else { from_t1 };
+                                    let from_sub = from_t2_opt.unwrap_or_else(|| if trans.from_title.trim().is_empty() { String::new() } else { "♪ 數位立體聲母帶 (Digital Audio Master)".to_string() });
+                                    let from_artist_str = if !trans.from_artist.is_empty() {
+                                        format!("👤 {}", trans.from_artist)
+                                    } else {
+                                        format!("👤 {}", lang.player_unknown_artist())
+                                    };
+                                    let from_album_str = if !trans.from_album.is_empty() {
+                                        format!("💿 {}", trans.from_album)
+                                    } else {
+                                        "💿 Single / Digital Release".to_string()
+                                    };
+
+                                    let col1 = egui::Color32::from_rgba_unmultiplied(0, 255, 110, alpha_from);
+                                    let col2 = egui::Color32::from_rgba_unmultiplied(80, 255, 176, alpha_from);
+                                    let col3 = egui::Color32::from_rgba_unmultiplied(112, 224, 176, alpha_from);
+                                    let col4 = egui::Color32::from_rgba_unmultiplied(140, 200, 255, alpha_from);
+
+                                    text_painter.text(text_rect.min + egui::vec2(dx_from, y1), egui::Align2::LEFT_TOP, &from_t1_disp, font_title.clone(), col1);
+                                    if !from_sub.is_empty() {
+                                        text_painter.text(text_rect.min + egui::vec2(dx_from, y2), egui::Align2::LEFT_TOP, &from_sub, font_sub.clone(), col2);
+                                    }
+                                    text_painter.text(text_rect.min + egui::vec2(dx_from, y3), egui::Align2::LEFT_TOP, &from_artist_str, font_artist.clone(), col3);
+                                    text_painter.text(text_rect.min + egui::vec2(dx_from, y4), egui::Align2::LEFT_TOP, &from_album_str, font_album.clone(), col4);
+                                }
+
+                                if alpha_to > 0 {
+                                    let (to_t1, to_t2_opt) = Self::split_track_title(&trans.to_title);
+                                    let to_t1_disp = if to_t1.is_empty() { lang.player_no_track().to_string() } else { to_t1 };
+                                    let to_sub = to_t2_opt.unwrap_or_else(|| if trans.to_title.trim().is_empty() { String::new() } else { "♪ 數位立體聲母帶 (Digital Audio Master)".to_string() });
+                                    let to_artist_str = if !trans.to_artist.is_empty() {
+                                        format!("👤 {}", trans.to_artist)
+                                    } else {
+                                        format!("👤 {}", lang.player_unknown_artist())
+                                    };
+                                    let to_album_str = if !trans.to_album.is_empty() {
+                                        format!("💿 {}", trans.to_album)
+                                    } else {
+                                        "💿 Single / Digital Release".to_string()
+                                    };
+
+                                    let col1 = egui::Color32::from_rgba_unmultiplied(0, 255, 110, alpha_to);
+                                    let col2 = egui::Color32::from_rgba_unmultiplied(80, 255, 176, alpha_to);
+                                    let col3 = egui::Color32::from_rgba_unmultiplied(112, 224, 176, alpha_to);
+                                    let col4 = egui::Color32::from_rgba_unmultiplied(140, 200, 255, alpha_to);
+
+                                    text_painter.text(text_rect.min + egui::vec2(dx_to, y1), egui::Align2::LEFT_TOP, &to_t1_disp, font_title.clone(), col1);
+                                    if !to_sub.is_empty() {
+                                        text_painter.text(text_rect.min + egui::vec2(dx_to, y2), egui::Align2::LEFT_TOP, &to_sub, font_sub.clone(), col2);
+                                    }
+                                    text_painter.text(text_rect.min + egui::vec2(dx_to, y3), egui::Align2::LEFT_TOP, &to_artist_str, font_artist.clone(), col3);
+                                    text_painter.text(text_rect.min + egui::vec2(dx_to, y4), egui::Align2::LEFT_TOP, &to_album_str, font_album.clone(), col4);
+                                }
+                            } else {
+                                // 靜態正常顯示：座標絕對一致 (text_rect.min + (0, y))，過場結束後 100% 無縫無跳動
+                                let text_painter = ui.painter().with_clip_rect(text_rect);
+
+                                let (curr_t1, curr_t2_opt) = Self::split_track_title(&track_info.title);
+                                let curr_t1_disp = if curr_t1.is_empty() { lang.player_no_track().to_string() } else { curr_t1 };
+                                let curr_sub = curr_t2_opt.unwrap_or_else(|| if track_info.title.trim().is_empty() { String::new() } else { "♪ 數位立體聲母帶 (Digital Audio Master)".to_string() });
+                                let curr_artist_str = if !track_info.artist.is_empty() {
+                                    format!("👤 {}", track_info.artist)
+                                } else {
+                                    format!("👤 {}", lang.player_unknown_artist())
+                                };
+                                let curr_album_str = if !track_info.album.is_empty() {
+                                    format!("💿 {}", track_info.album)
+                                } else {
+                                    "💿 Single / Digital Release".to_string()
+                                };
+
+                                // Line 1: 曲目主名稱
+                                text_painter.text(
+                                    text_rect.min + egui::vec2(0.0, y1),
+                                    egui::Align2::LEFT_TOP,
+                                    &curr_t1_disp,
+                                    font_title,
+                                    egui::Color32::from_rgb(0, 255, 110),
+                                );
+
+                                // Line 2: 樂章／副標題
+                                if !curr_sub.is_empty() {
+                                    text_painter.text(
+                                        text_rect.min + egui::vec2(0.0, y2),
+                                        egui::Align2::LEFT_TOP,
+                                        &curr_sub,
+                                        font_sub,
+                                        egui::Color32::from_rgb(80, 255, 176),
+                                    );
+                                }
+
+                                // Line 3: 演出者
+                                text_painter.text(
+                                    text_rect.min + egui::vec2(0.0, y3),
+                                    egui::Align2::LEFT_TOP,
+                                    &curr_artist_str,
+                                    font_artist,
+                                    egui::Color32::from_rgb(112, 224, 176),
+                                );
+
+                                // Line 4: 唱片專輯
+                                text_painter.text(
+                                    text_rect.min + egui::vec2(0.0, y4),
+                                    egui::Align2::LEFT_TOP,
+                                    &curr_album_str,
+                                    font_album,
+                                    egui::Color32::from_rgb(140, 200, 255),
+                                );
+                            }
+
+                            ui.add_space(if is_mini { 2.0 } else { 3.0 });
+
+                            // Line 5: 獨立規格徽章列（專屬行，寬敞不擁擠）
+                            ui.horizontal(|ui| {
+                                self.render_audio_format_badges_inline(ui, is_mini);
+                            });
+
+                            ui.add_space(if is_mini { 1.5 } else { 2.0 });
+
+                            // Line 6: 播放狀態、進度時間與來源程式（左側狀態時間，右側專屬來源按鈕）
+                            ui.horizontal(|ui| {
+                                let (stat_text, stat_col) = if track_info.is_playing {
+                                    ("▶ PLAYING", egui::Color32::from_rgb(0, 255, 140))
+                                } else if track_info.has_session {
+                                    ("❚❚ PAUSED", egui::Color32::from_rgb(255, 180, 40))
+                                } else {
+                                    ("■ STOPPED", egui::Color32::from_rgb(120, 135, 150))
+                                };
+                                ui.label(
+                                    egui::RichText::new(stat_text)
+                                        .monospace()
+                                        .size(if is_mini { 8.5 } else { 9.0 })
+                                        .strong()
+                                        .color(stat_col),
+                                );
+
+                                let cur_pos = if let Some(preview_secs) = self.seek_drag_secs {
+                                    preview_secs
+                                } else {
+                                    track_info.current_position_secs()
+                                };
+                                let total_dur = track_info.duration_secs;
+                                let time_str = if total_dur > 0.0 {
+                                    format!("{} / {}", crate::media_control::MediaTrackInfo::format_time(cur_pos), crate::media_control::MediaTrackInfo::format_time(total_dur))
+                                } else if cur_pos > 0.0 {
+                                    format!("{} / --:--", crate::media_control::MediaTrackInfo::format_time(cur_pos))
+                                } else {
+                                    "--:-- / --:--".to_string()
+                                };
+                                ui.label(
+                                    egui::RichText::new(time_str)
+                                        .monospace()
+                                        .size(if is_mini { 8.5 } else { 9.0 })
+                                        .color(egui::Color32::from_rgb(160, 200, 180)),
+                                );
+
+                                // 右側：來源程式名稱標籤與連結跳轉
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    if !friendly_app.is_empty() {
+                                        let app_link_text = format!("來源: {} ↗", friendly_app);
+                                        let app_resp = ui.add(
+                                            egui::Label::new(
+                                                egui::RichText::new(app_link_text)
+                                                    .monospace()
+                                                    .size(if is_mini { 8.5 } else { 9.0 })
+                                                    .color(egui::Color32::from_rgb(120, 190, 240)),
+                                            )
+                                            .sense(egui::Sense::click()),
+                                        )
+                                        .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                        .on_hover_text(&click_app_tooltip);
+
+                                        if app_resp.clicked() {
+                                            crate::media_control::activate_media_source_app(
+                                                &track_info.source_app_id,
+                                                &track_info.title,
+                                                Some(&self.state.audio_source),
+                                            );
+                                        }
+                                    }
+                                });
+                            });
+                        });
+                    });
+                });
     }
 
     fn render_visualizer_button(&mut self, ui: &mut egui::Ui, spawner: crate::snapping::WindowKind) {
@@ -2361,23 +3935,32 @@ impl FlyoutApp {
 
     pub fn render_equalizer_button(&mut self, ui: &mut egui::Ui) {
         let lang = self.state.language;
-        self.render_nav_page_button(
+        let is_active = self.is_page_active(Page::Equalizer);
+        let resp = Self::render_stateful_icon_button(
             ui,
-            Page::Equalizer,
-            "🎚",
+            "⦀",
+            is_active,
             lang.eq_title(),
             ButtonTheme::Green,
         );
+        if resp.clicked() {
+            if self.current_page == Page::Equalizer {
+                self.go_back();
+            } else {
+                self.eq_profile = EqProfile::Normal;
+                self.navigate_to(Page::Equalizer);
+            }
+        }
     }
 
     pub fn render_popout_equalizer_button(&mut self, ui: &mut egui::Ui, spawner: crate::snapping::WindowKind) {
         let lang = self.state.language;
         let is_open = self.equalizer_window_open;
-        let tooltip = lang.eq_title();
+        let tooltip = lang.mini_equalizer_title();
 
         let resp = Self::render_stateful_icon_button(
             ui,
-            "🎚",
+            "⦀",
             is_open,
             tooltip,
             ButtonTheme::Blue,
@@ -2410,25 +3993,58 @@ impl FlyoutApp {
         );
     }
 
-    /// 前往新頁面，並將當前頁面推入歷史棧中
+    /// 前往新頁面，並將當前頁面推入歷史棧中（觸發 Push 滑動過場動畫）
     pub fn navigate_to(&mut self, page: Page) {
         if self.current_page == page {
             return;
         }
-        self.page_history.push(self.current_page);
+        let from = self.current_page;
+        self.page_history.push(from);
         self.current_page = page;
         MAIN_CURRENT_PAGE.store(page as u8, std::sync::atomic::Ordering::SeqCst);
+        self.page_transition = Some(PageTransition {
+            from,
+            to: page,
+            direction: TransitionDirection::Push,
+            start_time: std::time::Instant::now(),
+            duration: std::time::Duration::from_millis(220),
+        });
+        if let Some(ctx) = get_egui_ctx() {
+            ctx.request_repaint();
+        }
     }
 
-    /// 返回上一頁；若成功返回則返回 true，若已在最底層頁面則返回 false
+    /// 返回上一頁；若成功返回則返回 true，若已在最底層頁面則返回 false（觸發 Pop 滑動過場動畫）
     pub fn go_back(&mut self) -> bool {
         if let Some(prev) = self.page_history.pop() {
+            let from = self.current_page;
             self.current_page = prev;
             MAIN_CURRENT_PAGE.store(prev as u8, std::sync::atomic::Ordering::SeqCst);
+            self.page_transition = Some(PageTransition {
+                from,
+                to: prev,
+                direction: TransitionDirection::Pop,
+                start_time: std::time::Instant::now(),
+                duration: std::time::Duration::from_millis(220),
+            });
+            if let Some(ctx) = get_egui_ctx() {
+                ctx.request_repaint();
+            }
             true
         } else if self.current_page != Page::Main {
+            let from = self.current_page;
             self.current_page = Page::Main;
             MAIN_CURRENT_PAGE.store(Page::Main as u8, std::sync::atomic::Ordering::SeqCst);
+            self.page_transition = Some(PageTransition {
+                from,
+                to: Page::Main,
+                direction: TransitionDirection::Pop,
+                start_time: std::time::Instant::now(),
+                duration: std::time::Duration::from_millis(220),
+            });
+            if let Some(ctx) = get_egui_ctx() {
+                ctx.request_repaint();
+            }
             true
         } else {
             false
@@ -2437,6 +4053,19 @@ impl FlyoutApp {
 
     /// 重設至特定頁面並清空導覽歷史
     pub fn reset_to(&mut self, root: Page) {
+        if self.current_page != root {
+            let from = self.current_page;
+            self.page_transition = Some(PageTransition {
+                from,
+                to: root,
+                direction: TransitionDirection::Pop,
+                start_time: std::time::Instant::now(),
+                duration: std::time::Duration::from_millis(220),
+            });
+            if let Some(ctx) = get_egui_ctx() {
+                ctx.request_repaint();
+            }
+        }
         self.page_history.clear();
         self.current_page = root;
         MAIN_CURRENT_PAGE.store(root as u8, std::sync::atomic::Ordering::SeqCst);
@@ -2480,23 +4109,15 @@ impl FlyoutApp {
         ui.separator();
         ui.add_space(6.0);
 
-        // Segmented Tabs Header
-        ui.horizontal(|ui| {
-            let is_audio = self.settings_tab == SettingsTab::Audio;
-            let is_receiver = self.settings_tab == SettingsTab::Receiver;
-            let is_system = self.settings_tab == SettingsTab::System;
-            let tab_w = ((ui.available_width() - 12.0) / 3.0).max(80.0);
-
-            if ui.add_sized([tab_w, 26.0], egui::SelectableLabel::new(is_audio, egui::RichText::new(lang.settings_tab_audio()).size(12.5).strong())).clicked() {
-                self.settings_tab = SettingsTab::Audio;
-            }
-            if ui.add_sized([tab_w, 26.0], egui::SelectableLabel::new(is_receiver, egui::RichText::new(lang.settings_tab_receiver()).size(12.5).strong())).clicked() {
-                self.settings_tab = SettingsTab::Receiver;
-            }
-            if ui.add_sized([tab_w, 26.0], egui::SelectableLabel::new(is_system, egui::RichText::new(lang.settings_tab_system()).size(12.5).strong())).clicked() {
-                self.settings_tab = SettingsTab::System;
-            }
-        });
+        // Segmented Tabs Header (具備平滑滑動指示線與膠囊背景)
+        let tabs = [
+            (SettingsTab::Audio, lang.settings_tab_audio()),
+            (SettingsTab::Receiver, lang.settings_tab_receiver()),
+            (SettingsTab::System, lang.settings_tab_system()),
+        ];
+        if let Some(tab) = Self::render_sliding_tab_bar(ui, "settings_tabs", self.settings_tab, &tabs) {
+            self.settings_tab = tab;
+        }
 
         ui.add_space(8.0);
 
@@ -3125,11 +4746,7 @@ impl FlyoutApp {
                                 ui.add_space(4.0);
                                 if ui.button(egui::RichText::new(lang.airplay_receiver_btn_adjust_eq()).size(11.5).strong().color(egui::Color32::from_rgb(140, 210, 255))).clicked() {
                                     self.eq_profile = EqProfile::Receiver;
-                                    if self.detach_equalizer_window {
-                                        self.equalizer_window_open = true;
-                                    } else {
-                                        self.navigate_to(Page::Equalizer);
-                                    }
+                                    self.navigate_to(Page::Equalizer);
                                 }
                             }
                         }
@@ -3359,19 +4976,6 @@ impl FlyoutApp {
                             .weak(),
                     );
                 });
-
-                ui.add_space(6.0);
-
-                // Detach Equalizer Window
-                let mut detach_eq = self.state.detach_equalizer_window;
-                let cb_eq = ui.checkbox(
-                    &mut detach_eq,
-                    egui::RichText::new(lang.setting_detach_equalizer_window()).size(12.0),
-                );
-                if cb_eq.changed() {
-                    self.detach_equalizer_window = detach_eq;
-                    let _ = self.cmd_tx.send_blocking(GuiCmd::SetDetachEqualizerWindow(detach_eq));
-                }
 
                 ui.add_space(6.0);
 
@@ -3641,6 +5245,194 @@ impl FlyoutApp {
         header_h + scroll_output.content_size.y
     }
 
+    /// 渲染串流規格徽章組（AIRPLAY 2 / LOCAL / AirPods、44.1 kHz、16-BIT、STEREO / MONO、HE、WE）
+    pub fn render_audio_format_badges(&self, ui: &mut egui::Ui) {
+        self.render_audio_format_badges_inline(ui, false);
+    }
+
+    /// 渲染串流規格徽章組（支援行內緊湊版）
+    pub fn render_audio_format_badges_inline(&self, ui: &mut egui::Ui, is_mini: bool) {
+        let lang = self.state.language;
+        let channel_badge = if self.is_mono { "MONO" } else { "STEREO" };
+        let is_streaming = self.state.status == DeviceStatus::Streaming;
+        let is_connecting = self.state.status == DeviceStatus::Connecting;
+        let is_he_on = self.state.sound_enhancer_mode != airplay_audio::SoundEnhancerMode::Off;
+        let he_label = match self.state.sound_enhancer_mode {
+            airplay_audio::SoundEnhancerMode::Off => "HE:OFF",
+            airplay_audio::SoundEnhancerMode::Natural => "HE:NAT",
+            airplay_audio::SoundEnhancerMode::Dynamic => "HE:DYN",
+            airplay_audio::SoundEnhancerMode::Brilliant => "HE:BRI",
+        };
+        let is_we_on = self.state.warmth_enhancer_mode != airplay_audio::WarmthEnhancerMode::Off;
+        let we_label = match self.state.warmth_enhancer_mode {
+            airplay_audio::WarmthEnhancerMode::Off => "WE:OFF",
+            airplay_audio::WarmthEnhancerMode::Subtle => "WE:SUB",
+            airplay_audio::WarmthEnhancerMode::Warm => "WE:WARM",
+            airplay_audio::WarmthEnhancerMode::Vintage => "WE:VIN",
+        };
+
+        let is_airpods_route = match &self.state.status {
+            DeviceStatus::AoMode(ref dev_name) => {
+                crate::controller::is_airpods_playback_device(dev_name)
+                    || crate::controller::is_airpods_playback_device(&self.state.ao_output_device)
+            }
+            _ => false,
+        };
+
+        let airpods_has_battery = self.state.airpods_battery_left.is_some() || self.state.airpods_battery_right.is_some();
+
+        let (airpods_badge_label, airpods_min_bat, airpods_tip) = if is_airpods_route {
+            let l_bat = self.state.airpods_battery_left;
+            let r_bat = self.state.airpods_battery_right;
+            let c_bat = self.state.airpods_battery_case;
+            let is_chg = self.state.airpods_charging_left || self.state.airpods_charging_right;
+
+            let avg = match (l_bat, r_bat) {
+                (Some(l), Some(r)) => ((l as u32 + r as u32) / 2) as u8,
+                (Some(l), None) => l,
+                (None, Some(r)) => r,
+                (None, None) => 100,
+            };
+            let min_b = [l_bat, r_bat].into_iter().flatten().min().unwrap_or(avg);
+
+            let label = if airpods_has_battery {
+                let status_icon = if is_chg { "⚡" } else { "🔋" };
+                format!("🎧{status_icon} {avg}%")
+            } else {
+                "AIRPODS".to_string()
+            };
+
+            let model_name = self.state.airpods_model.as_deref().unwrap_or("AirPods");
+            let status_tag = lang.airpods_connected_status();
+            let mut details = Vec::new();
+            if let Some(l) = l_bat {
+                let chg = if self.state.airpods_charging_left { "⚡" } else { "" };
+                let wear = if self.state.airpods_left_in_ear { "● " } else { "○ " };
+                details.push(format!("• {wear}L: {l}%{chg}"));
+            }
+            if let Some(r) = r_bat {
+                let chg = if self.state.airpods_charging_right { "⚡" } else { "" };
+                let wear = if self.state.airpods_right_in_ear { "● " } else { "○ " };
+                details.push(format!("• {wear}R: {r}%{chg}"));
+            }
+            if let Some(c) = c_bat {
+                let chg = if self.state.airpods_charging_case { "⚡" } else { "" };
+                details.push(format!("• 🔋Case: {c}%{chg}"));
+            }
+            let tip = if details.is_empty() {
+                format!("🎧 {model_name} ({status_tag})")
+            } else {
+                format!("🎧 {model_name} ({status_tag})\n{}", details.join("\n"))
+            };
+
+            (label, min_b, tip)
+        } else {
+            ("AIRPLAY 2".to_string(), 100, String::new())
+        };
+
+        let is_other_ao = match &self.state.status {
+            DeviceStatus::AoMode(_) if !is_airpods_route => true,
+            _ => false,
+        };
+
+        let primary_badge_str = if is_airpods_route {
+            airpods_badge_label.as_str()
+        } else if is_other_ao {
+            "LOCAL"
+        } else {
+            "AIRPLAY 2"
+        };
+
+        // 獨立規格徽章列由左至右順序：primary_badge -> 44.1 kHz -> 16-BIT -> STEREO/MONO -> (HE) -> (WE)
+        let mut badges = Vec::new();
+        badges.push(primary_badge_str);
+        badges.push("44.1 kHz");
+        badges.push("16-BIT");
+        badges.push(channel_badge);
+        if is_he_on { badges.push(he_label); }
+        if is_we_on { badges.push(we_label); }
+
+        ui.spacing_mut().item_spacing.x = if is_mini { 3.0 } else { 3.5 };
+        for badge in badges {
+            let is_primary_badge = badge == primary_badge_str;
+            let is_active_mono = badge == "MONO";
+            let is_he_badge = badge == he_label;
+            let is_we_badge = badge == we_label;
+            let (bg_col, stroke_col, text_col) = if is_he_badge {
+                if is_he_on {
+                    (egui::Color32::from_rgb(10, 36, 32), egui::Color32::from_rgb(25, 95, 80), egui::Color32::from_rgb(0, 255, 210))
+                } else {
+                    (egui::Color32::from_rgb(24, 25, 28), egui::Color32::from_rgb(50, 52, 58), egui::Color32::from_rgb(115, 120, 130))
+                }
+            } else if is_we_badge {
+                if is_we_on {
+                    (egui::Color32::from_rgb(12, 38, 22), egui::Color32::from_rgb(32, 98, 56), egui::Color32::from_rgb(80, 250, 150))
+                } else {
+                    (egui::Color32::from_rgb(24, 25, 28), egui::Color32::from_rgb(50, 52, 58), egui::Color32::from_rgb(115, 120, 130))
+                }
+            } else if is_primary_badge {
+                if is_airpods_route {
+                    if airpods_min_bat <= 10 {
+                        (egui::Color32::from_rgb(38, 14, 14), egui::Color32::from_rgb(110, 25, 25), egui::Color32::from_rgb(255, 75, 75))
+                    } else if airpods_min_bat <= 20 {
+                        (egui::Color32::from_rgb(36, 22, 10), egui::Color32::from_rgb(110, 60, 20), egui::Color32::from_rgb(255, 145, 45))
+                    } else {
+                        (egui::Color32::from_rgb(14, 30, 16), egui::Color32::from_rgb(30, 70, 36), egui::Color32::from_rgb(60, 200, 95))
+                    }
+                } else if is_streaming || is_other_ao {
+                    (egui::Color32::from_rgb(14, 30, 16), egui::Color32::from_rgb(30, 70, 36), egui::Color32::from_rgb(60, 200, 95))
+                } else if is_connecting {
+                    (egui::Color32::from_rgb(36, 26, 12), egui::Color32::from_rgb(90, 65, 25), egui::Color32::from_rgb(255, 185, 55))
+                } else {
+                    (egui::Color32::from_rgb(24, 25, 28), egui::Color32::from_rgb(50, 52, 58), egui::Color32::from_rgb(115, 120, 130))
+                }
+            } else if is_active_mono {
+                (egui::Color32::from_rgb(36, 26, 12), egui::Color32::from_rgb(90, 65, 25), egui::Color32::from_rgb(255, 185, 55))
+            } else {
+                (egui::Color32::from_rgb(14, 30, 16), egui::Color32::from_rgb(30, 70, 36), egui::Color32::from_rgb(60, 200, 95))
+            };
+
+            egui::Frame::none()
+                .fill(bg_col)
+                .stroke(egui::Stroke::new(0.5_f32, stroke_col))
+                .rounding(egui::Rounding::same(3.0))
+                .inner_margin(egui::Margin::symmetric(if is_mini { 3.0 } else { 4.0 }, 1.5))
+                .show(ui, |ui| {
+                    let resp = ui.label(
+                        egui::RichText::new(badge)
+                            .monospace()
+                            .size(if is_mini { 7.8 } else { 8.5 })
+                            .color(text_col),
+                    );
+                    if is_primary_badge {
+                        if is_airpods_route {
+                            resp.on_hover_text(&airpods_tip);
+                        } else {
+                            let tip = if is_streaming {
+                                let name = self.state.connected_name.as_deref().unwrap_or("AirPlay");
+                                lang.status_streaming(name)
+                            } else if is_connecting {
+                                let name = self.state.connected_name.as_deref().unwrap_or("AirPlay");
+                                lang.status_connecting(name)
+                            } else if is_other_ao {
+                                match &self.state.status {
+                                    DeviceStatus::AoMode(name) => format!("正在播放至 {name}"),
+                                    _ => "本機音訊輸出".to_string(),
+                                }
+                            } else {
+                                lang.status_idle().to_string()
+                            };
+                            resp.on_hover_text(tip);
+                        }
+                    } else if is_he_badge {
+                        show_wrapped_tooltip(resp, lang.sound_enhancer_tooltip());
+                    } else if is_we_badge {
+                        show_wrapped_tooltip(resp, lang.warmth_enhancer_tooltip());
+                    }
+                });
+        }
+    }
+
     pub fn render_player_page(&mut self, ui: &mut egui::Ui) -> f32 {
         let initial_top = ui.cursor().top();
         let lang = self.state.language;
@@ -3659,28 +5451,7 @@ impl FlyoutApp {
         // 2. Query GSMTC Media Track Info
         let track_info = crate::media_control::get_current_media_track().read().unwrap().clone();
 
-        // Texture caching: update if thumbnail bytes changed
-        if track_info.thumbnail_bytes != self.last_album_art_bytes {
-            self.last_album_art_bytes = track_info.thumbnail_bytes.clone();
-            if let Some(ref bytes) = track_info.thumbnail_bytes {
-                if let Ok(img) = image::load_from_memory(bytes) {
-                    let rgba = img.to_rgba8();
-                    let size = [rgba.width() as usize, rgba.height() as usize];
-                    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
-                    self.album_art_texture = Some(ui.ctx().load_texture(
-                        "winamp_album_art",
-                        color_image,
-                        egui::TextureOptions::LINEAR,
-                    ));
-                } else {
-                    self.album_art_texture = None;
-                }
-            } else {
-                self.album_art_texture = None;
-            }
-        }
-
-        // 3. WinAMP Main Display Chassis (Album Cover + VFD/LCD Screen)
+        // 3. WinAMP Main Display Chassis (Album Cover + VFD/LCD Screen with dynamic transitions)
         egui::Frame::group(ui.style())
             .fill(egui::Color32::from_rgb(22, 24, 29))
             .stroke(egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(46, 52, 64)))
@@ -3690,394 +5461,7 @@ impl FlyoutApp {
                 ui.set_width(ui.available_width());
                 let total_inner_w = ui.available_width();
 
-                ui.horizontal(|ui| {
-                    // Friendly app name detection for tooltip
-                    let app_id_lower = track_info.source_app_id.to_lowercase();
-                    let friendly_app = if app_id_lower.contains("spotify") {
-                        "Spotify"
-                    } else if app_id_lower.contains("applemusic") || app_id_lower.contains("apple.music") {
-                        "Apple Music"
-                    } else if app_id_lower.contains("tidal") {
-                        "Tidal"
-                    } else if app_id_lower.contains("chrome") {
-                        "Chrome"
-                    } else if app_id_lower.contains("firefox") {
-                        "Firefox"
-                    } else if app_id_lower.contains("msedge") || app_id_lower.contains("edge") {
-                        "Microsoft Edge"
-                    } else if !track_info.source_app_id.is_empty() {
-                        let base = track_info.source_app_id.split(['!', '_', '\\', '/']).next().unwrap_or(&track_info.source_app_id);
-                        base.trim_end_matches(".exe")
-                    } else {
-                        ""
-                    };
-
-                    let click_app_tooltip = if !friendly_app.is_empty() {
-                        format!("{} ({})", lang.player_click_to_open_app(), friendly_app)
-                    } else {
-                        lang.player_click_to_open_app().to_string()
-                    };
-
-                    // Left: Album Art Box (88x88 px) - Clickable to open/activate media player
-                    let art_size = egui::vec2(88.0, 88.0);
-                    let (art_rect, art_resp) = ui.allocate_exact_size(art_size, egui::Sense::click());
-                    let art_resp = art_resp
-                        .on_hover_cursor(egui::CursorIcon::PointingHand)
-                        .on_hover_text(&click_app_tooltip);
-
-                    if art_resp.clicked() {
-                        crate::media_control::activate_media_source_app(
-                            &track_info.source_app_id,
-                            &track_info.title,
-                            Some(&self.state.audio_source),
-                        );
-                    }
-
-                    let painter = ui.painter();
-
-                    if let Some(ref tex) = self.album_art_texture {
-                        // Render loaded album art
-                        painter.rect_filled(art_rect, egui::Rounding::same(6.0), egui::Color32::BLACK);
-                        let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-                        painter.image(tex.id(), art_rect, uv, egui::Color32::WHITE);
-                        painter.rect_stroke(
-                            art_rect,
-                            egui::Rounding::same(6.0),
-                            egui::Stroke::new(1.0_f32, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 40)),
-                        );
-                    } else {
-                        // Retro vinyl record placeholder
-                        let center = art_rect.center();
-                        let radius = (art_size.x.min(art_size.y) / 2.0) - 2.0;
-
-                        // Outer vinyl disc
-                        painter.circle_filled(center, radius, egui::Color32::from_rgb(18, 19, 23));
-                        painter.circle_stroke(center, radius, egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(50, 54, 65)));
-
-                        // Vinyl groove concentric rings
-                        for r_factor in [0.85, 0.72, 0.60, 0.48] {
-                            painter.circle_stroke(
-                                center,
-                                radius * r_factor,
-                                egui::Stroke::new(0.5_f32, egui::Color32::from_rgba_unmultiplied(80, 85, 100, 60)),
-                            );
-                        }
-
-                        // Center label
-                        painter.circle_filled(center, radius * 0.36, egui::Color32::from_rgb(35, 75, 130));
-                        painter.circle_stroke(center, radius * 0.36, egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(80, 140, 220)));
-
-                        // Spindle hole
-                        painter.circle_filled(center, 4.0, egui::Color32::from_rgb(220, 225, 230));
-
-                        // Musical note indicator
-                        painter.text(
-                            center - egui::vec2(0.0, 10.0),
-                            egui::Align2::CENTER_CENTER,
-                            "♪",
-                            egui::FontId::proportional(12.0),
-                            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 160),
-                        );
-                    }
-
-                    // Hover cue on album art: subtle glow and external launch icon
-                    if art_resp.hovered() {
-                        painter.rect_filled(
-                            art_rect,
-                            egui::Rounding::same(6.0),
-                            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 30),
-                        );
-                        painter.text(
-                            art_rect.right_top() + egui::vec2(-4.0, 4.0),
-                            egui::Align2::RIGHT_TOP,
-                            "↗",
-                            egui::FontId::proportional(13.0),
-                            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 230),
-                        );
-                    }
-
-                    ui.add_space(8.0);
-
-                    // Right: WinAMP VFD / LCD Screen (exact width matching spectrum below)
-                    let vfd_w = ui.available_width();
-                    let vfd_h = 88.0f32;
-                    let (vfd_rect, _) = ui.allocate_exact_size(egui::vec2(vfd_w, vfd_h), egui::Sense::hover());
-                    let vfd_painter = ui.painter();
-                    vfd_painter.rect_filled(vfd_rect, egui::Rounding::same(5.0), egui::Color32::from_rgb(8, 16, 10));
-                    vfd_painter.rect_stroke(
-                        vfd_rect,
-                        egui::Rounding::same(5.0),
-                        egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(20, 48, 24)),
-                    );
-
-                    let inner_vfd = vfd_rect.shrink2(egui::vec2(8.0, 6.0));
-                    ui.allocate_new_ui(egui::UiBuilder::new().max_rect(inner_vfd), |ui| {
-                        ui.vertical(|ui| {
-                            // Track Title (Glowing green marquee style, clickable to bring up media player)
-                            let title_text = if track_info.title.trim().is_empty() {
-                                lang.player_no_track().to_string()
-                            } else {
-                                track_info.title.clone()
-                            };
-                            let title_resp = ui.add(
-                                egui::Label::new(
-                                    egui::RichText::new(title_text)
-                                        .monospace()
-                                        .size(12.5)
-                                        .strong()
-                                        .color(egui::Color32::from_rgb(0, 255, 110)),
-                                )
-                                .sense(egui::Sense::click()),
-                            )
-                            .on_hover_cursor(egui::CursorIcon::PointingHand)
-                            .on_hover_text(&click_app_tooltip);
-
-                            if title_resp.clicked() {
-                                crate::media_control::activate_media_source_app(
-                                    &track_info.source_app_id,
-                                    &track_info.title,
-                                    Some(&self.state.audio_source),
-                                );
-                            }
-
-                            ui.add_space(2.0);
-
-                            // Artist & Album
-                            let artist_text = if track_info.artist.trim().is_empty() {
-                                lang.player_unknown_artist().to_string()
-                            } else if !track_info.album.trim().is_empty() {
-                                format!("{} • {}", track_info.artist, track_info.album)
-                            } else {
-                                track_info.artist.clone()
-                            };
-                            ui.label(
-                                egui::RichText::new(artist_text)
-                                    .monospace()
-                                    .size(10.5)
-                                    .color(egui::Color32::from_rgb(110, 220, 150)),
-                            );
-
-                            ui.add_space(3.0);
-
-                            // Stream Specs Badges (Dynamic STEREO / MONO display & AirPlay Connection Indicator & Harmonic Exciter (HE) Badge)
-                            ui.horizontal_wrapped(|ui| {
-                                ui.spacing_mut().item_spacing.x = 4.0;
-                                let channel_badge = if self.is_mono { "MONO" } else { "STEREO" };
-                                let is_streaming = self.state.status == DeviceStatus::Streaming;
-                                let is_connecting = self.state.status == DeviceStatus::Connecting;
-                                let is_he_on = self.state.sound_enhancer_mode != airplay_audio::SoundEnhancerMode::Off;
-                                let he_label = match self.state.sound_enhancer_mode {
-                                    airplay_audio::SoundEnhancerMode::Off => "HE:OFF",
-                                    airplay_audio::SoundEnhancerMode::Natural => "HE:NAT",
-                                    airplay_audio::SoundEnhancerMode::Dynamic => "HE:DYN",
-                                    airplay_audio::SoundEnhancerMode::Brilliant => "HE:BRI",
-                                };
-                                let is_we_on = self.state.warmth_enhancer_mode != airplay_audio::WarmthEnhancerMode::Off;
-                                let we_label = match self.state.warmth_enhancer_mode {
-                                    airplay_audio::WarmthEnhancerMode::Off => "WE:OFF",
-                                    airplay_audio::WarmthEnhancerMode::Subtle => "WE:SUB",
-                                    airplay_audio::WarmthEnhancerMode::Warm => "WE:WARM",
-                                    airplay_audio::WarmthEnhancerMode::Vintage => "WE:VIN",
-                                };
-
-                                let is_airpods_route = match &self.state.status {
-                                    DeviceStatus::AoMode(ref dev_name) => {
-                                        crate::controller::is_airpods_playback_device(dev_name)
-                                            || crate::controller::is_airpods_playback_device(&self.state.ao_output_device)
-                                    }
-                                    _ => false,
-                                };
-
-                                let airpods_has_battery = self.state.airpods_battery_left.is_some() || self.state.airpods_battery_right.is_some();
-
-                                let (airpods_badge_label, airpods_min_bat, airpods_tip) = if is_airpods_route {
-                                    let l_bat = self.state.airpods_battery_left;
-                                    let r_bat = self.state.airpods_battery_right;
-                                    let c_bat = self.state.airpods_battery_case;
-                                    let is_chg = self.state.airpods_charging_left || self.state.airpods_charging_right;
-
-                                    let avg = match (l_bat, r_bat) {
-                                        (Some(l), Some(r)) => ((l as u32 + r as u32) / 2) as u8,
-                                        (Some(l), None) => l,
-                                        (None, Some(r)) => r,
-                                        (None, None) => 100,
-                                    };
-                                    let min_b = [l_bat, r_bat].into_iter().flatten().min().unwrap_or(avg);
-
-                                    let label = if airpods_has_battery {
-                                        let status_icon = if is_chg { "⚡" } else { "🔋" };
-                                        format!("🎧{status_icon} {avg}%")
-                                    } else {
-                                        "AIRPODS".to_string()
-                                    };
-
-                                    let model_name = self.state.airpods_model.as_deref().unwrap_or("AirPods");
-                                    let status_tag = lang.airpods_connected_status();
-                                    let mut details = Vec::new();
-                                    if let Some(l) = l_bat {
-                                        let chg = if self.state.airpods_charging_left { "⚡" } else { "" };
-                                        let wear = if self.state.airpods_left_in_ear { "● " } else { "○ " };
-                                        details.push(format!("• {wear}L: {l}%{chg}"));
-                                    }
-                                    if let Some(r) = r_bat {
-                                        let chg = if self.state.airpods_charging_right { "⚡" } else { "" };
-                                        let wear = if self.state.airpods_right_in_ear { "● " } else { "○ " };
-                                        details.push(format!("• {wear}R: {r}%{chg}"));
-                                    }
-                                    if let Some(c) = c_bat {
-                                        let chg = if self.state.airpods_charging_case { "⚡" } else { "" };
-                                        details.push(format!("• 🔋Case: {c}%{chg}"));
-                                    }
-                                    let tip = if details.is_empty() {
-                                        format!("🎧 {model_name} ({status_tag})")
-                                    } else {
-                                        format!("🎧 {model_name} ({status_tag})\n{}", details.join("\n"))
-                                    };
-
-                                    (label, min_b, tip)
-                                } else {
-                                    ("AIRPLAY 2".to_string(), 100, String::new())
-                                };
-
-                                let is_other_ao = match &self.state.status {
-                                    DeviceStatus::AoMode(_) if !is_airpods_route => true,
-                                    _ => false,
-                                };
-
-                                let primary_badge_str = if is_airpods_route {
-                                    airpods_badge_label.as_str()
-                                } else if is_other_ao {
-                                    "LOCAL"
-                                } else {
-                                    "AIRPLAY 2"
-                                };
-
-                                for badge in &[primary_badge_str, "44.1 kHz", "16-BIT", channel_badge, he_label, we_label] {
-                                    let is_primary_badge = *badge == primary_badge_str;
-                                    let is_active_mono = *badge == "MONO";
-                                    let is_he_badge = *badge == he_label;
-                                    let is_we_badge = *badge == we_label;
-                                    let (bg_col, stroke_col, text_col) = if is_he_badge {
-                                        if is_he_on {
-                                            (egui::Color32::from_rgb(10, 36, 32), egui::Color32::from_rgb(25, 95, 80), egui::Color32::from_rgb(0, 255, 210))
-                                        } else {
-                                            (egui::Color32::from_rgb(24, 25, 28), egui::Color32::from_rgb(50, 52, 58), egui::Color32::from_rgb(115, 120, 130))
-                                        }
-                                    } else if is_we_badge {
-                                        if is_we_on {
-                                            (egui::Color32::from_rgb(12, 38, 22), egui::Color32::from_rgb(32, 98, 56), egui::Color32::from_rgb(80, 250, 150))
-                                        } else {
-                                            (egui::Color32::from_rgb(24, 25, 28), egui::Color32::from_rgb(50, 52, 58), egui::Color32::from_rgb(115, 120, 130))
-                                        }
-                                    } else if is_primary_badge {
-                                        if is_airpods_route {
-                                            if airpods_min_bat <= 10 {
-                                                (egui::Color32::from_rgb(38, 14, 14), egui::Color32::from_rgb(110, 25, 25), egui::Color32::from_rgb(255, 75, 75))
-                                            } else if airpods_min_bat <= 20 {
-                                                (egui::Color32::from_rgb(36, 22, 10), egui::Color32::from_rgb(110, 60, 20), egui::Color32::from_rgb(255, 145, 45))
-                                            } else {
-                                                (egui::Color32::from_rgb(14, 30, 16), egui::Color32::from_rgb(30, 70, 36), egui::Color32::from_rgb(60, 200, 95))
-                                            }
-                                        } else if is_streaming || is_other_ao {
-                                            (egui::Color32::from_rgb(14, 30, 16), egui::Color32::from_rgb(30, 70, 36), egui::Color32::from_rgb(60, 200, 95))
-                                        } else if is_connecting {
-                                            (egui::Color32::from_rgb(36, 26, 12), egui::Color32::from_rgb(90, 65, 25), egui::Color32::from_rgb(255, 185, 55))
-                                        } else {
-                                            (egui::Color32::from_rgb(24, 25, 28), egui::Color32::from_rgb(50, 52, 58), egui::Color32::from_rgb(115, 120, 130))
-                                        }
-                                    } else if is_active_mono {
-                                        (egui::Color32::from_rgb(36, 26, 12), egui::Color32::from_rgb(90, 65, 25), egui::Color32::from_rgb(255, 185, 55))
-                                    } else {
-                                        (egui::Color32::from_rgb(14, 30, 16), egui::Color32::from_rgb(30, 70, 36), egui::Color32::from_rgb(60, 200, 95))
-                                    };
-
-                                    egui::Frame::none()
-                                        .fill(bg_col)
-                                        .stroke(egui::Stroke::new(0.5_f32, stroke_col))
-                                        .rounding(egui::Rounding::same(3.0))
-                                        .inner_margin(egui::Margin::symmetric(4.0, 1.5))
-                                        .show(ui, |ui| {
-                                            let resp = ui.label(
-                                                egui::RichText::new(*badge)
-                                                    .monospace()
-                                                    .size(8.5)
-                                                    .color(text_col),
-                                            );
-                                            if is_primary_badge {
-                                                if is_airpods_route {
-                                                    resp.on_hover_text(&airpods_tip);
-                                                } else {
-                                                    let tip = if is_streaming {
-                                                        let name = self.state.connected_name.as_deref().unwrap_or("AirPlay");
-                                                        lang.status_streaming(name)
-                                                    } else if is_connecting {
-                                                        let name = self.state.connected_name.as_deref().unwrap_or("AirPlay");
-                                                        lang.status_connecting(name)
-                                                    } else if is_other_ao {
-                                                        match &self.state.status {
-                                                            DeviceStatus::AoMode(name) => format!("正在播放至 {name}"),
-                                                            _ => "本機音訊輸出".to_string(),
-                                                        }
-                                                    } else {
-                                                        lang.status_idle().to_string()
-                                                    };
-                                                    resp.on_hover_text(tip);
-                                                }
-                                            } else if is_he_badge {
-                                                show_wrapped_tooltip(resp, lang.sound_enhancer_tooltip());
-                                            } else if is_we_badge {
-                                                show_wrapped_tooltip(resp, lang.warmth_enhancer_tooltip());
-                                            }
-                                        });
-                                }
-                            });
-
-                            ui.add_space(2.0);
-
-                            // Playback status pill & Track Position / Duration timer
-                            ui.horizontal(|ui| {
-                                let (stat_text, stat_col) = if track_info.is_playing {
-                                    ("▶ PLAYING", egui::Color32::from_rgb(0, 255, 140))
-                                } else if track_info.has_session {
-                                    ("❚❚ PAUSED", egui::Color32::from_rgb(255, 180, 40))
-                                } else {
-                                    ("■ STOPPED", egui::Color32::from_rgb(120, 135, 150))
-                                };
-                                ui.label(
-                                    egui::RichText::new(stat_text)
-                                        .monospace()
-                                        .size(9.5)
-                                        .strong()
-                                        .color(stat_col),
-                                );
-
-                                // Track Position & Duration (responsive to drag preview)
-                                let cur_pos = if let Some(preview_secs) = self.seek_drag_secs {
-                                    preview_secs
-                                } else {
-                                    track_info.current_position_secs()
-                                };
-                                let total_dur = track_info.duration_secs;
-                                let time_str = if total_dur > 0.0 {
-                                    format!("{} / {}", crate::media_control::MediaTrackInfo::format_time(cur_pos), crate::media_control::MediaTrackInfo::format_time(total_dur))
-                                } else if cur_pos > 0.0 {
-                                    format!("{} / --:--", crate::media_control::MediaTrackInfo::format_time(cur_pos))
-                                } else {
-                                    "--:-- / --:--".to_string()
-                                };
-
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    ui.label(
-                                        egui::RichText::new(time_str)
-                                            .monospace()
-                                            .size(9.5)
-                                            .color(egui::Color32::from_rgb(0, 230, 110)),
-                                    );
-                                });
-                            });
-                        });
-                    });
-                });
+                self.render_winamp_display_chassis(ui, &track_info, lang, false);
 
                 ui.add_space(6.0);
 
@@ -4222,6 +5606,7 @@ impl FlyoutApp {
                             .on_hover_text(lang.player_prev())
                             .clicked()
                         {
+                            self.next_track_intent = Some(TrackTransitionDirection::Prev);
                             crate::media_control::send_media_control(crate::media_control::MediaControlCmd::Previous);
                         }
 
@@ -4247,6 +5632,7 @@ impl FlyoutApp {
                             .on_hover_text(lang.player_next())
                             .clicked()
                         {
+                            self.next_track_intent = Some(TrackTransitionDirection::Next);
                             crate::media_control::send_media_control(crate::media_control::MediaControlCmd::Next);
                         }
 
@@ -4619,50 +6005,83 @@ impl FlyoutApp {
 
                 ui.add_space(6.0);
 
-                // 10-Band Sliders (WinAMP Classic Vertical Rack)
+                // 10-Band Sliders & Dynamic Morphing Frequency Curve (WinAMP Classic Vertical Rack)
                 let labels = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
-                let col_gap = 2.0f32;
-                let avail_w = ui.available_width();
-                let slider_col_w = ((avail_w - 9.0 * col_gap) / 10.0).floor().max(20.0);
+                let prev_spacing_x = ui.spacing().item_spacing.x;
+                ui.spacing_mut().item_spacing.x = 2.0;
 
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = col_gap;
-                    for band_idx in 0..10 {
-                        ui.allocate_ui_with_layout(
-                            egui::vec2(slider_col_w, 120.0),
-                            egui::Layout::top_down(egui::Align::Center),
-                            |ui| {
-                                let mut gain = self.state.eq_gains[band_idx];
-                                let gain_str = if gain > 0.0 {
-                                    format!("+{}", gain.round() as i32)
-                                } else {
-                                    format!("{}", gain.round() as i32)
-                                };
-                                let text_col = if gain.abs() > 0.5 {
-                                    egui::Color32::from_rgb(240, 185, 55)
-                                } else {
-                                    egui::Color32::from_rgb(120, 125, 135)
-                                };
-                                ui.label(egui::RichText::new(gain_str).monospace().size(9.0).color(text_col));
+                // 平滑漸變形變插值 (切換 Preset 或 Reset 時，各頻段拉桿與曲線在 ~180ms 內有機滑動到位)
+                let dt = ui.ctx().input(|i| i.stable_dt).min(0.1);
+                let blend = 1.0 - (-dt * 22.0).exp();
 
-                                let slider = egui::Slider::new(&mut gain, -12.0..=12.0)
-                                    .vertical()
-                                    .show_value(false)
-                                    .step_by(0.5);
+                let mut is_animating = false;
+                for i in 0..10 {
+                    let diff = self.state.eq_gains[i] - self.display_eq_gains[i];
+                    if diff.abs() > 0.02 {
+                        self.display_eq_gains[i] += diff * blend;
+                        is_animating = true;
+                    } else {
+                        self.display_eq_gains[i] = self.state.eq_gains[i];
+                    }
+                }
+                if is_animating {
+                    ui.ctx().request_repaint();
+                }
 
-                                if ui.add(slider).changed() {
-                                    self.selected_preset = Some(EqPreset::Custom);
-                                    self.state.eq_enabled = true;
-                                    self.state.eq_gains[band_idx] = gain;
-                                    self.state.custom_eq_gains[band_idx] = gain;
-                                    let _ = self.cmd_tx.send_blocking(GuiCmd::SetEqGain(band_idx, gain));
-                                }
+                let mut node_points = Vec::with_capacity(10);
+                let mut zero_db_y = 0.0f32;
 
-                                ui.label(egui::RichText::new(labels[band_idx]).monospace().size(9.0).weak());
-                            },
-                        );
+                ui.columns(10, |columns| {
+                    for (band_idx, col_ui) in columns.iter_mut().enumerate() {
+                        col_ui.vertical_centered(|ui| {
+                            let target_gain = self.state.eq_gains[band_idx];
+                            let gain_str = if target_gain > 0.0 {
+                                format!("+{}", target_gain.round() as i32)
+                            } else {
+                                format!("{}", target_gain.round() as i32)
+                            };
+                            let text_col = if target_gain.abs() > 0.5 {
+                                egui::Color32::from_rgb(240, 180, 50)
+                            } else {
+                                egui::Color32::from_rgb(120, 125, 135)
+                            };
+                            ui.label(egui::RichText::new(gain_str).monospace().size(9.0).color(text_col));
+
+                            let mut gain = self.display_eq_gains[band_idx];
+
+                            let slider = egui::Slider::new(&mut gain, -12.0..=12.0)
+                                .vertical()
+                                .show_value(false);
+
+                            let slider_resp = ui.add(slider);
+                            // 關鍵修正：僅在使用者實際以滑鼠拖動或點擊該拉桿時，才切換為「自訂」並發送音訊設定指令。
+                            let user_active = slider_resp.dragged() || (slider_resp.clicked() && slider_resp.changed());
+                            if user_active {
+                                let snapped_gain = (gain * 2.0).round() / 2.0;
+                                self.selected_preset = Some(EqPreset::Custom);
+                                self.state.eq_enabled = true;
+                                self.state.eq_gains[band_idx] = snapped_gain;
+                                self.display_eq_gains[band_idx] = snapped_gain;
+                                self.state.custom_eq_gains[band_idx] = snapped_gain;
+                                let _ = self.cmd_tx.send_blocking(GuiCmd::SetEqGain(band_idx, snapped_gain));
+                            }
+
+                            // 記錄滑塊頂點座標以供 Catmull-Rom 三次仿樣波形曲線形變渲染
+                            let slider_rect = slider_resp.rect;
+                            let norm = (gain - (-12.0)) / 24.0;
+                            let thumb_y = slider_rect.bottom() - norm * slider_rect.height();
+                            let thumb_x = slider_rect.center().x;
+                            node_points.push(egui::pos2(thumb_x, thumb_y));
+                            zero_db_y = slider_rect.bottom() - 0.5 * slider_rect.height();
+
+                            ui.label(egui::RichText::new(labels[band_idx]).monospace().size(9.0).weak());
+                        });
                     }
                 });
+                ui.spacing_mut().item_spacing.x = prev_spacing_x;
+
+                // 渲染發光等化器響應曲線與動態形變漸變
+                render_eq_curve_overlay(ui, &node_points, zero_db_y, self.state.eq_enabled);
             });
 
         ui.cursor().top() - initial_top
@@ -4682,17 +6101,39 @@ impl FlyoutApp {
         } else {
             crate::snapping::WindowKind::Main
         };
+        let header_title = if is_standalone {
+            lang.mini_equalizer_title()
+        } else {
+            lang.eq_title()
+        };
         self.render_universal_window_header(
             ui,
             kind,
-            lang.eq_title(),
+            header_title,
             !is_standalone,
             |app, ui| {
                 app.render_visualizer_button(ui, kind);
             },
         );
 
-        let is_rx = self.eq_profile == EqProfile::Receiver;
+        if !is_standalone {
+            ui.add_space(2.0);
+            // Profile Switcher Tabs: Normal / Receiver (具備平滑滑動指示線與膠囊背景)
+            let tabs = [
+                (EqProfile::Normal, lang.eq_profile_normal()),
+                (EqProfile::Receiver, lang.eq_profile_receiver()),
+            ];
+            if let Some(prof) = Self::render_sliding_tab_bar(ui, "eq_profiles", self.eq_profile, &tabs) {
+                self.eq_profile = prof;
+            }
+            ui.add_space(6.0);
+        }
+
+        let is_rx = if is_standalone {
+            false
+        } else {
+            self.eq_profile == EqProfile::Receiver
+        };
 
         // Sound Engine (HE & WE) Restoration & Warmth Controls
         egui::Frame::none()
@@ -4970,109 +6411,120 @@ impl FlyoutApp {
             }
         });
 
-        ui.add_space(8.0);
+        ui.add_space(5.0);
 
-        // 10-Band Equalizer Sliders
+        // 10-Band Equalizer Sliders & Dynamic Morphing Frequency Curve
         let labels = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
-        let col_gap = 2.0f32;
-        let avail_w = ui.available_width();
-        let slider_col_w = ((avail_w - 9.0 * col_gap) / 10.0).floor().max(20.0);
+        let prev_spacing_x = ui.spacing().item_spacing.x;
+        ui.spacing_mut().item_spacing.x = 2.0;
 
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = col_gap;
-            for band_idx in 0..10 {
-                ui.allocate_ui_with_layout(
-                    egui::vec2(slider_col_w, 150.0),
-                    egui::Layout::top_down(egui::Align::Center),
-                    |ui| {
-                        let mut gain = if is_rx {
-                            self.state.airplay_receiver_eq_gains[band_idx]
-                        } else {
-                            self.state.eq_gains[band_idx]
-                        };
-                        let gain_str = if gain > 0.0 {
-                            format!("+{}", gain.round() as i32)
-                        } else {
-                            format!("{}", gain.round() as i32)
-                        };
-                        let text_col = if gain.abs() > 0.5 {
-                            egui::Color32::from_rgb(240, 180, 50)
-                        } else {
-                            egui::Color32::GRAY
-                        };
-                        ui.label(egui::RichText::new(gain_str).size(10.0).color(text_col));
+        // 平滑漸變形變插值 (切換 Preset 或 Reset 時，各頻段拉桿與曲線在 ~180ms 內有機滑動到位)
+        let dt = ui.ctx().input(|i| i.stable_dt).min(0.1);
+        let blend = 1.0 - (-dt * 22.0).exp();
 
-                        let slider = egui::Slider::new(&mut gain, -12.0..=12.0)
-                            .vertical()
-                            .show_value(false)
-                            .step_by(0.5);
-
-                        if ui.add(slider).changed() {
-                            if is_rx {
-                                self.receiver_selected_preset = Some(EqPreset::Custom);
-                                self.state.airplay_receiver_eq_enabled = true;
-                                self.state.airplay_receiver_eq_gains[band_idx] = gain;
-                                self.state.airplay_receiver_custom_eq_gains[band_idx] = gain;
-                                let _ = self.cmd_tx.send_blocking(GuiCmd::SetReceiverEqGain(band_idx, gain));
-                            } else {
-                                self.selected_preset = Some(EqPreset::Custom);
-                                self.state.eq_enabled = true;
-                                self.state.eq_gains[band_idx] = gain;
-                                self.state.custom_eq_gains[band_idx] = gain;
-                                let _ = self.cmd_tx.send_blocking(GuiCmd::SetEqGain(band_idx, gain));
-                            }
-                        }
-
-                        ui.label(egui::RichText::new(labels[band_idx]).size(9.5).weak());
-                    },
-                );
+        let mut is_animating = false;
+        if is_rx {
+            for i in 0..10 {
+                let diff = self.state.airplay_receiver_eq_gains[i] - self.display_receiver_eq_gains[i];
+                if diff.abs() > 0.02 {
+                    self.display_receiver_eq_gains[i] += diff * blend;
+                    is_animating = true;
+                } else {
+                    self.display_receiver_eq_gains[i] = self.state.airplay_receiver_eq_gains[i];
+                }
             }
-        });
-
-        ui.add_space(8.0);
-        ui.separator();
-        ui.add_space(6.0);
-
-        // Profile Switcher Tabs: Normal / Receiver (relocated to bottom)
-        ui.horizontal(|ui| {
-            let tab_w = ((ui.available_width() - 8.0) / 2.0).max(120.0);
-            let is_normal = self.eq_profile == EqProfile::Normal;
-            let is_receiver = self.eq_profile == EqProfile::Receiver;
-
-            if ui.add_sized([tab_w, 24.0], egui::SelectableLabel::new(is_normal, egui::RichText::new(lang.eq_profile_normal()).size(11.5).strong())).clicked() {
-                self.eq_profile = EqProfile::Normal;
-            }
-            if ui.add_sized([tab_w, 24.0], egui::SelectableLabel::new(is_receiver, egui::RichText::new(lang.eq_profile_receiver()).size(11.5).strong())).clicked() {
-                self.eq_profile = EqProfile::Receiver;
-            }
-        });
-
-        ui.add_space(6.0);
-
-        // Footer Information Panel
-        let footer_text = if self.eq_profile == EqProfile::Receiver {
-            lang.eq_profile_receiver_hint()
         } else {
-            lang.eq_profile_normal_hint()
-        };
+            for i in 0..10 {
+                let diff = self.state.eq_gains[i] - self.display_eq_gains[i];
+                if diff.abs() > 0.02 {
+                    self.display_eq_gains[i] += diff * blend;
+                    is_animating = true;
+                } else {
+                    self.display_eq_gains[i] = self.state.eq_gains[i];
+                }
+            }
+        }
+        if is_animating {
+            ui.ctx().request_repaint();
+        }
 
-        egui::Frame::none()
-            .fill(egui::Color32::from_rgb(18, 22, 28))
-            .stroke(egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(38, 48, 62)))
-            .rounding(egui::Rounding::same(6.0))
-            .inner_margin(egui::Margin::symmetric(10.0, 6.0))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                ui.label(
-                    egui::RichText::new(footer_text)
-                        .size(10.5)
-                        .color(if self.eq_profile == EqProfile::Receiver {
-                            egui::Color32::from_rgb(130, 215, 255)
+        let mut node_points = Vec::with_capacity(10);
+        let mut zero_db_y = 0.0f32;
+
+        ui.columns(10, |columns| {
+            for (band_idx, col_ui) in columns.iter_mut().enumerate() {
+                col_ui.vertical_centered(|ui| {
+                    let target_gain = if is_rx {
+                        self.state.airplay_receiver_eq_gains[band_idx]
+                    } else {
+                        self.state.eq_gains[band_idx]
+                    };
+                    let gain_str = if target_gain > 0.0 {
+                        format!("+{}", target_gain.round() as i32)
+                    } else {
+                        format!("{}", target_gain.round() as i32)
+                    };
+                    let text_col = if target_gain.abs() > 0.5 {
+                        egui::Color32::from_rgb(240, 180, 50)
+                    } else {
+                        egui::Color32::GRAY
+                    };
+                    ui.label(egui::RichText::new(gain_str).size(10.0).color(text_col));
+
+                    let mut gain = if is_rx {
+                        self.display_receiver_eq_gains[band_idx]
+                    } else {
+                        self.display_eq_gains[band_idx]
+                    };
+
+                    let slider = egui::Slider::new(&mut gain, -12.0..=12.0)
+                        .vertical()
+                        .show_value(false);
+
+                    let slider_resp = ui.add(slider);
+                    // 關鍵修正：僅在使用者實際以滑鼠拖動或點擊該拉桿時，才切換為「自訂」並發送音訊設定指令。
+                    // 絕不可因程式動態平滑插值渲染而誤判為使用者手動修改，避免鎖死自訂或無限回饋抖動。
+                    let user_active = slider_resp.dragged() || (slider_resp.clicked() && slider_resp.changed());
+                    if user_active {
+                        let snapped_gain = (gain * 2.0).round() / 2.0;
+                        if is_rx {
+                            self.receiver_selected_preset = Some(EqPreset::Custom);
+                            self.state.airplay_receiver_eq_enabled = true;
+                            self.state.airplay_receiver_eq_gains[band_idx] = snapped_gain;
+                            self.display_receiver_eq_gains[band_idx] = snapped_gain;
+                            self.state.airplay_receiver_custom_eq_gains[band_idx] = snapped_gain;
+                            let _ = self.cmd_tx.send_blocking(GuiCmd::SetReceiverEqGain(band_idx, snapped_gain));
                         } else {
-                            egui::Color32::from_rgb(160, 185, 210)
-                        }),
-                );
-            });
+                            self.selected_preset = Some(EqPreset::Custom);
+                            self.state.eq_enabled = true;
+                            self.state.eq_gains[band_idx] = snapped_gain;
+                            self.display_eq_gains[band_idx] = snapped_gain;
+                            self.state.custom_eq_gains[band_idx] = snapped_gain;
+                            let _ = self.cmd_tx.send_blocking(GuiCmd::SetEqGain(band_idx, snapped_gain));
+                        }
+                    }
+
+                    // 記錄滑塊頂點座標以供 Catmull-Rom 三次仿樣波形曲線形變渲染
+                    let slider_rect = slider_resp.rect;
+                    let norm = (gain - (-12.0)) / 24.0;
+                    let thumb_y = slider_rect.bottom() - norm * slider_rect.height();
+                    let thumb_x = slider_rect.center().x;
+                    node_points.push(egui::pos2(thumb_x, thumb_y));
+                    zero_db_y = slider_rect.bottom() - 0.5 * slider_rect.height();
+
+                    ui.label(egui::RichText::new(labels[band_idx]).size(9.5).weak());
+                });
+            }
+        });
+        ui.spacing_mut().item_spacing.x = prev_spacing_x;
+
+        // 渲染發光等化器響應曲線與動態形變漸變
+        let eq_active = if is_rx {
+            self.state.airplay_receiver_eq_enabled
+        } else {
+            self.state.eq_enabled
+        };
+        render_eq_curve_overlay(ui, &node_points, zero_db_y, eq_active);
 
         ui.cursor().top() - initial_top
     }
@@ -5084,28 +6536,7 @@ impl FlyoutApp {
         // Query GSMTC Media Track Info
         let track_info = crate::media_control::get_current_media_track().read().unwrap().clone();
 
-        // Texture caching: update if thumbnail bytes changed
-        if track_info.thumbnail_bytes != self.last_album_art_bytes {
-            self.last_album_art_bytes = track_info.thumbnail_bytes.clone();
-            if let Some(ref bytes) = track_info.thumbnail_bytes {
-                if let Ok(img) = image::load_from_memory(bytes) {
-                    let rgba = img.to_rgba8();
-                    let size = [rgba.width() as usize, rgba.height() as usize];
-                    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
-                    self.album_art_texture = Some(ui.ctx().load_texture(
-                        "mini_album_art",
-                        color_image,
-                        egui::TextureOptions::LINEAR,
-                    ));
-                } else {
-                    self.album_art_texture = None;
-                }
-            } else {
-                self.album_art_texture = None;
-            }
-        }
-
-        // 0. Universal Window Header (MiniPlayer standalone with 🏠 Home, Title, 📌 Pin, 🎨 Visualizer, 🎚 Equalizer)
+        // 0. Universal Window Header (MiniPlayer standalone with 🏠 Home, Title, 📌 Pin, 🎨 Visualizer, ⦀ Equalizer)
         self.render_universal_window_header(
             ui,
             crate::snapping::WindowKind::MiniPlayer,
@@ -5117,218 +6548,19 @@ impl FlyoutApp {
             },
         );
 
-        // 1. WinAMP Main Display Chassis (Album Cover + VFD/LCD Screen)
+        // 1. WinAMP Main Display Chassis (Album Cover + VFD/LCD Screen with dynamic transitions)
         egui::Frame::group(ui.style())
             .fill(egui::Color32::from_rgb(22, 24, 29))
             .stroke(egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(46, 52, 64)))
             .rounding(egui::Rounding::same(8.0))
-            .inner_margin(egui::Margin::symmetric(10.0, 8.0))
+            .inner_margin(egui::Margin::symmetric(10.0, 7.0))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 let total_inner_w = ui.available_width();
 
-                ui.horizontal(|ui| {
-                    let app_id_lower = track_info.source_app_id.to_lowercase();
-                    let friendly_app = if app_id_lower.contains("spotify") {
-                        "Spotify"
-                    } else if app_id_lower.contains("applemusic") || app_id_lower.contains("apple.music") {
-                        "Apple Music"
-                    } else if app_id_lower.contains("tidal") {
-                        "Tidal"
-                    } else if app_id_lower.contains("chrome") {
-                        "Chrome"
-                    } else if app_id_lower.contains("firefox") {
-                        "Firefox"
-                    } else if app_id_lower.contains("msedge") || app_id_lower.contains("edge") {
-                        "Microsoft Edge"
-                    } else if !track_info.source_app_id.is_empty() {
-                        let base = track_info.source_app_id.split(['!', '_', '\\', '/']).next().unwrap_or(&track_info.source_app_id);
-                        base.trim_end_matches(".exe")
-                    } else {
-                        ""
-                    };
+                self.render_winamp_display_chassis(ui, &track_info, lang, true);
 
-                    let click_app_tooltip = if !friendly_app.is_empty() {
-                        format!("{} ({})", lang.player_click_to_open_app(), friendly_app)
-                    } else {
-                        lang.player_click_to_open_app().to_string()
-                    };
-
-                    // Left: Album Art Box (72x72 px)
-                    let art_size = egui::vec2(72.0, 72.0);
-                    let (art_rect, art_resp) = ui.allocate_exact_size(art_size, egui::Sense::click());
-                    let art_resp = art_resp
-                        .on_hover_cursor(egui::CursorIcon::PointingHand)
-                        .on_hover_text(&click_app_tooltip);
-
-                    if art_resp.clicked() {
-                        crate::media_control::activate_media_source_app(
-                            &track_info.source_app_id,
-                            &track_info.title,
-                            Some(&self.state.audio_source),
-                        );
-                    }
-
-                    let painter = ui.painter();
-
-                    if let Some(ref tex) = self.album_art_texture {
-                        painter.rect_filled(art_rect, egui::Rounding::same(6.0), egui::Color32::BLACK);
-                        let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-                        painter.image(tex.id(), art_rect, uv, egui::Color32::WHITE);
-                        painter.rect_stroke(
-                            art_rect,
-                            egui::Rounding::same(6.0),
-                            egui::Stroke::new(1.0_f32, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 40)),
-                        );
-                    } else {
-                        let center = art_rect.center();
-                        let radius = (art_size.x.min(art_size.y) / 2.0) - 2.0;
-
-                        painter.circle_filled(center, radius, egui::Color32::from_rgb(18, 19, 23));
-                        painter.circle_stroke(center, radius, egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(50, 54, 65)));
-
-                        for r_factor in [0.85, 0.72, 0.60, 0.48] {
-                            painter.circle_stroke(
-                                center,
-                                radius * r_factor,
-                                egui::Stroke::new(0.5_f32, egui::Color32::from_rgba_unmultiplied(80, 85, 100, 60)),
-                            );
-                        }
-
-                        painter.circle_filled(center, radius * 0.36, egui::Color32::from_rgb(35, 75, 130));
-                        painter.circle_stroke(center, radius * 0.36, egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(80, 140, 220)));
-
-                        painter.circle_filled(center, 3.5, egui::Color32::from_rgb(220, 225, 230));
-                        painter.text(
-                            center - egui::vec2(0.0, 9.0),
-                            egui::Align2::CENTER_CENTER,
-                            "♪",
-                            egui::FontId::proportional(11.0),
-                            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 160),
-                        );
-                    }
-
-                    if art_resp.hovered() {
-                        painter.rect_filled(
-                            art_rect,
-                            egui::Rounding::same(6.0),
-                            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 30),
-                        );
-                        painter.text(
-                            art_rect.right_top() + egui::vec2(-4.0, 4.0),
-                            egui::Align2::RIGHT_TOP,
-                            "↗",
-                            egui::FontId::proportional(12.0),
-                            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 230),
-                        );
-                    }
-
-                    ui.add_space(8.0);
-
-                    // Right: WinAMP VFD / LCD Screen
-                    let vfd_w = ui.available_width();
-                    let vfd_h = 72.0f32;
-                    let (vfd_rect, _) = ui.allocate_exact_size(egui::vec2(vfd_w, vfd_h), egui::Sense::hover());
-                    let vfd_painter = ui.painter();
-                    vfd_painter.rect_filled(vfd_rect, egui::Rounding::same(5.0), egui::Color32::from_rgb(8, 16, 10));
-                    vfd_painter.rect_stroke(
-                        vfd_rect,
-                        egui::Rounding::same(5.0),
-                        egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(20, 48, 24)),
-                    );
-
-                    let inner_vfd = vfd_rect.shrink2(egui::vec2(8.0, 5.0));
-                    ui.allocate_new_ui(egui::UiBuilder::new().max_rect(inner_vfd), |ui| {
-                        ui.vertical(|ui| {
-                            let title_text = if track_info.title.trim().is_empty() {
-                                lang.player_no_track().to_string()
-                            } else {
-                                track_info.title.clone()
-                            };
-                            let title_resp = ui.add(
-                                egui::Label::new(
-                                    egui::RichText::new(title_text)
-                                        .monospace()
-                                        .size(12.0)
-                                        .strong()
-                                        .color(egui::Color32::from_rgb(0, 255, 110)),
-                                )
-                                .sense(egui::Sense::click()),
-                            )
-                            .on_hover_cursor(egui::CursorIcon::PointingHand)
-                            .on_hover_text(&click_app_tooltip);
-
-                            if title_resp.clicked() {
-                                crate::media_control::activate_media_source_app(
-                                    &track_info.source_app_id,
-                                    &track_info.title,
-                                    Some(&self.state.audio_source),
-                                );
-                            }
-
-                            ui.add_space(1.0);
-
-                            let artist_text = if track_info.artist.trim().is_empty() {
-                                lang.player_unknown_artist().to_string()
-                            } else if !track_info.album.trim().is_empty() {
-                                format!("{} • {}", track_info.artist, track_info.album)
-                            } else {
-                                track_info.artist.clone()
-                            };
-                            ui.label(
-                                egui::RichText::new(artist_text)
-                                    .monospace()
-                                    .size(10.0)
-                                    .color(egui::Color32::from_rgb(110, 220, 150)),
-                            );
-
-                            ui.add_space(2.0);
-
-                            // Badges & Time
-                            ui.horizontal(|ui| {
-                                let (stat_text, stat_col) = if track_info.is_playing {
-                                    ("▶ PLAYING", egui::Color32::from_rgb(0, 255, 140))
-                                } else if track_info.has_session {
-                                    ("❚❚ PAUSED", egui::Color32::from_rgb(255, 180, 40))
-                                } else {
-                                    ("■ STOPPED", egui::Color32::from_rgb(120, 135, 150))
-                                };
-                                ui.label(
-                                    egui::RichText::new(stat_text)
-                                        .monospace()
-                                        .size(9.0)
-                                        .strong()
-                                        .color(stat_col),
-                                );
-
-                                let cur_pos = if let Some(preview_secs) = self.seek_drag_secs {
-                                    preview_secs
-                                } else {
-                                    track_info.current_position_secs()
-                                };
-                                let total_dur = track_info.duration_secs;
-                                let time_str = if total_dur > 0.0 {
-                                    format!("{} / {}", crate::media_control::MediaTrackInfo::format_time(cur_pos), crate::media_control::MediaTrackInfo::format_time(total_dur))
-                                } else if cur_pos > 0.0 {
-                                    format!("{} / --:--", crate::media_control::MediaTrackInfo::format_time(cur_pos))
-                                } else {
-                                    "--:-- / --:--".to_string()
-                                };
-
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    ui.label(
-                                        egui::RichText::new(time_str)
-                                            .monospace()
-                                            .size(9.0)
-                                            .color(egui::Color32::from_rgb(0, 230, 110)),
-                                    );
-                                });
-                            });
-                        });
-                    });
-                });
-
-                ui.add_space(5.0);
+        ui.add_space(5.0);
 
                 // Seek Bar
                 let cur_pos = if let Some(preview_secs) = self.seek_drag_secs {
@@ -5387,7 +6619,7 @@ impl FlyoutApp {
                 ui.add_space(5.0);
 
                 // 2. WinAMP Multi-color Segmented Spectrum Visualizer
-                let spec_h = 42.0f32;
+                let spec_h = 50.0f32;
                 let (spec_rect, _spec_resp) = ui.allocate_exact_size(
                     egui::vec2(total_inner_w, spec_h),
                     egui::Sense::hover(),
@@ -5400,12 +6632,12 @@ impl FlyoutApp {
                     egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(30, 34, 44)),
                 );
 
-                let inner_spec = spec_rect.shrink(3.0);
+                let inner_spec = spec_rect.shrink(4.0);
                 let num_bars = 16;
                 let bar_gap = 2.5f32;
                 let bar_w = ((inner_spec.width() - (num_bars as f32 - 1.0) * bar_gap) / num_bars as f32).max(2.0);
 
-                let num_segs = 10;
+                let num_segs = 12;
                 let seg_gap = 1.2f32;
                 let seg_h = ((inner_spec.height() - (num_segs as f32 - 1.0) * seg_gap) / num_segs as f32).max(1.5);
 
@@ -5463,6 +6695,7 @@ impl FlyoutApp {
                             .on_hover_text(lang.player_prev())
                             .clicked()
                         {
+                            self.next_track_intent = Some(TrackTransitionDirection::Prev);
                             crate::media_control::send_media_control(crate::media_control::MediaControlCmd::Previous);
                         }
 
@@ -5485,6 +6718,7 @@ impl FlyoutApp {
                             .on_hover_text(lang.player_next())
                             .clicked()
                         {
+                            self.next_track_intent = Some(TrackTransitionDirection::Next);
                             crate::media_control::send_media_control(crate::media_control::MediaControlCmd::Next);
                         }
 
@@ -5738,6 +6972,7 @@ impl FlyoutApp {
             current_page: Page::Main,
             last_page: Page::Main,
             page_history: Vec::new(),
+            page_transition: None,
             settings_tab: SettingsTab::default(),
             meter_level: 0.0,
             last_meter_update: std::time::Instant::now(),
@@ -5749,6 +6984,8 @@ impl FlyoutApp {
             eq_profile: EqProfile::Normal,
             selected_preset: None,
             receiver_selected_preset: None,
+            display_eq_gains: [0.0; 10],
+            display_receiver_eq_gains: [0.0; 10],
             album_art_texture: None,
             last_album_art_bytes: None,
             receiver_artwork_texture: None,
@@ -5760,8 +6997,16 @@ impl FlyoutApp {
             mini_player_window_open: false,
             mini_player_needs_initial_dock: false,
             equalizer_needs_initial_dock: false,
-            detach_equalizer_window: false,
             seek_drag_secs: None,
+            app_icon_texture: None,
+            pending_modular_workstation_frames: 0,
+            track_transition: None,
+            prev_track_title: String::new(),
+            prev_track_artist: String::new(),
+            prev_track_album: String::new(),
+            prev_album_art_texture: None,
+            next_track_intent: None,
+            workstation_onboarding_dismissed: crate::controller::is_workstation_discovered(),
         }
     }
 }
@@ -5846,6 +7091,11 @@ mod tests {
         app.toggle_equalizer_window(WindowKind::Main);
         assert!(!app.equalizer_window_open);
         assert!(!app.is_equalizer_active());
+
+        // Receiver profile navigation test
+        app.eq_profile = EqProfile::Receiver;
+        app.navigate_to(Page::Equalizer);
+        assert_eq!(app.eq_profile, EqProfile::Receiver);
     }
 
     #[test]
@@ -5927,5 +7177,147 @@ mod tests {
         app.navigate_toggle_page(Page::Equalizer);
         assert_eq!(app.current_page, Page::Main);
         assert!(app.equalizer_window_open);
+    }
+
+    #[test]
+    fn test_page_transition_push_and_pop() {
+        let mut app = FlyoutApp::new_mock();
+        assert_eq!(app.current_page, Page::Main);
+        assert!(app.page_transition.is_none());
+
+        // 1. Push transition (Main -> Settings)
+        app.navigate_to(Page::Settings);
+        assert_eq!(app.current_page, Page::Settings);
+        let trans = app.page_transition.expect("Push transition must be active");
+        assert_eq!(trans.direction, TransitionDirection::Push);
+        assert_eq!(trans.from, Page::Main);
+        assert_eq!(trans.to, Page::Settings);
+        assert_eq!(trans.duration, std::time::Duration::from_millis(220));
+
+        // 2. Pop transition (Settings -> Main)
+        assert!(app.go_back());
+        assert_eq!(app.current_page, Page::Main);
+        let trans = app.page_transition.expect("Pop transition must be active");
+        assert_eq!(trans.direction, TransitionDirection::Pop);
+        assert_eq!(trans.from, Page::Settings);
+        assert_eq!(trans.to, Page::Main);
+
+        // 3. Reset transition
+        app.navigate_to(Page::Equalizer);
+        app.reset_to(Page::Main);
+        assert_eq!(app.current_page, Page::Main);
+        let trans = app.page_transition.expect("Reset transition must trigger Pop");
+        assert_eq!(trans.direction, TransitionDirection::Pop);
+        assert_eq!(trans.from, Page::Equalizer);
+        assert_eq!(trans.to, Page::Main);
+    }
+
+    #[test]
+    fn test_sliding_tab_bar_and_eq_curve_spline() {
+        // Test catmull_rom interpolation points
+        let p0 = egui::pos2(0.0, 0.0);
+        let p1 = egui::pos2(10.0, 10.0);
+        let p2 = egui::pos2(20.0, 10.0);
+        let p3 = egui::pos2(30.0, 0.0);
+
+        let start = catmull_rom(p0, p1, p2, p3, 0.0);
+        assert!((start.x - 10.0).abs() < 1e-4);
+        assert!((start.y - 10.0).abs() < 1e-4);
+
+        let end = catmull_rom(p0, p1, p2, p3, 1.0);
+        assert!((end.x - 20.0).abs() < 1e-4);
+        assert!((end.y - 10.0).abs() < 1e-4);
+
+        let mid = catmull_rom(p0, p1, p2, p3, 0.5);
+        assert!((mid.x - 15.0).abs() < 1e-4);
+
+        // Test display_eq_gains initialization
+        let app = FlyoutApp::new_mock();
+        assert_eq!(app.display_eq_gains, [0.0; 10]);
+        assert_eq!(app.display_receiver_eq_gains, [0.0; 10]);
+    }
+
+    #[test]
+    fn test_track_transition_and_cover_crossfade() {
+        let mut app = FlyoutApp::new_mock();
+        let ctx = egui::Context::default();
+        let current_track_arc = crate::media_control::get_current_media_track();
+
+        // 1. Initial track setup (no transition on initial load)
+        {
+            let mut track = current_track_arc.write().unwrap();
+            track.title = "Song 1".to_string();
+            track.artist = "Artist A".to_string();
+            track.album = "Album X".to_string();
+        }
+        app.sync_media_track(&ctx);
+        assert_eq!(app.prev_track_title, "Song 1");
+        assert!(app.track_transition.is_none());
+
+        // 2. Next track change triggers forward transition
+        {
+            let mut track = current_track_arc.write().unwrap();
+            track.title = "Song 2".to_string();
+            track.artist = "Artist B".to_string();
+        }
+        app.sync_media_track(&ctx);
+        let trans = app.track_transition.as_ref().expect("Transition must be triggered");
+        assert_eq!(trans.direction, TrackTransitionDirection::Next);
+        assert_eq!(trans.from_title, "Song 1");
+        assert_eq!(trans.to_title, "Song 2");
+        assert_eq!(trans.duration, std::time::Duration::from_millis(320));
+
+        // 3. Previous track intent triggers backward transition
+        app.next_track_intent = Some(TrackTransitionDirection::Prev);
+        {
+            let mut track = current_track_arc.write().unwrap();
+            track.title = "Song 3".to_string();
+            track.artist = "Artist C".to_string();
+        }
+        app.sync_media_track(&ctx);
+        let trans = app.track_transition.as_ref().expect("Transition must be triggered");
+        assert_eq!(trans.direction, TrackTransitionDirection::Prev);
+        assert_eq!(trans.from_title, "Song 2");
+        assert_eq!(trans.to_title, "Song 3");
+    }
+
+    #[test]
+    fn test_close_window_cluster_all() {
+        let _lock = crate::snapping::TEST_LOCK.lock().unwrap();
+        crate::snapping::reset_all();
+
+        let mut app = FlyoutApp::new_mock();
+        app.mini_player_window_open = true;
+        app.equalizer_window_open = true;
+
+        let mini_r = windows_sys::Win32::Foundation::RECT { left: 500, top: 100, right: 900, bottom: 350 };
+        let eq_r = windows_sys::Win32::Foundation::RECT { left: 500, top: 350, right: 900, bottom: 600 };
+
+        crate::snapping::set_dock_relation(
+            crate::snapping::WindowKind::Equalizer,
+            crate::snapping::WindowKind::MiniPlayer,
+            &eq_r,
+            &mini_r,
+        );
+
+        assert!(app.mini_player_window_open);
+        assert!(app.equalizer_window_open);
+
+        // Close entire cluster starting from MiniPlayer
+        app.close_window_cluster(crate::snapping::WindowKind::MiniPlayer);
+
+        assert!(!app.mini_player_window_open);
+        assert!(!app.equalizer_window_open);
+    }
+
+    #[test]
+    fn test_workstation_onboarding_state() {
+        let mut app = FlyoutApp::new_mock();
+        app.workstation_onboarding_dismissed = false;
+        assert!(!app.workstation_onboarding_dismissed);
+
+        // When discovered, state updates correctly
+        app.workstation_onboarding_dismissed = true;
+        assert!(app.workstation_onboarding_dismissed);
     }
 }

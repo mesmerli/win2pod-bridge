@@ -2,6 +2,8 @@ pub mod airpods;
 pub mod app_enumerator;
 pub mod autostart;
 pub mod controller;
+pub mod custom_cursor;
+pub mod genie_effect;
 pub mod gui;
 pub mod handoff;
 pub mod i18n;

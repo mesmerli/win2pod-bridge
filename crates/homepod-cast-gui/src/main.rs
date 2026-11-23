@@ -3,7 +3,7 @@
 // Hide console window in Windows subsystem
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use homepod_cast_gui::{controller, gui, single_instance, tray};
+use homepod_cast_gui::{controller, gui, single_instance, snapping, tray};
 
 use std::sync::{Arc, RwLock};
 use eframe::egui;
@@ -145,6 +145,7 @@ fn main() -> anyhow::Result<()> {
 
     // Load custom window and taskbar icon
     let icon_data = load_window_icon();
+    snapping::init_window_pinned_states();
     let initial_always_on_top = crate::controller::load_always_on_top();
     let initial_level = if initial_always_on_top {
         egui::WindowLevel::AlwaysOnTop
@@ -156,7 +157,7 @@ fn main() -> anyhow::Result<()> {
         .with_inner_size([460.0, 680.0])
         .with_min_inner_size([360.0, 320.0])
         .with_resizable(true)
-        .with_close_button(true)
+        .with_decorations(false)
         .with_visible(!start_minimized)
         .with_window_level(initial_level);
 

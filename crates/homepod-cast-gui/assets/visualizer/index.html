@@ -95,33 +95,298 @@ kbd { font: 11px var(--font); border: 1px solid var(--line-strong); border-radiu
 #toast { position: fixed; top: calc(70px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); background: var(--panel);
   border: 1px solid var(--line-strong); border-radius: 999px; padding: 6px 16px; pointer-events: none; backdrop-filter: blur(24px); z-index: 30;
   color: #fff; font-size: 12.5px; font-weight: 500; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
-.top-actions { position: fixed; top: 16px; right: 16px; z-index: 1000; display: flex; align-items: center; gap: 8px; }
-.top-btn { background: var(--panel); border: 1px solid var(--line-strong); border-radius: 50%; width: 38px; height: 38px;
+
+/* Custom Frameless Titlebar */
+#v-titlebar {
+  position: fixed; top: 0; left: 0; right: 0; height: 38px;
+  background: rgba(22, 24, 28, 0.95);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 8px; z-index: 1000;
+  user-select: none; -webkit-user-select: none;
+  cursor: grab;
+}
+#v-titlebar:active { cursor: grabbing; }
+.v-left { display: flex; align-items: center; gap: 8px; cursor: grab; }
+.v-left:active { cursor: grabbing; }
+.v-title { font-size: 14.5px; font-weight: 600; color: rgb(180, 220, 245); letter-spacing: -0.01em; cursor: grab; }
+.v-title:active { cursor: grabbing; }
+.v-badge { font-size: 14px; line-height: 1; cursor: grab; }
+.v-badge:active { cursor: grabbing; }
+.v-mid { flex: 1; height: 100%; cursor: grab; }
+.v-mid:active { cursor: grabbing; }
+.v-right { display: flex; align-items: center; gap: 5px; cursor: default; }
+.v-action-btn {
+  background: var(--soft); border: 1px solid var(--line); border-radius: 4px;
+  width: 26px; height: 24px; min-height: unset; padding: 0;
   display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--muted);
-  font-size: 15px; backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); transition: all 0.15s ease;
-  user-select: none; -webkit-user-select: none; padding: 0; }
-.top-btn:hover { background: var(--card); border-color: var(--accent); color: #fff; box-shadow: 0 0 14px var(--accent-glow); }
-.top-btn.active { background: var(--accent); color: #fff; border-color: rgba(255, 255, 255, 0.3); box-shadow: 0 0 16px var(--accent-glow); }
-.top-btn.danger:hover { background: rgba(239, 68, 68, 0.85); color: #fff; border-color: transparent; box-shadow: 0 0 16px rgba(239, 68, 68, 0.45); }
+  transition: all 0.15s ease;
+}
+.v-action-btn:hover { background: var(--soft-hover); color: #fff; border-color: var(--line-strong); }
+.v-action-btn.active { background: var(--accent); color: #fff; border-color: rgba(255, 255, 255, 0.3); }
+#bPin {
+  position: relative;
+  color: rgb(160, 160, 160);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+}
+#bPin:hover {
+  color: rgb(220, 220, 220);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+#bPin.active {
+  color: rgb(255, 215, 0);
+  background: rgb(55, 45, 18);
+  border-color: rgb(215, 165, 40);
+  box-shadow: 0 0 8px rgba(255, 200, 50, 0.35);
+}
+.pin-badge {
+  position: absolute;
+  bottom: 0px;
+  right: 1px;
+  font-size: 8px;
+  line-height: 1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font);
+  color: #e2e8f0;
+  background: transparent;
+  padding: 0;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.9);
+  letter-spacing: -0.02em;
+}
+#bPin.active .pin-badge {
+  color: rgb(255, 225, 120);
+  background: transparent;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.9);
+}
+.pin-svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+  transform: rotate(45deg);
+  transform-origin: center;
+}
+.opacity-popup {
+  position: absolute;
+  top: 38px;
+  right: 68px;
+  width: 220px;
+  background: rgba(22, 24, 30, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  border-radius: 8px;
+  padding: 12px 14px;
+  z-index: 1000;
+  color: #eee;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  user-select: none;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+.opacity-popup.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.op-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+#opVal {
+  color: #ffd700;
+  font-family: monospace;
+  font-size: 13px;
+}
+.op-slider {
+  width: 100%;
+  accent-color: #ffd700;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+.op-presets {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.op-preset-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ccc;
+  border-radius: 4px;
+  padding: 3px 0;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.op-preset-btn:hover {
+  background: rgba(255, 215, 0, 0.25);
+  border-color: rgba(255, 215, 0, 0.5);
+  color: #fff;
+}
+.op-preset-btn.active {
+  background: #ffd700;
+  color: #111;
+  font-weight: 600;
+  border-color: #ffe655;
+}
+.op-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 6px 0;
+}
+.op-peek-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #bbb;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+.op-peek-label input {
+  accent-color: #ffd700;
+  cursor: pointer;
+}
+.op-hint {
+  font-size: 10px;
+  color: #777;
+}
+.opacity-hud {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  background: rgba(18, 20, 26, 0.92);
+  border: 1.2px solid rgba(255, 215, 0, 0.85);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  border-radius: 20px;
+  padding: 6px 18px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  z-index: 2000;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.opacity-hud.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+.v-div { width: 1px; height: 16px; background: rgba(255, 255, 255, 0.12); margin: 0 2px; }
+.v-caption-btn {
+  background: rgb(52, 58, 70); border: 1px solid transparent; color: rgb(200, 205, 215);
+  min-width: 28px; height: 24px; min-height: unset; padding: 0 6px;
+  display: flex; align-items: center; justify-content: center; border-radius: 4px;
+  cursor: pointer; font-size: 13px; font-weight: bold; transition: all 0.15s ease;
+}
+.v-caption-btn:hover { background: rgb(68, 76, 92); color: #fff; }
+.v-caption-btn.v-close { color: rgb(220, 225, 235); }
+
+/* Fullscreen Floating Actions (獨立毛玻璃圓形懸浮按鈕) */
+.fs-actions {
+  position: fixed; top: 16px; right: 16px; z-index: 1000;
+  display: flex; align-items: center; gap: 8px;
+  background: transparent; border: none; padding: 0; box-shadow: none;
+  transition: opacity 0.3s ease;
+  user-select: none; -webkit-user-select: none;
+}
+.fs-top-btn {
+  background: rgba(24, 25, 29, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  width: 38px; height: 38px; min-height: unset; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--muted);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  transition: all 0.18s ease;
+}
+.fs-top-btn:hover {
+  background: rgba(35, 38, 46, 0.95);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 16px var(--accent-glow);
+  transform: scale(1.06);
+}
+
+body.fullscreen #v-titlebar { display: none !important; }
+body.fullscreen #fsActions { display: flex !important; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="topActions" class="top-actions">
-  <button type="button" id="bMainWin" class="top-btn" data-i18n-title="top_main" title="回到 Win2Pod 主視窗 (W)">
+<header id="v-titlebar">
+  <div class="v-left">
+    <button type="button" id="bMainWin" class="v-action-btn" data-i18n-title="top_main" title="回到 Win2Pod 主視窗 (W)">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V9.5z"></path>
+      </svg>
+    </button>
+    <span class="v-title">Win2Pod Motion - Paint Pulse</span>
+    <span id="vBadge" class="v-badge" style="display:none;"></span>
+  </div>
+  <div class="v-mid"></div>
+  <div class="v-right">
+    <button type="button" id="bTopFull" class="v-action-btn" data-i18n-title="top_full" title="全螢幕切換 (F)">
+      <svg id="topFullSvg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+      </svg>
+    </button>
+    <button type="button" id="bPin" class="v-action-btn" data-i18n-title="top_pin" title="釘選在最上層">
+      <svg class="pin-svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M16 9V4l1-2H7l1 2v5c0 1.66-1.34 3-3 3v2h6v7l1 2 1-2v-7h6v-2c-1.66 0-3-1.34-3-3z"/>
+      </svg>
+      <span id="pinBadge" class="pin-badge" style="display:none;"></span>
+    </button>
+    <span class="v-div"></span>
+    <button type="button" id="vBtnMin" class="v-caption-btn" title="最小化 (_)">_</button>
+    <button type="button" id="vBtnClose" class="v-caption-btn v-close" title="關閉 (✕)">✕</button>
+  </div>
+</header>
+<div id="opacityPopup" class="opacity-popup" style="display:none;">
+  <div class="op-header">
+    <span>🎯 視窗透明度</span>
+    <span id="opVal">75%</span>
+  </div>
+  <input type="range" id="opSlider" min="20" max="100" value="75" step="1" class="op-slider">
+  <div class="op-presets">
+    <button type="button" class="op-preset-btn" data-val="25">25%</button>
+    <button type="button" class="op-preset-btn" data-val="50">50%</button>
+    <button type="button" class="op-preset-btn" data-val="75">75%</button>
+    <button type="button" class="op-preset-btn" data-val="100">100%</button>
+  </div>
+  <div class="op-divider"></div>
+  <label class="op-peek-label">
+    <input type="checkbox" id="opPeekCheck" checked>
+    <span>懸停時恢復實體 (Hover Peek)</span>
+  </label>
+  <div class="op-hint">提示：游標懸停 📌 圖釘轉動滾輪可極速直調</div>
+</div>
+<div id="opacityHud" class="opacity-hud" style="display:none;">🔍 75%</div>
+<div id="fsActions" class="fs-actions" style="display:none;">
+  <button type="button" id="bMainWinFs" class="fs-top-btn" data-i18n-title="top_main" title="回到 Win2Pod 主視窗 (W)">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V9.5z"></path>
     </svg>
   </button>
-  <button type="button" id="bTopFull" class="top-btn" data-i18n-title="top_full" title="全螢幕切換 (F)">
-    <svg id="topFullSvg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
-    </svg>
-  </button>
-  <button type="button" id="bPin" class="top-btn" data-i18n-title="top_pin" title="釘選在最上層">
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <line x1="12" y1="17" x2="12" y2="22"></line>
-      <path d="M5 17h14v-2l-2-2V5a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v8l-2 2v2z"></path>
+  <button type="button" id="bTopFullFs" class="fs-top-btn" data-i18n-title="top_windowed" title="恢復視窗化 (F)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 14h6m0 0v6m0-6l-7 7m17-11h-6m0 0V4m0 6l7-7"></path>
     </svg>
   </button>
 </div>
@@ -142,7 +407,7 @@ kbd { font: 11px var(--font); border: 1px solid var(--line-strong); border-radiu
   <div class="grp">
     <div class="keys-sec" data-i18n="keys_sec_system">系統操作</div>
     <table>
-      <tr><td><kbd>W</kbd></td><td data-i18n="key_w">叫出 Win2Pod 主控制面板</td></tr>
+      <tr><td><kbd>W</kbd></td><td data-i18n="key_w">召喚主視窗 (全螢幕時切換 HUD 浮層)</td></tr>
       <tr><td><kbd>F</kbd></td><td data-i18n="key_f">切換全螢幕 / 視窗化</td></tr>
       <tr><td><kbd>H</kbd></td><td data-i18n="key_h">隱藏 / 顯示控制面板</td></tr>
       <tr><td><kbd>?</kbd></td><td data-i18n="key_question">顯示 / 關閉此說明</td></tr>
@@ -235,9 +500,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { BakedDebris } from './packages/baked-debris/src/index.js';
 import { PainterlyPass } from './packages/painterly-pass/src/index.js';
 
+const QS = new URLSearchParams(location.search);
 const $ = id => document.getElementById(id);
 let isFullscreen = false;
-let isVisPinned = false;
+let isVisPinned = QS.get('pinned') === '1' || QS.get('pinned') === 'true';
+let currentOpacity = parseInt(QS.get('opacity') || '100', 10);
+let isHoverPeek = QS.get('peek') !== '0';
 
 const I18N = {
   'zh-Hant': {
@@ -247,6 +515,8 @@ const I18N = {
     top_windowed: '視窗化 (F)',
     top_pin: '釘選在最上層',
     top_unpin: '取消釘選最上層',
+    pin_hint_rc: '右鍵點擊：調整透明度',
+    pin_hint_wheel: 'Alt + 滾輪：無級調節',
     btn_show_panel: '顯示面板 (H)',
     btn_hide_panel: '隱藏控制面板 (H)',
     hint_keys: '按 <kbd>?</kbd> 快捷鍵說明',
@@ -254,7 +524,6 @@ const I18N = {
     keys_title: '鍵盤快捷鍵說明',
     keys_close: '關閉快捷鍵說明',
     keys_sec_system: '系統操作',
-    key_w: '叫出 Win2Pod 主控制面板',
     key_f: '切換全螢幕 / 視窗化',
     key_h: '隱藏 / 顯示控制面板',
     key_question: '顯示 / 關閉此說明',
@@ -300,6 +569,8 @@ const I18N = {
     top_windowed: '窗口化 (F)',
     top_pin: '固定在最上层',
     top_unpin: '取消最上层固定',
+    pin_hint_rc: '右键点击：调整透明度',
+    pin_hint_wheel: 'Alt + 滚轮：无级调节',
     btn_show_panel: '显示面板 (H)',
     btn_hide_panel: '隐藏控制面板 (H)',
     hint_keys: '按 <kbd>?</kbd> 快捷键说明',
@@ -307,7 +578,6 @@ const I18N = {
     keys_title: '键盘快捷键说明',
     keys_close: '关闭快捷键说明',
     keys_sec_system: '系统操作',
-    key_w: '唤出 Win2Pod 主控制面板',
     key_f: '切换全屏 / 窗口化',
     key_h: '隐藏 / 显示控制面板',
     key_question: '显示 / 关闭此说明',
@@ -353,6 +623,8 @@ const I18N = {
     top_windowed: 'Exit Fullscreen (F)',
     top_pin: 'Always on Top',
     top_unpin: 'Unpin from Top',
+    pin_hint_rc: 'Right-click: Adjust opacity',
+    pin_hint_wheel: 'Alt + Scroll: Adjust opacity smoothly',
     btn_show_panel: 'Show Panel (H)',
     btn_hide_panel: 'Hide Control Panel (H)',
     hint_keys: 'Press <kbd>?</kbd> for Shortcuts',
@@ -360,7 +632,6 @@ const I18N = {
     keys_title: 'Keyboard Shortcuts',
     keys_close: 'Close shortcuts',
     keys_sec_system: 'System Operations',
-    key_w: 'Bring Win2Pod Main Window to Front',
     key_f: 'Toggle Fullscreen / Windowed',
     key_h: 'Hide / Show Control Panel',
     key_question: 'Show / Close this help',
@@ -406,6 +677,8 @@ const I18N = {
     top_windowed: 'ウィンドウ表示 (F)',
     top_pin: '常に最前面に固定',
     top_unpin: '最前面の固定を解除',
+    pin_hint_rc: '右クリック：透明度を調整',
+    pin_hint_wheel: 'Alt + ホイール：無段階調節',
     btn_show_panel: 'パネルを表示 (H)',
     btn_hide_panel: 'コントロールパネルを非表示 (H)',
     hint_keys: '<kbd>?</kbd> キーで操作説明',
@@ -413,7 +686,6 @@ const I18N = {
     keys_title: 'キーボード操作説明',
     keys_close: '説明を閉じる',
     keys_sec_system: 'システム操作',
-    key_w: 'Win2Pod メイン画面を最前面に表示',
     key_f: '全画面 / ウィンドウ切替',
     key_h: 'コントロールパネルの表示 / 非表示',
     key_question: 'この操作説明を表示 / 閉じる',
@@ -459,6 +731,8 @@ const I18N = {
     top_windowed: '창 모드 (F)',
     top_pin: '항상 위에 고정',
     top_unpin: '항상 위 고정 해제',
+    pin_hint_rc: '우클릭: 투명도 조절',
+    pin_hint_wheel: 'Alt + 스크롤: 무단 조절',
     btn_show_panel: '패널 표시 (H)',
     btn_hide_panel: '제어 패널 숨기기 (H)',
     hint_keys: '<kbd>?</kbd> 키로 단축키 안내',
@@ -466,7 +740,6 @@ const I18N = {
     keys_title: '키보드 단축키 안내',
     keys_close: '단축키 안내 닫기',
     keys_sec_system: '시스템 조작',
-    key_w: 'Win2Pod 메인 제어판을 맨 앞으로 가져오기',
     key_f: '전체 화면 / 창 모드 전환',
     key_h: '제어 패널 숨기기 / 표시',
     key_question: '단축키 안내 표시 / 닫기',
@@ -512,6 +785,8 @@ const I18N = {
     top_windowed: 'Quitter le plein écran (F)',
     top_pin: 'Garder au premier plan',
     top_unpin: 'Détacher du premier plan',
+    pin_hint_rc: 'Clic droit : Ajuster l\'opacité',
+    pin_hint_wheel: 'Alt + Molette : Ajuster en continu',
     btn_show_panel: 'Afficher le panneau (H)',
     btn_hide_panel: 'Masquer le panneau (H)',
     hint_keys: 'Appuyez sur <kbd>?</kbd> Raccourcis',
@@ -519,7 +794,6 @@ const I18N = {
     keys_title: 'Raccourcis clavier',
     keys_close: 'Fermer les raccourcis',
     keys_sec_system: 'Opérations système',
-    key_w: 'Amener la fenêtre principale Win2Pod au premier plan',
     key_f: 'Basculer plein écran / fenêtré',
     key_h: 'Masquer / Afficher le panneau de commande',
     key_question: 'Afficher / Fermer cette aide',
@@ -565,6 +839,8 @@ const I18N = {
     top_windowed: 'Vollbild beenden (F)',
     top_pin: 'Immer im Vordergrund',
     top_unpin: 'Vordergrund lösen',
+    pin_hint_rc: 'Rechtsklick: Deckkraft anpassen',
+    pin_hint_wheel: 'Alt + Scrollen: Stufenlos anpassen',
     btn_show_panel: 'Bedienfeld anzeigen (H)',
     btn_hide_panel: 'Bedienfeld ausblenden (H)',
     hint_keys: 'Drücken Sie <kbd>?</kbd> Tastenkürzel',
@@ -572,7 +848,6 @@ const I18N = {
     keys_title: 'Tastenkombinationen',
     keys_close: 'Tastenkürzel schließen',
     keys_sec_system: 'Systembedienung',
-    key_w: 'Win2Pod-Hauptfenster in den Vordergrund bringen',
     key_f: 'Vollbild / Fenstermodus umschalten',
     key_h: 'Bedienfeld ausblenden / einblenden',
     key_question: 'Diese Hilfe anzeigen / schließen',
@@ -618,6 +893,8 @@ const I18N = {
     top_windowed: 'Modo ventana (F)',
     top_pin: 'Fijar en primer plano',
     top_unpin: 'Desanclar de primer plano',
+    pin_hint_rc: 'Clic derecho: Ajustar opacidad',
+    pin_hint_wheel: 'Alt + Rueda: Ajuste continuo',
     btn_show_panel: 'Mostrar panel (H)',
     btn_hide_panel: 'Ocultar panel (H)',
     hint_keys: 'Pulsa <kbd>?</kbd> para Atajos',
@@ -625,7 +902,6 @@ const I18N = {
     keys_title: 'Atajos de teclado',
     keys_close: 'Cerrar atajos',
     keys_sec_system: 'Operaciones del sistema',
-    key_w: 'Traer la ventana principal de Win2Pod al frente',
     key_f: 'Alternar pantalla completa / ventana',
     key_h: 'Ocultar / Mostrar panel de control',
     key_question: 'Mostrar / Cerrar esta ayuda',
@@ -671,6 +947,8 @@ const I18N = {
     top_windowed: 'Finestra (F)',
     top_pin: 'Sempre in primo piano',
     top_unpin: 'Rimuovi primo piano',
+    pin_hint_rc: 'Clic destro: Regola opacità',
+    pin_hint_wheel: 'Alt + Rotellina: Regolazione continua',
     btn_show_panel: 'Mostra pannello (H)',
     btn_hide_panel: 'Nascondi pannello (H)',
     hint_keys: 'Premi <kbd>?</kbd> per Scorciatoie',
@@ -678,7 +956,6 @@ const I18N = {
     keys_title: 'Scorciatoie da tastiera',
     keys_close: 'Chiudi scorciatoie',
     keys_sec_system: 'Operazioni di sistema',
-    key_w: 'Porta la finestra principale di Win2Pod in primo piano',
     key_f: 'Alterna schermo intero / finestra',
     key_h: 'Nascondi / Mostra pannello di controllo',
     key_question: 'Mostra / Chiudi questo aiuto',
@@ -724,6 +1001,8 @@ const I18N = {
     top_windowed: 'Modo janela (F)',
     top_pin: 'Fixar no topo',
     top_unpin: 'Desafixar do topo',
+    pin_hint_rc: 'Clique direito: Ajustar opacidade',
+    pin_hint_wheel: 'Alt + Roda: Ajuste contínuo',
     btn_show_panel: 'Mostrar painel (H)',
     btn_hide_panel: 'Ocultar painel (H)',
     hint_keys: 'Pressione <kbd>?</kbd> Atalhos',
@@ -731,7 +1010,6 @@ const I18N = {
     keys_title: 'Atalhos de Teclado',
     keys_close: 'Fechar atalhos',
     keys_sec_system: 'Operações do Sistema',
-    key_w: 'Trazer janela principal do Win2Pod para frente',
     key_f: 'Alternar tela cheia / janela',
     key_h: 'Ocultar / Mostrar painel de controle',
     key_question: 'Mostrar / Fechar esta ajuda',
@@ -777,6 +1055,8 @@ const I18N = {
     top_windowed: 'Оконный режим (F)',
     top_pin: 'Закрепить поверх всех окон',
     top_unpin: 'Открепить от верха',
+    pin_hint_rc: 'ПКМ: Настроить прозрачность',
+    pin_hint_wheel: 'Alt + Колесико: Плавная настройка',
     btn_show_panel: 'Показать панель (H)',
     btn_hide_panel: 'Скрыть панель (H)',
     hint_keys: 'Нажмите <kbd>?</kbd> для подсказки',
@@ -784,7 +1064,6 @@ const I18N = {
     keys_title: 'Горячие клавиши',
     keys_close: 'Закрыть подсказку',
     keys_sec_system: 'Системные действия',
-    key_w: 'Показать главное окно Win2Pod',
     key_f: 'Полноэкранный / оконный режим',
     key_h: 'Скрыть / Показать панель управления',
     key_question: 'Показать / Скрыть справку',
@@ -831,6 +1110,30 @@ function t(k) {
   return (dict && dict[k]) || (I18N['zh-Hant'] && I18N['zh-Hant'][k]) || '';
 }
 
+function updatePinButtonUI() {
+  try {
+    const btn = $('bPin');
+    if (!btn) return;
+    const pinAction = isVisPinned ? t('top_unpin') : t('top_pin');
+    const rcHint = t('pin_hint_rc') || '右鍵點擊：調整透明度';
+    const wheelHint = t('pin_hint_wheel') || 'Alt + 滾輪：無級調節';
+    const opInfo = (typeof currentOpacity === 'number' && currentOpacity < 100) ? ` (${currentOpacity}%)` : '';
+    btn.title = `${pinAction}${opInfo}\n• ${rcHint}\n• ${wheelHint}`;
+
+    const badge = $('pinBadge');
+    if (badge) {
+      if (typeof currentOpacity === 'number' && currentOpacity < 100) {
+        badge.textContent = currentOpacity + '%';
+        badge.style.display = 'block';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+  } catch (e) {
+    console.error('updatePinButtonUI error:', e);
+  }
+}
+
 function applyLanguage(langCode) {
   let lang = langCode || 'zh-Hant';
   if (lang.startsWith('zh-Hans') || lang === 'zh-CN' || lang === 'zh-SG') lang = 'zh-Hans';
@@ -867,10 +1170,7 @@ function applyLanguage(langCode) {
     if (dict[k]) el.setAttribute('aria-label', dict[k]);
   });
 
-  const btnPin = $('bPin');
-  if (btnPin) {
-    btnPin.title = isVisPinned ? dict.top_unpin : dict.top_pin;
-  }
+  updatePinButtonUI();
   const btnTopFull = $('bTopFull');
   if (btnTopFull) {
     btnTopFull.title = isFullscreen ? dict.top_windowed : dict.top_full;
@@ -882,9 +1182,12 @@ if (window.__pendingLang) {
   window.__pendingLang = null;
 }
 
-addEventListener('error', e => { const s = $('status'); s.hidden = false; s.textContent = t('failed') + (e.message || 'script error'); });
+addEventListener('error', e => {
+  console.error('Visualizer script error:', e);
+  const s = $('status');
+  if (s) { s.hidden = false; s.textContent = t('failed') + (e.message || 'script error'); }
+});
 // Lite mode for phones and small screens: pixel ratio 1, about a quarter of the pieces. ?full=1 turns it off, ?lite=1 forces it.
-const QS = new URLSearchParams(location.search);
 const LITE = QS.has('full') ? false : QS.has('lite') || matchMedia('(pointer: coarse), (max-width: 820px)').matches;
 const clamp01 = x => Math.min(1, Math.max(0, x));
 const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
@@ -1107,12 +1410,17 @@ function toggleFullscreen() {
 window.handleFullscreenChanged = function(fs) {
   const wasFullscreen = isFullscreen;
   isFullscreen = !!fs;
+  document.body.classList.toggle('fullscreen', isFullscreen);
   const topFull = $('bTopFull');
   if (topFull) {
     topFull.title = isFullscreen ? t('top_windowed') : t('top_full');
     topFull.innerHTML = isFullscreen
       ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6m0 0v6m0-6l-7 7m17-11h-6m0 0V4m0 6l7-7"/></svg>'
       : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>';
+  }
+  const topFullFs = $('bTopFullFs');
+  if (topFullFs) {
+    topFullFs.title = isFullscreen ? t('top_windowed') : t('top_full');
   }
   if (isFullscreen) {
     toast(t('toast_fullscreen_sleep_prevented'), 2400);
@@ -1126,9 +1434,9 @@ window.handleVisPinChanged = function(pinned, showToast = true) {
   const btn = $('bPin');
   if (btn) {
     btn.setAttribute('aria-pressed', String(isVisPinned));
-    btn.title = isVisPinned ? t('top_unpin') : t('top_pin');
     btn.classList.toggle('active', isVisPinned);
   }
+  updatePinButtonUI();
   if (showToast) {
     toast(isVisPinned ? t('toast_pinned') : t('toast_unpinned'));
   }
@@ -1139,12 +1447,189 @@ if (QS.get('pinned') === '1' || QS.get('pinned') === 'true') {
 }
 
 const bPinEl = $('bPin');
+const opacityPopupEl = $('opacityPopup');
+const opSliderEl = $('opSlider');
+const opValEl = $('opVal');
+const opPeekCheckEl = $('opPeekCheck');
+const opacityHudEl = $('opacityHud');
+let hudFadeTimeout = null;
+
+let popupAutoCloseTimer = null;
+
+function isOpacityPopupOpen() {
+  return opacityPopupEl && opacityPopupEl.classList.contains('visible');
+}
+
+function openOpacityPopup() {
+  if (!opacityPopupEl) return;
+  cancelPopupAutoClose();
+  opacityPopupEl.style.display = 'block';
+  requestAnimationFrame(() => {
+    opacityPopupEl.classList.add('visible');
+  });
+  // 實時預覽：開啟選單期間暫停 Hover Peek，呈現所見即所得之真實透明度
+  sendIpc('suppress_peek:1');
+}
+
+function closeOpacityPopup() {
+  cancelPopupAutoClose();
+  if (!opacityPopupEl) return;
+  opacityPopupEl.classList.remove('visible');
+  setTimeout(() => {
+    if (!opacityPopupEl.classList.contains('visible')) {
+      opacityPopupEl.style.display = 'none';
+      if (!opacityHudEl || !opacityHudEl.classList.contains('visible')) {
+        sendIpc('suppress_peek:0');
+      }
+    }
+  }, 200);
+}
+
+function toggleOpacityPopup() {
+  if (isOpacityPopupOpen()) {
+    closeOpacityPopup();
+  } else {
+    openOpacityPopup();
+  }
+}
+
+function schedulePopupAutoClose(delayMs = 600) {
+  clearTimeout(popupAutoCloseTimer);
+  popupAutoCloseTimer = setTimeout(() => {
+    closeOpacityPopup();
+  }, delayMs);
+}
+
+function cancelPopupAutoClose() {
+  clearTimeout(popupAutoCloseTimer);
+}
+
+function updateOpacityUI(val) {
+  currentOpacity = Math.max(20, Math.min(100, val));
+  if (opSliderEl) opSliderEl.value = currentOpacity;
+  if (opValEl) opValEl.textContent = currentOpacity + '%';
+  document.querySelectorAll('.op-preset-btn').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.val, 10) === currentOpacity);
+  });
+  updatePinButtonUI();
+}
+
+function showOpacityHud(val) {
+  if (!opacityHudEl) return;
+  // 滾輪微調期間實時預覽透明穿透效果
+  sendIpc('suppress_peek:1');
+  opacityHudEl.textContent = '🎯 ' + val + '%';
+  opacityHudEl.style.display = 'block';
+  requestAnimationFrame(() => {
+    opacityHudEl.classList.add('visible');
+  });
+  if (hudFadeTimeout) clearTimeout(hudFadeTimeout);
+  hudFadeTimeout = setTimeout(() => {
+    opacityHudEl.classList.remove('visible');
+    setTimeout(() => {
+      if (!opacityHudEl.classList.contains('visible')) {
+        opacityHudEl.style.display = 'none';
+        if (!isOpacityPopupOpen()) {
+          sendIpc('suppress_peek:0');
+        }
+      }
+    }, 200);
+  }, 850);
+}
+
+if (opSliderEl) {
+  updateOpacityUI(currentOpacity);
+  opSliderEl.oninput = e => {
+    const val = parseInt(e.target.value, 10);
+    updateOpacityUI(val);
+    sendIpc('set_opacity:' + val);
+    cancelPopupAutoClose();
+  };
+}
+
+if (opPeekCheckEl) {
+  opPeekCheckEl.checked = isHoverPeek;
+  opPeekCheckEl.onchange = e => {
+    isHoverPeek = e.target.checked;
+    sendIpc('set_hover_peek:' + (isHoverPeek ? '1' : '0'));
+    cancelPopupAutoClose();
+  };
+}
+
+document.querySelectorAll('.op-preset-btn').forEach(btn => {
+  btn.onclick = e => {
+    e.stopPropagation();
+    const val = parseInt(btn.dataset.val, 10);
+    updateOpacityUI(val);
+    sendIpc('set_opacity:' + val);
+    cancelPopupAutoClose();
+  };
+});
+
+if (opacityPopupEl) {
+  opacityPopupEl.addEventListener('mouseenter', () => {
+    cancelPopupAutoClose();
+  });
+  opacityPopupEl.addEventListener('mouseleave', () => {
+    // 滑鼠移出面板範圍，0.6 秒後自動淡出關閉，免除點擊
+    schedulePopupAutoClose(600);
+  });
+}
+
 if (bPinEl) {
   bPinEl.onclick = e => {
     e.stopPropagation();
     sendIpc('toggle_pin');
   };
+  bPinEl.oncontextmenu = e => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleOpacityPopup();
+  };
+  // 圖釘滾輪極速直調：游標停在圖釘上直接滾動滾輪，以 5% 階梯增減
+  bPinEl.addEventListener('wheel', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const delta = e.deltaY < 0 ? 5 : -5;
+    const next = Math.max(20, Math.min(100, currentOpacity + delta));
+    if (next !== currentOpacity) {
+      updateOpacityUI(next);
+      sendIpc('set_opacity:' + next);
+      showOpacityHud(next);
+    }
+  }, { passive: false });
 }
+
+window.addEventListener('click', e => {
+  if (isOpacityPopupOpen()) {
+    if (!opacityPopupEl.contains(e.target) && e.target !== bPinEl && !bPinEl?.contains(e.target)) {
+      closeOpacityPopup();
+    }
+  }
+});
+
+let isMouseInside = false;
+
+function triggerVisMouseEnter() {
+  if (!isMouseInside) {
+    isMouseInside = true;
+    sendIpc('vis_mouse_enter');
+  }
+}
+
+function triggerVisMouseLeave() {
+  if (isMouseInside) {
+    isMouseInside = false;
+    sendIpc('vis_mouse_leave');
+    if (isOpacityPopupOpen()) {
+      closeOpacityPopup();
+    }
+  }
+}
+
+document.addEventListener('mouseenter', triggerVisMouseEnter);
+document.addEventListener('mouseleave', triggerVisMouseLeave);
+document.addEventListener('mousemove', triggerVisMouseEnter);
 
 const bTopFullEl = $('bTopFull');
 if (bTopFullEl) {
@@ -1154,10 +1639,16 @@ if (bTopFullEl) {
   };
 }
 
+const bTopFullFsEl = $('bTopFullFs');
+if (bTopFullFsEl) {
+  bTopFullFsEl.onclick = e => {
+    e.stopPropagation();
+    toggleFullscreen();
+  };
+}
+
 function requestShowMain() {
   sendIpc('show_main');
-  window.focus();
-  toast(t('toast_main'));
 }
 
 const bMainWinEl = $('bMainWin');
@@ -1166,6 +1657,173 @@ if (bMainWinEl) {
     e.stopPropagation();
     requestShowMain();
   };
+}
+
+const bMainWinFsEl = $('bMainWinFs');
+if (bMainWinFsEl) {
+  bMainWinFsEl.onclick = e => {
+    e.stopPropagation();
+    requestShowMain();
+  };
+}
+
+let fsFadeTimer = null;
+const fsActionsEl = $('fsActions');
+window.addEventListener('mousemove', () => {
+  if (isFullscreen && fsActionsEl) {
+    fsActionsEl.style.opacity = '1.0';
+    clearTimeout(fsFadeTimer);
+    fsFadeTimer = setTimeout(() => {
+      if (isFullscreen && fsActionsEl) {
+        fsActionsEl.style.opacity = '0.45';
+      }
+    }, 3000);
+  }
+});
+
+let isClusterDocked = false;
+
+function resetCaptionButtons() {
+  if (vBtnMinEl) {
+    vBtnMinEl.textContent = isClusterDocked ? '‗' : '_';
+    vBtnMinEl.title = isClusterDocked ? '最小化模組化工作站全體群組 (Shift+點擊僅最小化此視窗)' : '最小化此視窗';
+    vBtnMinEl.style.color = isClusterDocked ? '#b4d7ff' : '';
+  }
+  if (vBtnCloseEl) {
+    vBtnCloseEl.textContent = isClusterDocked ? '⛝' : '✕';
+    vBtnCloseEl.title = isClusterDocked ? '關閉模組化工作站全體群組 (Shift+點擊僅關閉此視窗)' : '關閉此視窗';
+    vBtnCloseEl.style.backgroundColor = '';
+    vBtnCloseEl.style.color = '';
+  }
+}
+
+function updateHoveredButtonState(btn, isClose, e) {
+  const isShift = isClusterDocked && ((e && e.shiftKey) || false);
+  if (isClose) {
+    if (vBtnCloseEl) {
+      vBtnCloseEl.textContent = isShift ? '✕' : (isClusterDocked ? '⛝' : '✕');
+      vBtnCloseEl.title = isShift
+        ? '僅關閉此視窗 (自工作站群組脫離)'
+        : (isClusterDocked ? '關閉模組化工作站全體群組 (Shift+點擊僅關閉此視窗)' : '關閉此視窗');
+      vBtnCloseEl.style.backgroundColor = '';
+      vBtnCloseEl.style.color = '';
+    }
+  } else {
+    if (vBtnMinEl) {
+      vBtnMinEl.textContent = isShift ? '_' : (isClusterDocked ? '‗' : '_');
+      vBtnMinEl.title = isShift
+        ? '僅最小化此視窗 (自工作站群組脫離)'
+        : (isClusterDocked ? '最小化模組化工作站全體群組 (Shift+點擊僅最小化此視窗)' : '最小化此視窗');
+      vBtnMinEl.style.color = (isClusterDocked && !isShift) ? '#b4d7ff' : '';
+    }
+  }
+}
+
+const vBtnMinEl = $('vBtnMin');
+if (vBtnMinEl) {
+  vBtnMinEl.addEventListener('mouseenter', e => updateHoveredButtonState(vBtnMinEl, false, e));
+  vBtnMinEl.addEventListener('mousemove', e => updateHoveredButtonState(vBtnMinEl, false, e));
+  vBtnMinEl.addEventListener('mouseleave', () => {
+    resetCaptionButtons();
+  });
+  vBtnMinEl.onclick = e => {
+    e.stopPropagation();
+    if (window.chrome && window.chrome.webview) {
+      if (isClusterDocked) {
+        if (e.shiftKey) {
+          window.chrome.webview.postMessage('minimize_solo');
+        } else {
+          window.chrome.webview.postMessage('minimize');
+        }
+      } else {
+        window.chrome.webview.postMessage('minimize_solo');
+      }
+    }
+  };
+}
+
+const vBtnCloseEl = $('vBtnClose');
+if (vBtnCloseEl) {
+  vBtnCloseEl.addEventListener('mouseenter', e => updateHoveredButtonState(vBtnCloseEl, true, e));
+  vBtnCloseEl.addEventListener('mousemove', e => updateHoveredButtonState(vBtnCloseEl, true, e));
+  vBtnCloseEl.addEventListener('mouseleave', () => {
+    resetCaptionButtons();
+  });
+  vBtnCloseEl.onclick = e => {
+    e.stopPropagation();
+    if (window.chrome && window.chrome.webview) {
+      if (isClusterDocked) {
+        if (e.shiftKey) {
+          window.chrome.webview.postMessage('close');
+        } else {
+          window.chrome.webview.postMessage('close_cluster');
+        }
+      } else {
+        window.chrome.webview.postMessage('close');
+      }
+    }
+  };
+}
+
+// 方案 1：懸停精準感應制 (僅在滑鼠正懸停於按鈕時，響應鍵盤 Shift 切換)
+window.addEventListener('keydown', e => {
+  if (e.key === 'Shift') {
+    if (vBtnMinEl && vBtnMinEl.matches(':hover')) updateHoveredButtonState(vBtnMinEl, false, e);
+    if (vBtnCloseEl && vBtnCloseEl.matches(':hover')) updateHoveredButtonState(vBtnCloseEl, true, e);
+  }
+});
+window.addEventListener('keyup', e => {
+  if (e.key === 'Shift') {
+    if (vBtnMinEl && vBtnMinEl.matches(':hover')) updateHoveredButtonState(vBtnMinEl, false, e);
+    if (vBtnCloseEl && vBtnCloseEl.matches(':hover')) updateHoveredButtonState(vBtnCloseEl, true, e);
+  }
+});
+window.addEventListener('blur', () => {
+  resetCaptionButtons();
+});
+
+const vTitlebarEl = $('v-titlebar');
+if (vTitlebarEl) {
+  vTitlebarEl.addEventListener('mousedown', e => {
+    if (e.button === 0 && !e.target.closest('button')) {
+      if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage('start_drag');
+      }
+    }
+  });
+}
+
+window.updateTitleBadge = function(badgeSymbol) {
+  const badgeEl = $('vBadge');
+  isClusterDocked = !!badgeSymbol;
+  if (badgeEl) {
+    if (badgeSymbol) {
+      badgeEl.textContent = badgeSymbol;
+      badgeEl.style.display = 'inline-block';
+    } else {
+      badgeEl.textContent = '';
+      badgeEl.style.display = 'none';
+    }
+  }
+  resetCaptionButtons();
+  if (!isClusterDocked) {
+    if (vBtnMinEl) {
+      vBtnMinEl.textContent = '_';
+      vBtnMinEl.title = '最小化此視窗';
+      vBtnMinEl.style.color = '';
+    }
+    if (vBtnCloseEl) {
+      vBtnCloseEl.textContent = '✕';
+      vBtnCloseEl.title = '關閉此視窗';
+      vBtnCloseEl.style.backgroundColor = '';
+      vBtnCloseEl.style.color = '';
+    }
+  }
+};
+
+const urlBadge = QS.get('badge');
+if (urlBadge) {
+  window.updateTitleBadge(urlBadge);
 }
 
 /* ---------- listening: bands, beats, section ---------- */
@@ -1290,11 +1948,8 @@ addEventListener('keydown', e => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.target.matches?.('input[type=range]') && e.code.startsWith('Arrow')) return;
   switch (e.code) {
+    case 'KeyW': requestShowMain(); break;
     case 'KeyP': setPainted(!painted); toast(painted ? t('toast_style_painted') : t('toast_style_cubes')); break;
-    case 'KeyW':
-      e.preventDefault();
-      requestShowMain();
-      break;
     case 'KeyR': setRotate(!controls.autoRotate, true); break;
     case 'BracketLeft': case 'BracketRight': { const el = $('sens'); el.value = +el.value + (e.code === 'BracketRight' ? 10 : -10);
       el.dispatchEvent(new Event('input')); toast(`${t('toast_sensitivity')} ${el.value}%`); break; }
@@ -1367,6 +2022,7 @@ renderer.setAnimationLoop(nowMs => {
 });
 window.__pp = { boom, painter, A, fps, T_MAX, LITE, setPainted, controls,
   BS, BANDS, get t() { return Math.max(...BS.map(s => s.tShow)); }, get ts() { return BS.map(s => s.tShow); }, NB, hold(v) { hold = v; }, flow, setFlow, AQ };
+sendIpc('vis_ready');
 </script>
 </body>
 </html>

@@ -1,20 +1,23 @@
 # Microsoft Store Listing - English (en-US)
-# Win2Pod Bridge - Version 0.1.18
+# Win2Pod Bridge - Version 0.1.19
 
 ## 0. What's New in This Version (Release Notes - Paste into Partner Center)
 ```text
-[Win2Pod Bridge 0.1.18 Major Update - AirPlay Audio Receiver is Here!]
-• 📲 All-New "AirPlay Audio Receiver":
-  - Transform your Windows PC into a genuine AirPlay wireless speaker! You can now stream music, podcasts, and videos directly from the Control Center on your iPhone, iPad, or Mac ("AirPlay") to your PC speakers or headphones.
-  - Native 44.1 kHz / 16-bit Lossless ALAC decoding delivers pristine, audiophile-grade wireless sound.
-• ✨ Maximum Dynamic Range (Unity Gain Passthrough):
-  - Bypasses iOS Control Center volume attenuation restrictions. The PC receiver decodes audio directly at 1.0 (0 dB Unity Gain) for maximum dynamic range, preserving micro-details and acoustic punch even if the phone slider is lowered.
-  - Displays a dedicated "✨ Max Dynamic Range" badge with intuitive hover tooltips showing phone volume.
-• ⏯️ Smart Standby Resume (DACP Target Caching):
-  - When playback pauses on iPhone and closes the streaming session, the PC standby card retains a quick-resume play button. Tap ▶ to wake iPhone playback over the air, or receive instant connection feedback if disconnected.
-• 🎛️ Bi-Directional Media Controls & A/V Lip-Sync Calibration:
-  - Reverse-control iPhone playback (Play/Pause, Next/Prev Track) straight from the PC, complete with synchronized real-time album artwork and track metadata.
-  - Built-in dual-latency lip-sync presets: Standard (1.5s) and Deep (2.0s) for YouTube and video streaming.
+[Win2Pod Bridge 0.1.19 Major Update - Modular Workstation & Audiophile VFD Display]
+• 🗔 All-New "Modular Multi-Window Workstation" & Magnetic Dock Tree:
+  - Relive the classic Winamp docking magic! Freely snap and dock the Main Control Window, Mini Player, 10-Band Pro Equalizer, and 3D Motion Visualizer along any edge.
+  - New "Modular Workstation" caption button (◫) instantaneously deploys a perfectly aligned 3-column flagship audiophile command center.
+  - Directed Dock Tree Forest topology with Win32 subclassing enables master drag propagation, natural sub-window severing, and autonomous subcluster root promotion.
+• 📟 6-Line Audiophile VFD Matrix & Classical Movement Smart Wrapping:
+  - Authentic vintage hi-fi VFD display with high-density monospaced fonts and multi-tier fluorescent green and amber palettes.
+  - Classical Movement Smart Wrapping splits symphonic and classical movements cleanly across two balanced lines with zero awkward hyphenation.
+  - Clean 1:1 square album art and a dedicated "Source: App ↗" recall button permanently eliminate intrusive hovering tooltips.
+• 📐 Golden Half-Height Ratio (340px) & 50px Full-Height Spectrum:
+  - Mini Player and Equalizer default heights are calibrated to exactly half of the Main Window (340px), forming a flush, gapless side stack.
+  - Mini Player real-time visualizer spectrum elevated to 50px, delivering bit-perfect peak decay dynamics identical to the main player.
+• 🛡️ Win32 Z-Order SSOT & Ghost Topmost Protection:
+  - Single Source of Truth (SSOT): Cluster topmost hierarchy is anchored to the master pin state, eliminating desynchronized flags.
+  - Enforced Win32 HWND_NOTOPMOST demotion guarantees that unpinned windows never float stubbornly above desktop applications.
 ```
 
 ## 1. Product Name
@@ -28,9 +31,9 @@ Win2Pod Bridge
 *(Displays in search results, category pages, and promotional cards)*
 
 ```text
-Bridge Windows & Apple audio seamlessly! Stream PC sound to HomePod in lossless ALAC, or receive AirPlay audio from iPhone & iPad with Unity Gain Max Dynamic Range! Features AirPods handoff, 3D oil-painting visualizer, bi-directional media remote & 10-band pro EQ.
+Bridge Windows & Apple audio seamlessly! Stream PC sound to HomePod, or receive AirPlay audio from iPhone & iPad! Features all-new Winamp-style Modular Magnetic Workstation, 6-line audiophile VFD display, AirPods smart handoff, 3D visualizer & 10-band pro EQ.
 ```
-*(Character count: ~249 chars, comfortably under the 270-character limit)*
+*(Character count: ~259 chars, comfortably under the 270-character limit)*
 
 ---
 

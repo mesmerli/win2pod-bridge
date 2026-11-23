@@ -204,7 +204,6 @@ pub struct ControllerState {
     pub airpods_auto_pause: bool,
     pub window_snapping: bool,
     pub snap_distance: i32,
-    pub detach_equalizer_window: bool,
     pub paired_airpods: Vec<crate::airpods::PairedAirPodsDevice>,
     pub airpods_states: std::collections::HashMap<String, crate::airpods::protocol::AirPodsDeviceState>,
     pub airplay_receiver_enabled: bool,
@@ -328,7 +327,6 @@ impl Default for ControllerState {
             airpods_auto_pause: load_airpods_auto_pause(),
             window_snapping: load_window_snapping(),
             snap_distance: load_snap_distance(),
-            detach_equalizer_window: load_detach_equalizer_window(),
             paired_airpods: Vec::new(),
             airpods_states: std::collections::HashMap::new(),
             airplay_receiver_enabled: load_airplay_receiver_enabled(),
@@ -458,7 +456,6 @@ pub enum GuiCmd {
     SetAirPodsAutoPause(bool),
     SetWindowSnapping(bool),
     SetSnapDistance(i32),
-    SetDetachEqualizerWindow(bool),
     AirPodsEventReceived(crate::airpods::AirPodsEvent),
     SetAirPlayReceiverEnabled(bool),
     SetAirPlayReceiverName(String),
@@ -4138,11 +4135,6 @@ pub fn spawn_controller(
                                 }
                                 broadcast(&state);
                             }
-                            GuiCmd::SetDetachEqualizerWindow(enabled) => {
-                                state.detach_equalizer_window = enabled;
-                                save_detach_equalizer_window(enabled);
-                                broadcast(&state);
-                            }
                             GuiCmd::SetAirPlayReceiverEnabled(enabled) => {
                                 state.airplay_receiver_enabled = enabled;
                                 save_airplay_receiver_enabled(enabled);
@@ -5341,6 +5333,16 @@ pub struct AppConfig {
     pub always_on_top: bool,
     #[serde(default = "default_false")]
     pub visualizer_pinned: bool,
+    #[serde(default = "default_false")]
+    pub mini_player_pinned: bool,
+    #[serde(default = "default_false")]
+    pub equalizer_pinned: bool,
+    #[serde(default = "default_opacity")]
+    pub mini_player_opacity: f32,
+    #[serde(default = "default_opacity")]
+    pub visualizer_opacity: f32,
+    #[serde(default = "default_true")]
+    pub hover_peek_enabled: bool,
     #[serde(default = "default_true")]
     pub airpods_auto_routing: bool,
     #[serde(default = "default_true")]
@@ -5377,9 +5379,13 @@ pub struct AppConfig {
     pub airplay_receiver_sound_enhancer_mode: SoundEnhancerMode,
     #[serde(default)]
     pub airplay_receiver_warmth_enhancer_mode: WarmthEnhancerMode,
+    #[serde(default = "default_false")]
+    pub workstation_discovered: bool,
 }
 
 fn default_receiver_name() -> String { "Win2Pod Audio Receiver".to_string() }
+fn default_opacity() -> f32 { 1.0 }
+fn default_visualizer_opacity() -> f32 { 1.0 }
 fn default_snap_distance() -> i32 { 12 }
 fn default_audio_device() -> String { "default".to_string() }
 fn default_volume() -> f32 { DEFAULT_VOLUME }
@@ -5415,6 +5421,11 @@ impl Default for AppConfig {
             warmth_enhancer_mode: WarmthEnhancerMode::Off,
             always_on_top: default_false(),
             visualizer_pinned: default_false(),
+            mini_player_pinned: default_false(),
+            equalizer_pinned: default_false(),
+            mini_player_opacity: default_opacity(),
+            visualizer_opacity: default_visualizer_opacity(),
+            hover_peek_enabled: default_true(),
             airpods_auto_routing: default_true(),
             airpods_auto_pause: default_true(),
             window_snapping: default_true(),
@@ -5433,6 +5444,7 @@ impl Default for AppConfig {
             airplay_receiver_custom_eq_gains: default_custom_eq_gains(),
             airplay_receiver_sound_enhancer_mode: SoundEnhancerMode::Off,
             airplay_receiver_warmth_enhancer_mode: WarmthEnhancerMode::Off,
+            workstation_discovered: default_false(),
         }
     }
 }
@@ -5762,12 +5774,119 @@ pub fn save_visualizer_pinned(pinned: bool) {
     update_config(|c| c.visualizer_pinned = pinned);
 }
 
+pub fn load_mini_player_pinned() -> bool {
+    load_config().mini_player_pinned
+}
+
+pub fn save_mini_player_pinned(pinned: bool) {
+    update_config(|c| c.mini_player_pinned = pinned);
+}
+
+pub fn load_equalizer_pinned() -> bool {
+    load_config().equalizer_pinned
+}
+
+pub fn save_equalizer_pinned(pinned: bool) {
+    update_config(|c| c.equalizer_pinned = pinned);
+}
+
+pub fn save_window_pinned(kind: crate::snapping::WindowKind, pinned: bool) {
+    match kind {
+        crate::snapping::WindowKind::Main => save_always_on_top(pinned),
+        crate::snapping::WindowKind::MiniPlayer => save_mini_player_pinned(pinned),
+        crate::snapping::WindowKind::Equalizer => save_equalizer_pinned(pinned),
+        crate::snapping::WindowKind::Visualizer => save_visualizer_pinned(pinned),
+    }
+}
+
+pub fn load_window_pinned(kind: crate::snapping::WindowKind) -> bool {
+    match kind {
+        crate::snapping::WindowKind::Main => load_always_on_top(),
+        crate::snapping::WindowKind::MiniPlayer => load_mini_player_pinned(),
+        crate::snapping::WindowKind::Equalizer => load_equalizer_pinned(),
+        crate::snapping::WindowKind::Visualizer => load_visualizer_pinned(),
+    }
+}
+
+pub fn load_mini_player_opacity() -> f32 {
+    let op = load_config().mini_player_opacity;
+    if (op - 0.75).abs() < 1e-4 {
+        1.0
+    } else {
+        op.clamp(0.2, 1.0)
+    }
+}
+
+pub fn save_mini_player_opacity(val: f32) {
+    let clamped = val.clamp(0.2, 1.0);
+    update_config(|c| c.mini_player_opacity = clamped);
+}
+
+pub fn load_visualizer_opacity() -> f32 {
+    let op = load_config().visualizer_opacity;
+    if (op - 0.75).abs() < 1e-4 {
+        1.0
+    } else {
+        op.clamp(0.2, 1.0)
+    }
+}
+
+pub fn save_visualizer_opacity(val: f32) {
+    let clamped = val.clamp(0.2, 1.0);
+    update_config(|c| c.visualizer_opacity = clamped);
+}
+
+pub fn load_hover_peek_enabled() -> bool {
+    load_config().hover_peek_enabled
+}
+
+pub fn save_hover_peek_enabled(_val: bool) {
+    #[cfg(test)]
+    {
+        return;
+    }
+    #[allow(unreachable_code)]
+    update_config(|c| c.hover_peek_enabled = _val);
+}
+
+pub fn save_window_opacity(_kind: crate::snapping::WindowKind, _opacity: f32) {
+    #[cfg(test)]
+    {
+        return;
+    }
+    #[allow(unreachable_code)]
+    match _kind {
+        crate::snapping::WindowKind::MiniPlayer => save_mini_player_opacity(_opacity),
+        crate::snapping::WindowKind::Visualizer => save_visualizer_opacity(_opacity),
+        _ => {}
+    }
+}
+
+pub fn load_window_opacity(kind: crate::snapping::WindowKind) -> f32 {
+    match kind {
+        crate::snapping::WindowKind::MiniPlayer => load_mini_player_opacity(),
+        crate::snapping::WindowKind::Visualizer => load_visualizer_opacity(),
+        _ => 1.0,
+    }
+}
+
 pub fn load_airpods_auto_routing() -> bool {
     load_config().airpods_auto_routing
 }
 
 pub fn save_airpods_auto_routing(enabled: bool) {
     update_config(|c| c.airpods_auto_routing = enabled);
+}
+
+pub fn is_workstation_discovered() -> bool {
+    load_config().workstation_discovered
+}
+
+pub fn save_workstation_discovered(_val: bool) {
+    #[cfg(test)]
+    return;
+    #[cfg(not(test))]
+    update_config(|c| c.workstation_discovered = _val);
 }
 
 pub fn load_airpods_auto_pause() -> bool {
@@ -5792,14 +5911,6 @@ pub fn load_snap_distance() -> i32 {
 
 pub fn save_snap_distance(dist: i32) {
     update_config(|c| c.snap_distance = dist);
-}
-
-pub fn load_detach_equalizer_window() -> bool {
-    load_config().detach_equalizer_window
-}
-
-pub fn save_detach_equalizer_window(enabled: bool) {
-    update_config(|c| c.detach_equalizer_window = enabled);
 }
 
 pub fn load_airplay_receiver_enabled() -> bool {
