@@ -686,16 +686,12 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
         if !main_hwnd.is_null() {
             const GWLP_HWNDPARENT: i32 = -8;
             SetWindowLongPtrW(main_hwnd, GWLP_HWNDPARENT, 0);
-            if !crate::snapping::is_window_pinned(crate::snapping::WindowKind::Main) {
+            if !crate::tray::is_window_hidden_to_tray() && !crate::snapping::is_window_pinned(crate::snapping::WindowKind::Main) {
                 SetWindowPos(main_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
         }
 
-        if crate::tray::is_window_hidden_to_tray() {
-            crate::tray::bring_main_to_front();
-        } else {
-            crate::snapping::bring_fleet_to_top();
-        }
+        crate::snapping::bring_fleet_to_top();
     }
 
     if let Some(ref wv) = state.webview {
@@ -1426,7 +1422,7 @@ unsafe extern "system" fn visualizer_wnd_proc(
                 SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
             }
             let main_hwnd = crate::tray::get_main_hwnd();
-            if !main_hwnd.is_null() && !crate::snapping::is_window_pinned(crate::snapping::WindowKind::Main) {
+            if !main_hwnd.is_null() && !crate::tray::is_window_hidden_to_tray() && !crate::snapping::is_window_pinned(crate::snapping::WindowKind::Main) {
                 SetWindowPos(main_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
             PostQuitMessage(0);
