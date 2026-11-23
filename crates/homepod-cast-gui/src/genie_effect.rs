@@ -18,6 +18,17 @@ pub struct CachedGenieSnapshot {
 }
 
 static LAST_SNAPSHOT: std::sync::Mutex<Option<CachedGenieSnapshot>> = std::sync::Mutex::new(None);
+static REVERSE_GENIE_ENABLED: AtomicBool = AtomicBool::new(true);
+
+/// Query if reverse genie restore animation is enabled
+pub fn is_reverse_genie_enabled() -> bool {
+    REVERSE_GENIE_ENABLED.load(Ordering::SeqCst)
+}
+
+/// Enable or disable reverse genie restore animation
+pub fn set_reverse_genie_enabled(enabled: bool) {
+    REVERSE_GENIE_ENABLED.store(enabled, Ordering::SeqCst);
+}
 
 /// Query if a cached snapshot is available for reverse genie restore
 pub fn has_cached_genie_snapshot() -> bool {
@@ -523,6 +534,11 @@ where
 
     #[cfg(not(test))]
     {
+        if !is_reverse_genie_enabled() {
+            on_finish();
+            return false;
+        }
+
         abort_genie_effect();
 
         let snapshot = {
@@ -675,7 +691,7 @@ fn run_reverse_genie_animation<F>(
         let old_rnd = SelectObject(hdc_render, hbmp_render);
         let pixels = std::slice::from_raw_parts_mut(pixel_ptr as *mut u32, (win_w * win_h) as usize);
 
-        let duration_ms = 340.0; // 340ms brisk & natural macOS-style Genie restore duration
+        let duration_ms = 170.0; // 170ms ultra-fast (half time) swift macOS-style Genie restore duration
         let start_time = Instant::now();
 
         let win_size = SIZE { cx: win_w, cy: win_h };

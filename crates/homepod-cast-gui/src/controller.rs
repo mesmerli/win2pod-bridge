@@ -204,6 +204,7 @@ pub struct ControllerState {
     pub airpods_auto_pause: bool,
     pub window_snapping: bool,
     pub snap_distance: i32,
+    pub genie_restore_animation: bool,
     pub paired_airpods: Vec<crate::airpods::PairedAirPodsDevice>,
     pub airpods_states: std::collections::HashMap<String, crate::airpods::protocol::AirPodsDeviceState>,
     pub airplay_receiver_enabled: bool,
@@ -327,6 +328,11 @@ impl Default for ControllerState {
             airpods_auto_pause: load_airpods_auto_pause(),
             window_snapping: load_window_snapping(),
             snap_distance: load_snap_distance(),
+            genie_restore_animation: {
+                let enabled = load_genie_restore_animation();
+                crate::genie_effect::set_reverse_genie_enabled(enabled);
+                enabled
+            },
             paired_airpods: Vec::new(),
             airpods_states: std::collections::HashMap::new(),
             airplay_receiver_enabled: load_airplay_receiver_enabled(),
@@ -456,6 +462,7 @@ pub enum GuiCmd {
     SetAirPodsAutoPause(bool),
     SetWindowSnapping(bool),
     SetSnapDistance(i32),
+    SetGenieRestoreAnimation(bool),
     AirPodsEventReceived(crate::airpods::AirPodsEvent),
     SetAirPlayReceiverEnabled(bool),
     SetAirPlayReceiverName(String),
@@ -4125,6 +4132,12 @@ pub fn spawn_controller(
                                 }
                                 broadcast(&state);
                             }
+                            GuiCmd::SetGenieRestoreAnimation(enabled) => {
+                                state.genie_restore_animation = enabled;
+                                save_genie_restore_animation(enabled);
+                                crate::genie_effect::set_reverse_genie_enabled(enabled);
+                                broadcast(&state);
+                            }
                             GuiCmd::SetSnapDistance(dist) => {
                                 let clamped = dist.clamp(0, 50);
                                 state.snap_distance = clamped;
@@ -5351,6 +5364,8 @@ pub struct AppConfig {
     pub window_snapping: bool,
     #[serde(default = "default_snap_distance")]
     pub snap_distance: i32,
+    #[serde(default = "default_true")]
+    pub genie_restore_animation: bool,
     #[serde(default = "default_false")]
     pub detach_equalizer_window: bool,
     #[serde(default)]
@@ -5430,6 +5445,7 @@ impl Default for AppConfig {
             airpods_auto_pause: default_true(),
             window_snapping: default_true(),
             snap_distance: default_snap_distance(),
+            genie_restore_animation: default_true(),
             detach_equalizer_window: default_false(),
             standin_device_id: None,
             airplay_receiver_enabled: false,
@@ -5911,6 +5927,14 @@ pub fn load_snap_distance() -> i32 {
 
 pub fn save_snap_distance(dist: i32) {
     update_config(|c| c.snap_distance = dist);
+}
+
+pub fn load_genie_restore_animation() -> bool {
+    load_config().genie_restore_animation
+}
+
+pub fn save_genie_restore_animation(enabled: bool) {
+    update_config(|c| c.genie_restore_animation = enabled);
 }
 
 pub fn load_airplay_receiver_enabled() -> bool {
