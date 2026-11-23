@@ -285,7 +285,52 @@ $$w(u) = (1 - u) \cdot W_{\text{orig}} + u \cdot W_{\text{tray}}$$
 
 ---
 
-## 7. 架構核心成果與檢驗
+## 7. 靈動懸浮：視窗原生半透明化（Layered Opacity）與懸浮智慧窺視（Hover Peek）
+
+在多視窗工作站生態中，「迷你播放器」與「視覺特效視窗」常被使用者長時間置頂於螢幕一隅，一邊寫代碼或瀏覽網頁、一邊享受背景音樂與律動。然而，全不透明的視窗會遮蔽後方的編輯器文字，而固定半透明又會導致想看清歌曲或操作按鈕時閱讀困難。
+
+我們為此量身打造了**「原生層疊半透明 + 智慧懸浮窺視（Hover Peek）」**雙軌機制：
+
+```mermaid
+stateDiagram-v2
+    [*] --> SemiTransparent: 使用者設定透明度 (20% ~ 90%)
+    SemiTransparent --> Hovered: 滑鼠游標移入 (MouseEnter)
+    Hovered --> Solid: 毫秒級自動過渡至 100% 不透明 (Hover Peek)
+    Solid --> MouseLeave: 滑鼠離開視窗 (MouseLeave)
+    MouseLeave --> SemiTransparent: 自動漸變回目標透明度
+    
+    note right of Solid: 確保歌名、進度條、按鈕高對比清晰可讀
+    note right of SemiTransparent: 柔和退居背景，不干擾主畫面工作
+```
+
+### 關鍵機制與技術細節
+
+#### 1. Win32 原生 `WS_EX_LAYERED` 硬體加速混合
+- 在 [snapping.rs](file:///C:/Users/mesme/workspace/win2pod-bridge/crates/homepod-cast-gui/src/snapping.rs#L107-L135) 中實作 `apply_native_window_opacity(hwnd, opacity)`：
+  - 透過 `GetWindowLongW` / `SetWindowLongW` 附加 `WS_EX_LAYERED` 延伸樣式。
+  - 呼叫 Win32 原生 API `SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA)`，由 Windows DWM 桌面視窗管理員在 GPU 合成階段以零 CPU 開銷完成 Alpha 混合。
+- **性能優化（動態樣式剝除）**：
+  當透明度為 $100\%$（`opacity >= 0.999`）時，系統主動以 `SetWindowLongW` 剝除 `WS_EX_LAYERED` 樣式並觸發 `SWP_FRAMECHANGED`，使視窗完整回退至標準原生渲染通道，完全避免分層視窗帶來的微量記憶體與 DWM 轉譯開銷。
+
+#### 2. 安全下限不變量（Safety Clamping Invariant: 20% ~ 100%）
+- **踩坑點**：若允許透明度一路降至 $0\%$，視窗會在畫面上徹底「人間蒸發」。使用者既看不見也無法點擊，會誤以為程式崩潰或丟失視窗。
+- **架構規範**：嚴格強制夾取（Clamp）透明度區間在 $[0.20, 1.00]$。最低 $20\%$ 保證了在任何暗色或淺色桌布上，視窗輪廓與圖示始終隱約可辨，絕不丟失。
+
+#### 3. 智慧懸浮窺視（Hover Peek / Intelligent Auto-Reveal）
+- 在 [visualizer.rs](file:///C:/Users/mesme/workspace/win2pod-bridge/crates/homepod-cast-gui/src/visualizer.rs#L535-L560) 與迷你播放器中：
+  - 平時維持安靜半透明（例如 $40\%$），宛如毛玻璃雕刻般懸浮於背景。
+  - 只要使用者的滑鼠游標掠過或移入視窗範圍（Hover），系統立刻無感切換至 $100\%$ 不透明，所有歌詞、曲名、光柱與按鈕瞬間立體飽滿；移出後無痕還原，兼顧工作專注與操作便利。
+
+#### 4. Alt + 滑鼠滾輪無級微調（Fast Gesture Tuning）
+- 使用者無需深入層層設定選單，只要游標懸浮在迷你播放器或視覺視窗上，按住鍵盤 `Alt` 鍵並滾動滑鼠滾輪，即可即時以 $5\%$ 步進流暢升降透明度，手感極度直覺。
+
+#### 5. 叢集同化與設定持久化
+- 每個視窗的半透明數值（`mini_player_opacity`, `visualizer_opacity`）與 Hover Peek 開關（`hover_peek_enabled`）皆寫入設定檔（`controller.rs`）。
+- 當副視窗組裝吸附至群組時（`assimilate_cluster_to_anchor`），視窗的樣式狀態會平滑調和，重啟後亦能百分之百原樣復原。
+
+---
+
+## 8. 架構核心成果與檢驗
 
 經過此番體系化梳理與重構，Win2Pod 達成如下標準行為：
 
@@ -298,11 +343,12 @@ $$w(u) = (1 - u) \cdot W_{\text{orig}} + u \cdot W_{\text{tray}}$$
 | **按副視窗 🏠 召喚** | 主視窗優雅平滑飛回並完美融入群組，絕不破壞既有子群組 | 徹底消除硬編碼搬移 + 拓撲一致性 |
 | **點擊任一合體視窗** | 群組內所有視窗原子級同步置頂，不被第三方視窗穿插 | `bring_cluster_to_top` Z-Order 秩序 |
 | **點擊任一合體視窗 📌** | 全叢集視窗原子級同步切換置頂／非置頂，杜絕幽靈置頂 | `set_cluster_pinned` + `HWND_NOTOPMOST` 規範 |
+| **半透明視窗懸浮互動** | 平時安靜半透明，滑鼠移入自動 100% 窺視，Alt+滾輪微調 | `apply_native_window_opacity` + `Hover Peek` |
 | **點擊任一合體視窗 X** | 連鎖關閉該連通群組中的所有合體視窗 | `close_window_cluster` 遍歷關閉 |
 
 ---
 
-## 8. 結語
+## 9. 結語
 
 視窗磁吸吸附表面上看似只是「計算座標貼齊」，但一旦引入**多視窗自由組合、主從聯動、生命週期異步化與跨架構渲染框架（Win32 + egui + wry）**，其複雜度便會呈幾何級數上升。
 
@@ -313,5 +359,6 @@ $$w(u) = (1 - u) \cdot W_{\text{orig}} + u \cdot W_{\text{tray}}$$
 4. **Z 軸與平面享有同等嚴謹的階層規範**（單一事實來源、杜絕狀態分裂與逆向感染，並善用 Win32 `HWND_NOTOPMOST` 清除非預期置頂）。
 5. **歷史代碼必須及時隨架構升級而重構**（早期雙視窗時代的便宜行事代碼，在多視窗拓撲體系下會成為難以察覺的「幽靈撕裂者」，唯有堅持 SSOT 原則方能維護系統純潔性）。
 6. **細節成就非凡質感**（從多塊鋸齒拉絲到逐掃描線次像素光柵化的 Muelle S-curve，數學模型的嚴謹性決定了使用者體驗的精緻上限）。
+7. **互動的人性化細節（Affordance）**（半透明視窗搭配 20% 安全下限、智慧 Hover Peek 與手勢滾輪無級微調，讓靈活性與可用性達到最佳平衡）。
 
 這份經驗不僅讓 Win2Pod 成功重現經典 Winamp 的迷人操作手感與 macOS 的靈動神燈視效，更為未來進一步擴充更多模組視窗立下了堅實可靠的架構基礎。
