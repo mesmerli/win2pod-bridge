@@ -251,6 +251,32 @@ flowchart TD
 
 ---
 
+### 坑點 7：全螢幕退出時的「主視窗殭屍復活」（Zombie Resuscitation on Fullscreen Exit）
+- **現象**：
+  使用者在視覺特效全螢幕模式下呼出 HUD 並點擊了主視窗的 ⛝（關閉／隱藏至系統匣）；然而當按下 `F` 或 `Escape` 切換退出全螢幕回到普通視窗時，**原本已收納至系統匣的主視窗竟然又神秘地自動彈回桌面**！
+- **深度病因（全螢幕退出回調中的過度熱心）**：
+  1. 在 `visualizer.rs` 的 `toggle_visualizer_fullscreen` 退出分支中，早期開發者為了確保使用者切回視窗化時能看到控制介面，寫了一段防護：
+     ```rust
+     if crate::tray::is_window_hidden_to_tray() {
+         crate::tray::bring_main_to_front();
+     } else {
+         crate::snapping::bring_fleet_to_top();
+     }
+     ```
+  2. **嚴重忽視使用者在全螢幕下主動關閉主視窗的意志**：當使用者在全螢幕中刻意關閉主視窗，主視窗已合法收合至托盤（`is_window_hidden_to_tray() == true`）。
+  3. 一旦退出全螢幕，這段過時的邏輯看到 `is_window_hidden_to_tray() == true`，竟擅自調用 `bring_main_to_front()` 強制將主視窗從 `(-32000, -32000)` 離屏坐標抓回螢幕中央並還原視窗！
+- **解法心法**：
+  - **尊重使用者的隱藏意志，全面交由 `bring_fleet_to_top()` 統一過濾**：
+    刪除強行喚醒邏輯，統一呼叫 `bring_fleet_to_top()`。在 `bring_fleet_to_top()` 內部已具備嚴密的托盤守衛：
+    ```rust
+    if kind == WindowKind::Main && crate::tray::is_window_hidden_to_tray() {
+        continue; // 隱藏於托盤的主視窗老老實實留於托盤，絕不驚擾
+    }
+    ```
+  - 確保視覺特效視窗切回普通模式時，僅調整自身樣式與可見視窗的層級，主視窗維持使用者所期望的隱藏狀態。
+
+---
+
 ## 6. 極致視覺體驗：Mac 風格 Muelle Genie S-Curve 神燈最小化效果實踐
 
 除了視窗間的剛性磁吸與聯動，視窗在隱藏與還原時的過渡動畫直接決定了應用的工藝質感。我們在 Windows 平台上以純 Win32 GDI + Layered Window 成功復刻了 macOS 最具辨識度的經典特效——**Muelle Genie Effect（阿拉丁神燈 S 曲線漏斗收縮動畫）**。
