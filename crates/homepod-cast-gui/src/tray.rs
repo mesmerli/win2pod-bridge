@@ -342,13 +342,11 @@ pub fn hide_all_windows_to_tray(hwnd: HWND, ctx: &egui::Context) {
     }
 }
 
-/// Restore window from system tray back onto visible desktop screen
-pub fn show_window_from_tray(hwnd: HWND, ctx: &egui::Context) {
-    crate::genie_effect::abort_genie_effect();
+/// Helper to finalize restoring the window and its associated cluster to screen
+pub fn show_window_actual_finish(hwnd: HWND, x: i32, y: i32, ctx: &egui::Context) {
     if hwnd.is_null() {
         return;
     }
-    record_shown_time();
     unsafe {
         use windows_sys::Win32::UI::WindowsAndMessaging::{
             GetWindowLongW, SetWindowLongW, SetWindowPos,
@@ -357,25 +355,11 @@ pub fn show_window_from_tray(hwnd: HWND, ctx: &egui::Context) {
             WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
         };
 
-        IS_APP_FLEET_HIDDEN.store(false, Ordering::SeqCst);
-        IS_TRAY_HIDDEN.store(false, Ordering::SeqCst);
-        crate::spectrum::update_spectrum_needed_state();
-
         // Restore normal ex_style (removes WS_EX_TOOLWINDOW)
         let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
         let new_ex = (ex & !(WS_EX_TOOLWINDOW as i32)) | (WS_EX_APPWINDOW as i32);
         SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
         crate::snapping::add_taskbar_tab_pub(hwnd);
-
-        let mut x = LAST_POS_X.load(Ordering::SeqCst);
-        let mut y = LAST_POS_Y.load(Ordering::SeqCst);
-        let work = crate::snapping::get_monitor_work_area(hwnd);
-        if x < work.left || x + 60 > work.right || y < work.top || y + 60 > work.bottom {
-            x = work.left + (work.right - work.left - 460).max(0) / 2;
-            y = work.top + (work.bottom - work.top - 680).max(0) / 2;
-            LAST_POS_X.store(x, Ordering::SeqCst);
-            LAST_POS_Y.store(y, Ordering::SeqCst);
-        }
 
         SetWindowPos(
             hwnd,
@@ -411,6 +395,44 @@ pub fn show_window_from_tray(hwnd: HWND, ctx: &egui::Context) {
 
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         ctx.request_repaint();
+    }
+}
+
+/// Restore window from system tray back onto visible desktop screen
+pub fn show_window_from_tray(hwnd: HWND, ctx: &egui::Context) {
+    crate::genie_effect::abort_genie_effect();
+    if hwnd.is_null() {
+        return;
+    }
+    record_shown_time();
+    unsafe {
+        IS_APP_FLEET_HIDDEN.store(false, Ordering::SeqCst);
+        IS_TRAY_HIDDEN.store(false, Ordering::SeqCst);
+        crate::spectrum::update_spectrum_needed_state();
+
+        let mut x = LAST_POS_X.load(Ordering::SeqCst);
+        let mut y = LAST_POS_Y.load(Ordering::SeqCst);
+        let work = crate::snapping::get_monitor_work_area(hwnd);
+        if x < work.left || x + 60 > work.right || y < work.top || y + 60 > work.bottom {
+            x = work.left + (work.right - work.left - 460).max(0) / 2;
+            y = work.top + (work.bottom - work.top - 680).max(0) / 2;
+            LAST_POS_X.store(x, Ordering::SeqCst);
+            LAST_POS_Y.store(y, Ordering::SeqCst);
+        }
+
+        // Add taskbar tab immediately so Taskbar shows active state while expanding
+        crate::snapping::add_taskbar_tab_pub(hwnd);
+
+        let target_hwnd = hwnd as usize;
+        let ctx_clone = ctx.clone();
+        let restore_action = move || {
+            show_window_actual_finish(target_hwnd as HWND, x, y, &ctx_clone);
+        };
+
+        if !crate::genie_effect::play_reverse_genie_s_curve_effect(x, y, hwnd as usize, restore_action) {
+            // Fallback: If no cached snapshot available, restore immediately
+            show_window_actual_finish(hwnd, x, y, ctx);
+        }
     }
 }
 

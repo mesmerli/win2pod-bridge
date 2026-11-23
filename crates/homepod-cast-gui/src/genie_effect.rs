@@ -9,6 +9,25 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 static ABORT_FLAG: AtomicBool = AtomicBool::new(false);
 
+/// Cached snapshot of the main window for the reverse genie restore animation
+#[derive(Clone)]
+pub struct CachedGenieSnapshot {
+    pub pixels: Vec<u32>,
+    pub width: i32,
+    pub height: i32,
+}
+
+static LAST_SNAPSHOT: std::sync::Mutex<Option<CachedGenieSnapshot>> = std::sync::Mutex::new(None);
+
+/// Query if a cached snapshot is available for reverse genie restore
+pub fn has_cached_genie_snapshot() -> bool {
+    if let Ok(guard) = LAST_SNAPSHOT.lock() {
+        guard.is_some()
+    } else {
+        false
+    }
+}
+
 /// Immediately abort any running genie animation (e.g. when hotkey is pressed).
 pub fn abort_genie_effect() {
     ABORT_FLAG.store(true, Ordering::SeqCst);
@@ -183,49 +202,17 @@ fn run_genie_s_curve_animation(
         DeleteDC(hdc_read);
         DeleteObject(hbmp_src); // Free original HBITMAP immediately
 
-        // 2. Locate precise target tray coordinate
-        let (tray_x, tray_y) = {
-            let px = crate::tray::TRAY_ICON_RECT_X.load(Ordering::SeqCst);
-            let py = crate::tray::TRAY_ICON_RECT_Y.load(Ordering::SeqCst);
+        // Cache snapshot for reverse genie restore
+        if let Ok(mut guard) = LAST_SNAPSHOT.lock() {
+            *guard = Some(CachedGenieSnapshot {
+                pixels: src_pixels.clone(),
+                width: start_w,
+                height: start_h,
+            });
+        }
 
-            if px != i32::MIN && py != i32::MIN {
-                (px, py)
-            } else {
-                // Win32 Taskbar Fallback
-                const SHELL_TRAY: [u16; 14] = [
-                    b'S' as u16, b'h' as u16, b'e' as u16, b'l' as u16, b'l' as u16, b'_' as u16,
-                    b'T' as u16, b'r' as u16, b'a' as u16, b'y' as u16, b'W' as u16, b'n' as u16,
-                    b'd' as u16, 0,
-                ];
-                const TRAY_NOTIFY: [u16; 14] = [
-                    b'T' as u16, b'r' as u16, b'a' as u16, b'y' as u16, b'N' as u16, b'o' as u16,
-                    b't' as u16, b'i' as u16, b'f' as u16, b'y' as u16, b'W' as u16, b'n' as u16,
-                    b'd' as u16, 0,
-                ];
-                let shell_tray = FindWindowW(SHELL_TRAY.as_ptr(), std::ptr::null());
-                let mut pt = (0, 0);
-                let mut found = false;
-                if !shell_tray.is_null() {
-                    let tray_notify = FindWindowExW(shell_tray, std::ptr::null_mut(), TRAY_NOTIFY.as_ptr(), std::ptr::null());
-                    let target = if !tray_notify.is_null() { tray_notify } else { shell_tray };
-                    let mut rc: RECT = std::mem::zeroed();
-                    if GetWindowRect(target, &mut rc) != 0 {
-                        // Notice: TrayNotifyWnd contains battery/wifi on the left and app icons on the right.
-                        // Targeting the right side (near clock) instead of center hits the app tray icons accurately.
-                        let target_x = (rc.right - 90).max(rc.left + 20);
-                        pt = (target_x, (rc.top + rc.bottom) / 2);
-                        found = true;
-                    }
-                }
-                if !found {
-                    let sw = GetSystemMetrics(SM_CXSCREEN);
-                    let sh = GetSystemMetrics(SM_CYSCREEN);
-                    (sw - 80, sh - 25)
-                } else {
-                    pt
-                }
-            }
-        };
+        // 2. Locate precise target tray coordinate
+        let (tray_x, tray_y) = locate_tray_coord();
 
         let genie = Genie {
             window: Edges {
@@ -468,6 +455,364 @@ fn run_genie_s_curve_animation(
     }
 }
 
+#[cfg(not(test))]
+fn locate_tray_coord() -> (i32, i32) {
+    let px = crate::tray::TRAY_ICON_RECT_X.load(Ordering::SeqCst);
+    let py = crate::tray::TRAY_ICON_RECT_Y.load(Ordering::SeqCst);
+
+    if px != i32::MIN && py != i32::MIN {
+        (px, py)
+    } else {
+        // Win32 Taskbar Fallback
+        const SHELL_TRAY: [u16; 14] = [
+            b'S' as u16, b'h' as u16, b'e' as u16, b'l' as u16, b'l' as u16, b'_' as u16,
+            b'T' as u16, b'r' as u16, b'a' as u16, b'y' as u16, b'W' as u16, b'n' as u16,
+            b'd' as u16, 0,
+        ];
+        const TRAY_NOTIFY: [u16; 14] = [
+            b'T' as u16, b'r' as u16, b'a' as u16, b'y' as u16, b'N' as u16, b'o' as u16,
+            b't' as u16, b'i' as u16, b'f' as u16, b'y' as u16, b'W' as u16, b'n' as u16,
+            b'd' as u16, 0,
+        ];
+        unsafe {
+            use windows_sys::Win32::Foundation::RECT;
+            use windows_sys::Win32::UI::WindowsAndMessaging::{
+                FindWindowExW, FindWindowW, GetSystemMetrics, GetWindowRect,
+                SM_CXSCREEN, SM_CYSCREEN,
+            };
+            let shell_tray = FindWindowW(SHELL_TRAY.as_ptr(), std::ptr::null());
+            let mut pt = (0, 0);
+            let mut found = false;
+            if !shell_tray.is_null() {
+                let tray_notify = FindWindowExW(shell_tray, std::ptr::null_mut(), TRAY_NOTIFY.as_ptr(), std::ptr::null());
+                let target = if !tray_notify.is_null() { tray_notify } else { shell_tray };
+                let mut rc: RECT = std::mem::zeroed();
+                if GetWindowRect(target, &mut rc) != 0 {
+                    let target_x = (rc.right - 90).max(rc.left + 20);
+                    pt = (target_x, (rc.top + rc.bottom) / 2);
+                    found = true;
+                }
+            }
+            if !found {
+                let sw = GetSystemMetrics(SM_CXSCREEN);
+                let sh = GetSystemMetrics(SM_CYSCREEN);
+                (sw - 80, sh - 25)
+            } else {
+                pt
+            }
+        }
+    }
+}
+
+/// Trigger the reverse macOS-style S-curve Genie effect (expanding from tray slot back into window)
+pub fn play_reverse_genie_s_curve_effect<F>(
+    target_x: i32,
+    target_y: i32,
+    orig_hwnd: usize,
+    on_finish: F,
+) -> bool
+where
+    F: FnOnce() + Send + 'static,
+{
+    #[cfg(test)]
+    {
+        let _ = (target_x, target_y, orig_hwnd);
+        on_finish();
+        return true;
+    }
+
+    #[cfg(not(test))]
+    {
+        abort_genie_effect();
+
+        let snapshot = {
+            if let Ok(guard) = LAST_SNAPSHOT.lock() {
+                guard.clone()
+            } else {
+                None
+            }
+        };
+
+        let Some(snap) = snapshot else {
+            on_finish();
+            return false;
+        };
+
+        std::thread::Builder::new()
+            .name("rev-genie-fx".into())
+            .spawn(move || {
+                run_reverse_genie_animation(snap, target_x, target_y, orig_hwnd, on_finish);
+            })
+            .ok();
+
+        true
+    }
+}
+
+#[cfg(not(test))]
+fn run_reverse_genie_animation<F>(
+    snap: CachedGenieSnapshot,
+    target_x: i32,
+    target_y: i32,
+    _orig_hwnd_val: usize,
+    on_finish: F,
+) where
+    F: FnOnce() + Send + 'static,
+{
+    use std::time::Instant;
+    use windows_sys::Win32::Foundation::{HWND, POINT, SIZE};
+    use windows_sys::Win32::Graphics::Gdi::{
+        CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, SelectObject,
+        AC_SRC_ALPHA, AC_SRC_OVER, BLENDFUNCTION, BI_RGB, BITMAPINFO, BITMAPINFOHEADER,
+        DIB_RGB_COLORS, HBITMAP,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DefWindowProcW, DestroyWindow,
+        RegisterClassExW, ShowWindow,
+        UpdateLayeredWindow,
+        SW_SHOWNOACTIVATE, ULW_ALPHA, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+        WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    };
+
+    ABORT_FLAG.store(false, Ordering::SeqCst);
+
+    let (tray_x, tray_y) = locate_tray_coord();
+
+    let start_w = snap.width;
+    let start_h = snap.height;
+    let src_w = start_w as usize;
+    let src_h = start_h as usize;
+    let src_pixels = snap.pixels;
+
+    let genie = Genie {
+        window: Edges {
+            left: target_x as f32,
+            top: target_y as f32,
+            right: (target_x + start_w) as f32,
+            bottom: (target_y + start_h) as f32,
+        },
+        slot: Edges {
+            left: (tray_x - 14) as f32,
+            top: (tray_y - 14) as f32,
+            right: (tray_x + 14) as f32,
+            bottom: (tray_y + 14) as f32,
+        },
+    };
+
+    let min_x = (genie.window.left.min(genie.slot.left) - 40.0).floor() as i32;
+    let max_x = (genie.window.right.max(genie.slot.right) + 40.0).ceil() as i32;
+    let min_y = (genie.window.top.min(genie.slot.top) - 40.0).floor() as i32;
+    let max_y = (genie.window.bottom.max(genie.slot.bottom) + 40.0).ceil() as i32;
+
+    let win_w = (max_x - min_x).max(100);
+    let win_h = (max_y - min_y).max(100);
+
+    const CLASS_NAME: [u16; 17] = [
+        b'G' as u16, b'e' as u16, b'n' as u16, b'i' as u16, b'e' as u16, b'S' as u16,
+        b'C' as u16, b'u' as u16, b'r' as u16, b'v' as u16, b'e' as u16, b'C' as u16,
+        b'l' as u16, b'a' as u16, b's' as u16, b'3' as u16, 0,
+    ];
+
+    unsafe {
+        let hinstance = windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(std::ptr::null());
+        let mut wc: WNDCLASSEXW = std::mem::zeroed();
+        wc.cbSize = std::mem::size_of::<WNDCLASSEXW>() as u32;
+        wc.lpfnWndProc = Some(DefWindowProcW);
+        wc.hInstance = hinstance;
+        wc.lpszClassName = CLASS_NAME.as_ptr();
+        RegisterClassExW(&wc);
+
+        let ex_style = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
+        let hwnd: HWND = CreateWindowExW(
+            ex_style,
+            CLASS_NAME.as_ptr(),
+            std::ptr::null(),
+            WS_POPUP,
+            min_x,
+            min_y,
+            win_w,
+            win_h,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            hinstance,
+            std::ptr::null(),
+        );
+
+        if hwnd.is_null() {
+            on_finish();
+            return;
+        }
+
+        let mut bmi: BITMAPINFO = std::mem::zeroed();
+        bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+        bmi.bmiHeader.biWidth = win_w;
+        bmi.bmiHeader.biHeight = -win_h;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+
+        let screen_dc = windows_sys::Win32::Graphics::Gdi::GetDC(std::ptr::null_mut());
+        let hdc_render = CreateCompatibleDC(screen_dc);
+        let mut pixel_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+
+        let hbmp_render: HBITMAP = CreateDIBSection(
+            hdc_render,
+            &bmi,
+            DIB_RGB_COLORS,
+            &mut pixel_ptr,
+            std::ptr::null_mut(),
+            0,
+        );
+        windows_sys::Win32::Graphics::Gdi::ReleaseDC(std::ptr::null_mut(), screen_dc);
+
+        if hbmp_render.is_null() || pixel_ptr.is_null() {
+            DeleteDC(hdc_render);
+            DestroyWindow(hwnd);
+            on_finish();
+            return;
+        }
+
+        let old_rnd = SelectObject(hdc_render, hbmp_render);
+        let pixels = std::slice::from_raw_parts_mut(pixel_ptr as *mut u32, (win_w * win_h) as usize);
+
+        let duration_ms = 340.0; // 340ms brisk & natural macOS-style Genie restore duration
+        let start_time = Instant::now();
+
+        let win_size = SIZE { cx: win_w, cy: win_h };
+        let pt_zero = POINT { x: 0, y: 0 };
+        let pt_win = POINT { x: min_x, y: min_y };
+
+        let orig_height = (genie.window.bottom - genie.window.top).max(1.0);
+        let mut first_frame = true;
+
+        while !ABORT_FLAG.load(Ordering::SeqCst) {
+            let elapsed = start_time.elapsed().as_secs_f32() * 1000.0;
+            if elapsed >= duration_ms {
+                break;
+            }
+
+            let t_norm = (elapsed / duration_ms).clamp(0.0, 1.0);
+            let progress = (1.0 - t_norm).clamp(0.0, 1.0);
+
+            let bend = Genie::bend(progress);
+            let shift = Genie::slide(progress) * (genie.slot.bottom - genie.window.top).max(0.0);
+
+            let screen_top = genie.window.top + shift;
+            let screen_bottom = (genie.window.bottom + shift).min(genie.slot.bottom);
+
+            if screen_top >= genie.slot.bottom {
+                std::thread::sleep(std::time::Duration::from_millis(8));
+                continue;
+            }
+
+            pixels.fill(0);
+
+            let start_local_y = ((screen_top - min_y as f32).floor() as i32).clamp(0, win_h - 1);
+            let end_local_y = ((screen_bottom - min_y as f32).ceil() as i32).clamp(0, win_h - 1);
+
+            let alpha_master = if t_norm < 0.12 {
+                ((t_norm / 0.12) * 255.0).clamp(0.0, 255.0) as u32
+            } else {
+                255u32
+            };
+
+            for local_y in start_local_y..=end_local_y {
+                let screen_y = min_y as f32 + local_y as f32 + 0.5;
+                if screen_y < screen_top || screen_y > screen_bottom {
+                    continue;
+                }
+
+                let (screen_left, screen_right) = genie.sides(screen_y, bend);
+                let span_w = screen_right - screen_left;
+                if span_w <= 0.5 {
+                    continue;
+                }
+
+                let local_left = screen_left - min_x as f32;
+                let local_right = screen_right - min_x as f32;
+
+                let ix_start = (local_left.floor() as i32).clamp(0, win_w - 1);
+                let ix_end = (local_right.ceil() as i32).clamp(0, win_w - 1);
+
+                let v = ((screen_y - screen_top) / orig_height).clamp(0.0, 0.9999);
+                let src_y = (v * (src_h as f32)) as usize;
+                let src_row_offset = src_y * src_w;
+                let dst_row_offset = (local_y as usize) * (win_w as usize);
+
+                for ix in ix_start..=ix_end {
+                    let fx = ix as f32 + 0.5;
+                    let u = (fx - local_left) / span_w;
+                    if u < 0.0 || u > 1.0 {
+                        continue;
+                    }
+
+                    let mut coverage = 1.0f32;
+                    if fx < local_left + 1.0 {
+                        coverage = (fx + 0.5 - local_left).clamp(0.0, 1.0);
+                    } else if fx > local_right - 1.0 {
+                        coverage = (local_right - (fx - 0.5)).clamp(0.0, 1.0);
+                    }
+                    if coverage <= 0.01 {
+                        continue;
+                    }
+
+                    let src_x = ((u * (src_w as f32)).clamp(0.0, (src_w - 1) as f32)) as usize;
+                    let orig_pixel = src_pixels[src_row_offset + src_x];
+
+                    let r = (orig_pixel >> 16) & 0xFF;
+                    let g = (orig_pixel >> 8) & 0xFF;
+                    let b = orig_pixel & 0xFF;
+
+                    let a = ((coverage * (alpha_master as f32)).clamp(0.0, 255.0)) as u32;
+                    if a == 0 {
+                        continue;
+                    }
+
+                    let pr = (r * a / 255).min(255);
+                    let pg = (g * a / 255).min(255);
+                    let pb = (b * a / 255).min(255);
+
+                    pixels[dst_row_offset + (ix as usize)] = (a << 24) | (pr << 16) | (pg << 8) | pb;
+                }
+            }
+
+            let blend = BLENDFUNCTION {
+                BlendOp: AC_SRC_OVER as u8,
+                BlendFlags: 0,
+                SourceConstantAlpha: 255,
+                AlphaFormat: AC_SRC_ALPHA as u8,
+            };
+
+            UpdateLayeredWindow(
+                hwnd,
+                std::ptr::null_mut(),
+                &pt_win,
+                &win_size,
+                hdc_render,
+                &pt_zero,
+                0,
+                &blend,
+                ULW_ALPHA,
+            );
+
+            if first_frame {
+                ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                first_frame = false;
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(11));
+        }
+
+        // Handover: Animation reached target position, display the real main window and destroy animation window
+        on_finish();
+
+        SelectObject(hdc_render, old_rnd);
+        DeleteDC(hdc_render);
+        DeleteObject(hbmp_render);
+        DestroyWindow(hwnd);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -502,5 +847,18 @@ mod tests {
     fn test_abort_flag() {
         abort_genie_effect();
         assert!(ABORT_FLAG.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn test_reverse_genie_flow() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        let executed = Arc::new(AtomicBool::new(false));
+        let exec_clone = executed.clone();
+        let res = play_reverse_genie_s_curve_effect(100, 100, 0, move || {
+            exec_clone.store(true, Ordering::SeqCst);
+        });
+        assert!(res);
+        assert!(executed.load(Ordering::SeqCst));
     }
 }
