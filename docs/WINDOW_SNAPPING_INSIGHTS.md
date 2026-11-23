@@ -230,7 +230,62 @@ flowchart TD
 
 ---
 
-## 6. 架構核心成果與檢驗
+### 坑點 6：歷史遺留雙視窗硬編碼引發的「跨群組遠程幽靈吸引」（Cross-Cluster Ghost Attraction & Home Summon Severance）
+- **現象**：
+  在工作站群組拆分後，桌面由「迷你播放器 + 迷你等化器 + 視覺視窗」三者組成一個相吸群組，主視窗處於系統匣隱藏中。當使用者在**迷你播放器**上點擊「🏠（Home 房子按鈕）」希望召喚主視窗合體時，主視窗現身的一瞬間，**視覺視窗竟然如同被磁鐵吸住一般瞬間脫離原群組、被強行吸引到了主視窗身邊**，並與主視窗結合成獨立的一組；而迷你播放器和等化器則被孤立留在原處。
+- **深度病因（歷史遺留代碼引發的拓撲撕裂）**：
+  1. 在系統早期僅有「主視窗」與「視覺化視窗」雙視窗架構時，開發者在 `tray.rs` 的 `bring_main_to_front()` 尾端加入了一段「還原對齊視覺視窗」的邏輯：
+     ```rust
+     let bond = crate::snapping::get_dock_bond();
+     if bond.is_bonded && !vis_hwnd.is_null() ... {
+         let (new_vis_x, new_vis_y) = calc_bonded_visualizer_pos(&bond, &vis_rect, &main_rect);
+         SetWindowPos(vis_hwnd, hwnd, new_vis_x, new_vis_y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+     }
+     ```
+  2. **盲目假設父節點必定為主視窗**：這段代碼僅僅檢查了 `bond.is_bonded == true`，**完全沒有校驗 `bond.parent == WindowKind::Main`**！
+  3. 當視覺視窗是吸附在迷你播放器身上時，其 `is_bonded` 亦為 `true`（但母節點為 `MiniPlayer`）。當主視窗從托盤現身時，這段代碼將主視窗舊坐標作為 `master_rect` 傳入，瞬間強制以 `SetWindowPos` 將視覺視窗拉移數百像素至主視窗身側。
+  4. 視覺視窗瞬間移位導致其與迷你播放器之間的物理間隔遠大於 24px，在緊接著觸發的 `rebuild_dock_tree()` 中，間隔過大的邊被依法剔除，視覺視窗正式與原群組決裂，轉而與主視窗結為新組。
+- **解法心法**：
+  - **杜絕任何繞過圖論引擎的私自移位**：現代的擴展樹森林（Dock Tree Forest）已由 `bring_fleet_to_top()` 中的 `restore_and_realign_all_children` 根據嚴密的母子拓撲統一維護。徹底刪除 `tray.rs` 中私自搬移視窗的遺留代碼。
+  - **召喚加入以發起者（Anchor Kind）為基準**：主視窗受召喚現身時，本身只是一塊「等待加入群組」的新圖元，絕不能在抵達目標群組前擅自動搖桌面上任何現存視窗的位移。
+
+---
+
+## 6. 極致視覺體驗：Mac 風格 Muelle Genie S-Curve 神燈最小化效果實踐
+
+除了視窗間的剛性磁吸與聯動，視窗在隱藏與還原時的過渡動畫直接決定了應用的工藝質感。我們在 Windows 平台上以純 Win32 GDI + Layered Window 成功復刻了 macOS 最具辨識度的經典特效——**Muelle Genie Effect（阿拉丁神燈 S 曲線漏斗收縮動畫）**。
+
+```mermaid
+flowchart TD
+    Capture["1. 原生 BitBlt 截取視窗當前點陣圖"] --> LayeredWin["2. 建立全螢幕 WS_EX_LAYERED 透明頂層畫布"]
+    LayeredWin --> SMath["3. Muelle S-curve Hermite 三次樣條數學模型計算"]
+    SMath --> Scanline["4. 逐掃描線 (Per-Scanline 1px) 次像素平滑光柵化"]
+    Scanline --> TrayTarget["5. 動態托盤坐標 (Tray Rect) 精確命中"]
+    TrayTarget --> UpdateLayer["6. UpdateLayeredWindow (ULW_ALPHA) 60 FPS 渲染"]
+```
+
+### 演進與技術攻堅復盤
+
+#### 1. 拒絕粗糙階梯：從分塊 StretchBlt 到逐掃描線次像素光柵化
+- **問題**：早期嘗試將視窗縱向切成 60 塊長條矩形執行 `StretchBlt`，在動畫播放時會出現明顯的「階梯狀橫條拉絲」與鋸齒斷層，完全喪失流體美感。
+- **解法**：捨棄逐塊拉伸，改採 **逐掃描線（Per-Scanline 1px）次像素抗鋸齒平滑光柵化**（詳見 [genie_effect.rs](file:///C:/Users/mesme/workspace/win2pod-bridge/crates/homepod-cast-gui/src/genie_effect.rs)）：
+  - 建立 32 位元預乘 Alpha DIBSection（`BI_RGB` 32bpp）。
+  - 對畫布每一行掃描線（Y 坐標），精確計算 S 曲線的左右邊界邊緣 $[x_{\text{left}}, x_{\text{right}}]$。
+  - 透過水平非線性縮放公式，將原始截圖像素平滑對應並線性混合同步寫入記憶體，徹底消除所有鋸齒與階梯感。
+
+#### 2. Muelle S-Curve 數學模型
+採用 macOS 經典的 Hermite 曲線模型，根據動畫進度 $t \in [0, 1]$ 與垂直位置 $u \in [0, 1]$ 計算漏斗形狀：
+$$S(t) = 3t^2 - 2t^3$$
+$$w(u) = (1 - u) \cdot W_{\text{orig}} + u \cdot W_{\text{tray}}$$
+在收斂至托盤目標時，底部以優雅的指數收斂曲線逐漸緊貼托盤圖示中心點，形成拉絲漏斗般的流體視覺。
+
+#### 3. 系統匣目標座標精準鎖定
+- **問題**：Windows 系統工作列常駐眾多圖示（電池、網路、音量、自訂程式），早期粗略定位容易偏移至相鄰的電池膠囊或時鐘。
+- **解法**：在 [tray.rs](file:///C:/Users/mesme/workspace/win2pod-bridge/crates/homepod-cast-gui/src/tray.rs) 中利用 `tray_icon.rect()` 即時獲取自身圖示的物理螢幕 Rect，將神燈漏斗的收縮終點精確綁定在 Win2Pod 圖示的幾何中心點，達成「自圖示中流出、吸回圖示中隱沒」的一體化沉浸感。
+
+---
+
+## 7. 架構核心成果與檢驗
 
 經過此番體系化梳理與重構，Win2Pod 達成如下標準行為：
 
@@ -239,14 +294,15 @@ flowchart TD
 | **四視窗任意拼裝** | 支援右側排列、頂部拼裝、底部等化器多重組合 | BFS 樹遍歷 + 依賴驗證 |
 | **拖曳母視窗** | 全體相連子節點以 60 FPS 幀率鎖定同步移動 | `propagate_child_moves` |
 | **拖曳子視窗** | 脫離當前母視窗，母視窗不動，子視窗獨立移出 | `remove_dock_edge` 向上剪枝 |
-| **關閉主視窗** | 若副視窗已脫離，副視窗平穩停留在原處且持續連動 | 免早退幀連續性 + 精準托盤防護 |
+| **關閉主視窗** | 觸發 Mac 風格 S 曲線神燈特效吸入托盤，副視窗持續成組運作 | Muelle Genie Effect + 精準托盤防護 |
+| **按副視窗 🏠 召喚** | 主視窗優雅平滑飛回並完美融入群組，絕不破壞既有子群組 | 徹底消除硬編碼搬移 + 拓撲一致性 |
 | **點擊任一合體視窗** | 群組內所有視窗原子級同步置頂，不被第三方視窗穿插 | `bring_cluster_to_top` Z-Order 秩序 |
 | **點擊任一合體視窗 📌** | 全叢集視窗原子級同步切換置頂／非置頂，杜絕幽靈置頂 | `set_cluster_pinned` + `HWND_NOTOPMOST` 規範 |
 | **點擊任一合體視窗 X** | 連鎖關閉該連通群組中的所有合體視窗 | `close_window_cluster` 遍歷關閉 |
 
 ---
 
-## 7. 結語
+## 8. 結語
 
 視窗磁吸吸附表面上看似只是「計算座標貼齊」，但一旦引入**多視窗自由組合、主從聯動、生命週期異步化與跨架構渲染框架（Win32 + egui + wry）**，其複雜度便會呈幾何級數上升。
 
@@ -255,5 +311,7 @@ flowchart TD
 2. **通訊生命週期大於一切**（在視窗銷毀與重繪交界處，精準的狀態原子隔離是防止閃退的不二法門）。
 3. **全局狀態需極度克制**（避免全域旗標污染獨立副視窗的事件泵）。
 4. **Z 軸與平面享有同等嚴謹的階層規範**（單一事實來源、杜絕狀態分裂與逆向感染，並善用 Win32 `HWND_NOTOPMOST` 清除非預期置頂）。
+5. **歷史代碼必須及時隨架構升級而重構**（早期雙視窗時代的便宜行事代碼，在多視窗拓撲體系下會成為難以察覺的「幽靈撕裂者」，唯有堅持 SSOT 原則方能維護系統純潔性）。
+6. **細節成就非凡質感**（從多塊鋸齒拉絲到逐掃描線次像素光柵化的 Muelle S-curve，數學模型的嚴謹性決定了使用者體驗的精緻上限）。
 
-這份經驗不僅讓 Win2Pod 成功重現經典 Winamp 的迷人操作手感，更為未來進一步擴充更多模組視窗立下了堅實可靠的架構基礎。
+這份經驗不僅讓 Win2Pod 成功重現經典 Winamp 的迷人操作手感與 macOS 的靈動神燈視效，更為未來進一步擴充更多模組視窗立下了堅實可靠的架構基礎。
