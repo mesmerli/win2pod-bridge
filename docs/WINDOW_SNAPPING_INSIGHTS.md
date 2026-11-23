@@ -330,7 +330,75 @@ stateDiagram-v2
 
 ---
 
-## 8. 架構核心成果與檢驗
+## 8. 分工明確的標題列控制：視窗角色徽章、叢集釘選與單獨脫隊最小化（Cluster vs Solo Controls）
+
+在多個視窗合體為一個大叢集時，若每個視窗都保留各自的「🗕 最小化、📌 置頂、⛝ 關閉」，會引發嚴重的操作認知混亂：
+- 使用者點擊附屬視窗的 🗕，到底該收起自己、還是收起整組？
+- 點擊 📌 釘選，附屬視窗置頂了、但母視窗在底下，視窗會不會被其他外部程式夾在中間「切成千層糕」？
+
+我們為此重構了**「視窗角色自適應與標題列按鈕動態分工」**機制：
+
+```mermaid
+flowchart LR
+    subgraph Cluster ["磁吸群組 (Cluster)"]
+        Master["Master 視窗 🧲<br/>(藍色微光邊框)"]
+        Slave1["Slave 從屬視窗 📎<br/>(無縫緊湊邊框)"]
+        Slave2["Slave 從屬視窗 📎<br/>(無縫緊湊邊框)"]
+        Master --> Slave1
+        Slave1 --> Slave2
+    end
+
+    subgraph Actions ["標題列按鈕操作策略"]
+        direction TB
+        BtnMin["🗕 最小化按鈕<br/>- 預設點擊：整組最小化 (Cluster Minimize)<br/>- Shift+點擊：脫隊單獨最小化 (Solo Minimize)"]
+        BtnPin["📌 釘選按鈕<br/>- 預設點擊：全群組原子級同步置頂 (Cluster Pinning)<br/>- HUD 呼出：臨時提拔，關閉時精確還原自癒"]
+        BtnClose["⛝ 關閉按鈕<br/>- 預設點擊：整組關閉<br/>- Shift+點擊：脫隊單獨關閉"]
+    end
+
+    Cluster -.-> Actions
+```
+
+### 關鍵機制與技術細節
+
+#### 1. 三態視窗角色（WindowRole）與動態標題列適配
+在 [snapping.rs](file:///C:/Users/mesme/workspace/win2pod-bridge/crates/homepod-cast-gui/src/snapping.rs#L435-L460) 中定義三種角色：
+- **`WindowRole::ClusterMaster`（叢集母艦 🧲）**：
+  - 角色：圖論連通分量中優先權最高（Level 1）的根節點。
+  - 外觀：標題列顯示「🧲」徽章，四周帶有 `rgb(70, 140, 215)` 的科技藍主控微光邊框。
+  - 職責：擁有全套控制權，掌管全群組的移動、置頂、收納與關閉。
+- **`WindowRole::ClusterSlave`（從屬僚機 📎）**：
+  - 角色：依附於 Master 之後的子節點。
+  - 外觀：標題列顯示「📎」吸附徽章，邊框轉為緊湊暗色 `rgb(45, 50, 60)`。
+  - **標題列動態精簡（`set_window_caption_buttons`）**：在 [snapping.rs](file:///C:/Users/mesme/workspace/win2pod-bridge/crates/homepod-cast-gui/src/snapping.rs#L947) 中，系統為 Slave 視窗自動精簡或隱藏重複的系統按鈕，避免畫面雜亂。
+- **`WindowRole::Standalone`（獨立個體）**：
+  - 未與任何人吸附，外框呈標準中性灰 `rgb(52, 58, 70)`，標題列無徽章，擁有標準單視窗控制邏輯。
+
+#### 2. 最小化按鈕雙模態：全體進退 vs 單獨脫隊
+- **預設點擊 🗕（Cluster Minimize）**：
+  - 當使用者點擊群組視窗上的最小化按鈕時，系統透過圖論遞迴遍歷整個連通塊，將全員一併收縮最小化，確保工作站整體狀態不被破壞。
+- **Shift + 點擊 🗕（Solo Minimize）**：
+  - 使用者情境：只想暫時收起「視覺特效」或「等化器」，留下「迷你播放器」繼續聽歌。
+  - 實現邏輯（[snapping.rs](file:///C:/Users/mesme/workspace/win2pod-bridge/crates/homepod-cast-gui/src/snapping.rs#L1740-L1760) `minimize_window_solo`）：
+    1. 主動調用 `break_dock_relation(target)`，乾淨俐落地將該視窗從有向樹中剪斷（Sever edge）。
+    2. 調用 Win32 `ShowWindow(hwnd, SW_MINIMIZE)` 僅最小化該視窗。
+    3. 留在桌面上的其餘視窗毫髮無損，系統自動觸發 `rebuild_dock_tree()` 重新推舉剩餘群組的 Master，完成無縫自治過渡。
+
+#### 3. 釘選置頂原子級全域傳播（Cluster Pinning Propagation）
+- **核心痛點**：Windows 作業系統底層並不知曉「視窗群組」概念。若群組中有的視窗是 `HWND_TOPMOST`，有的不是，當使用者切換至第三方瀏覽器時，非置頂視窗會被沉入瀏覽器背後，而置頂視窗仍浮在前方，群組實體被「橫向攔腰切斷」。
+- **解法心法**：
+  - 在 [snapping.rs](file:///C:/Users/mesme/workspace/win2pod-bridge/crates/homepod-cast-gui/src/snapping.rs#L165-L220) 中實作 `toggle_window_pinned(origin)`：
+  - 點擊任一合體視窗的 📌 釘選按鈕時，系統取得該群組全體成員，**原子級連帶將全員同步設為置頂或非置頂**（全面傳入 `HWND_TOPMOST` 或 `HWND_NOTOPMOST`）。
+  - 若使用者在副視窗上按住 `Shift + 點擊 📌`，則自動剪枝脫離群組，僅單獨切換自身置頂。
+
+#### 4. 全螢幕 HUD 釘選備份與退出自癒還原（HUD Pinned State Backup & Restore）
+- 在 [visualizer.rs](file:///C:/Users/mesme/workspace/win2pod-bridge/crates/homepod-cast-gui/src/visualizer.rs#L20-L45) 中：
+  - 當使用者在全螢幕視覺特效下按 `W` 呼出控制中心 HUD 時，系統必須暫時將主視窗等視窗提升至 `HWND_TOPMOST` 才能顯示在全螢幕之上。
+  - **狀態備份機制**：呼出 HUD 前，系統先記憶全體成員原先的真實釘選偏好（`WAS_PINNED` 暫存簿）。
+  - **退出自癒**：當關閉 HUD 或退出全螢幕時，系統忠實依照暫存簿還原各視窗的原本置頂屬性，絕不破壞使用者的桌面日常設定。
+
+---
+
+## 9. 架構核心成果與檢驗
 
 經過此番體系化梳理與重構，Win2Pod 達成如下標準行為：
 
