@@ -398,7 +398,59 @@ flowchart LR
 
 ---
 
-## 9. 架構核心成果與檢驗
+## 9. 新使用者體驗：模組化工作站呼吸光環與智慧導引氣泡（Onboarding Beacon & Balloon）
+
+Win2Pod 雖然具備極致的「四視窗磁吸合體」與「3 欄模組化工作站」能力，但新使用者首次啟動應用程式時，看到的僅是一面精緻簡約的主視窗，極易錯過「點擊標題列左上角 App 圖示即可一鍵展開四重視窗合體」的靈魂功能。
+
+為了在**不強迫彈窗、不打擾老玩家**的前提下達成「一眼即懂」，我們在 [gui.rs](file:///C:/Users/mesme/workspace/win2pod-bridge/crates/homepod-cast-gui/src/gui.rs#L2760-L2920) 實作了漸進式發現引導體系：
+
+```mermaid
+flowchart TD
+    Launch["使用者啟動應用程式"] --> Check{"是否曾組裝過工作站？<br/>(workstation_discovered)"}
+    Check -- "是 (已探索過)" --> NormalState["正常安靜渲染 App 圖示，無任何打擾"]
+    Check -- "否 (首次使用且工作站未開啟)" --> GuideState["啟動新使用者專屬引導機制"]
+    
+    subgraph Guide ["引導呈現機制"]
+        Beacon["1. 正弦波呼吸動態光圈 (Pulsing Halo Beacon)<br/>以 3.2 rad/s 平滑泛出科技藍光暈"]
+        Balloon["2. 半透明毛玻璃懸浮導引氣泡 (Floating Balloon)<br/>介紹工作站合體功能 + 立即體驗 / 知道了"]
+    end
+    
+    GuideState --> Beacon
+    GuideState --> Balloon
+    
+    Balloon -- "點擊『立即體驗』" --> Assemble["觸發 assemble_modular_workstation()<br/>標記永久已探索 (持久化至 config)"]
+    Balloon -- "點擊『知道了』" --> Dismiss["關閉氣泡<br/>標記永久已探索 (持久化至 config)"]
+```
+
+### 關鍵機制與技術細節
+
+#### 1. 正弦波呼吸微光光環（Pulsing Halo Beacon）
+- 在 [gui.rs](file:///C:/Users/mesme/workspace/win2pod-bridge/crates/homepod-cast-gui/src/gui.rs#L2776-L2790) 中：
+  - 根據全局即時時間戳計算連續正弦波強度：
+    $$\text{pulse} = \frac{\sin(\text{time} \times 3.2) + 1}{2} \in [0.0, 1.0]$$
+  - 在 App 圖示外圍繪製半徑與透明度動態呼吸擴散的圓角藍光環（擴展 $1.5 \sim 4.7\text{px}$，Alpha 動態介於 $45 \sim 185$）。
+  - 既能第一時間捕捉新使用者的視覺焦點，又完全不發出聲音或強奪輸入焦點。
+
+#### 2. 半透明毛玻璃導引氣泡卡片（Onboarding Balloon Card）
+- 依託 `egui::Area` 錨定於標題列 App 圖示下方，具備深色毛玻璃底色、天藍細邊框與柔和擴散陰影（Blur 16px）。
+- 支援完整的全語系本地化（繁中、簡中、英文、日文等）：
+  - 標題：💡 探索模組化工作站（Discover Modular Workstation）
+  - 說明：一鍵展開並自動拼裝：主視窗、迷你播放器、等化器與視覺效果！
+  - 雙按鈕互動：
+    - **「立即體驗」（藍色高亮按鈕）**：點擊後立即啟動 `assemble_modular_workstation()`，透過階梯式彈簧阻尼動畫（Staggered Spring）平滑將全體 4 個視窗依序拼裝到位。
+    - **「知道了」（低調暗色按鈕）**：點擊後安靜收起氣泡。
+
+#### 3. 單一事實來源與開關持久化（State Self-Healing & Persistence）
+- 不論使用者是點擊「立即體驗」、「知道了」、抑或是直接點擊了 App 圖示，系統一律觸發：
+  ```rust
+  self.workstation_onboarding_dismissed = true;
+  crate::controller::save_workstation_discovered(true);
+  ```
+- 該狀態永久寫入使用者本機設定檔（`workstation_discovered: true`），往後啟動永不重複彈出，徹底杜絕了讓進階使用者感到煩躁的「牛皮癬提示」。
+
+---
+
+## 10. 架構核心成果與檢驗
 
 經過此番體系化梳理與重構，Win2Pod 達成如下標準行為：
 
@@ -411,12 +463,14 @@ flowchart LR
 | **按副視窗 🏠 召喚** | 主視窗優雅平滑飛回並完美融入群組，絕不破壞既有子群組 | 徹底消除硬編碼搬移 + 拓撲一致性 |
 | **點擊任一合體視窗** | 群組內所有視窗原子級同步置頂，不被第三方視窗穿插 | `bring_cluster_to_top` Z-Order 秩序 |
 | **點擊任一合體視窗 📌** | 全叢集視窗原子級同步切換置頂／非置頂，杜絕幽靈置頂 | `set_cluster_pinned` + `HWND_NOTOPMOST` 規範 |
+| **Shift + 點擊 🗕** | 脫隊單獨最小化特定視窗，剩餘叢集保持原位並自癒推舉 Master | `minimize_window_solo` 剪枝與重構 |
 | **半透明視窗懸浮互動** | 平時安靜半透明，滑鼠移入自動 100% 窺視，Alt+滾輪微調 | `apply_native_window_opacity` + `Hover Peek` |
+| **新使用者首次啟動** | 標題列按鈕呼吸微光 + 懸浮導引氣泡，體驗後永久隱藏 | `workstation_discovered` 狀態持久化 |
 | **點擊任一合體視窗 X** | 連鎖關閉該連通群組中的所有合體視窗 | `close_window_cluster` 遍歷關閉 |
 
 ---
 
-## 9. 結語
+## 11. 結語
 
 視窗磁吸吸附表面上看似只是「計算座標貼齊」，但一旦引入**多視窗自由組合、主從聯動、生命週期異步化與跨架構渲染框架（Win32 + egui + wry）**，其複雜度便會呈幾何級數上升。
 
@@ -428,5 +482,6 @@ flowchart LR
 5. **歷史代碼必須及時隨架構升級而重構**（早期雙視窗時代的便宜行事代碼，在多視窗拓撲體系下會成為難以察覺的「幽靈撕裂者」，唯有堅持 SSOT 原則方能維護系統純潔性）。
 6. **細節成就非凡質感**（從多塊鋸齒拉絲到逐掃描線次像素光柵化的 Muelle S-curve，數學模型的嚴謹性決定了使用者體驗的精緻上限）。
 7. **互動的人性化細節（Affordance）**（半透明視窗搭配 20% 安全下限、智慧 Hover Peek 與手勢滾輪無級微調，讓靈活性與可用性達到最佳平衡）。
+8. **功能的發現性與非侵入式引導（Discoverability without Annoyance）**（善用動態正弦波光圈與單次觸達氣泡卡片，使隱蔽而強大的進階功能自然傳遞給新使用者）。
 
 這份經驗不僅讓 Win2Pod 成功重現經典 Winamp 的迷人操作手感與 macOS 的靈動神燈視效，更為未來進一步擴充更多模組視窗立下了堅實可靠的架構基礎。
