@@ -1,17 +1,17 @@
 # Ficha da Microsoft Store - Português (pt-PT)
-# Win2Pod Bridge - Versão 0.1.21
+# Win2Pod Bridge - Versão 0.1.22
 
 ## 0. Novidades desta versão (What's new in this version - Para o Partner Center)
 ```text
-[Win2Pod Bridge 0.1.21 Atualização - Efeito Génio fluído e Translucidez inteligente]
-• 🧞 Efeito de minimização Génio estilo macOS (Muelle Genie Effect):
+[Win2Pod Bridge 0.1.22 Atualização - Efeito Génio fluído e Translucidez inteligente]
+???? Efeito de minimização Génio estilo macOS (Muelle Genie Effect):
   - Integração do efeito S-Curve de varrimento linha a linha baseado no projeto de código aberto muelle. A janela é aspirada suavemente para a barra de tarefas ao minimizar e restaurada instantaneamente sem falhas.
-• 🪟 Translucidez nativa do Windows (WS_EX_LAYERED) e Hover Peek inteligente:
+???? Translucidez nativa do Windows (WS_EX_LAYERED) e Hover Peek inteligente:
   - A janela flutuante do visualizador oferece opacidade ajustável (20% ~ 100%), permitindo trabalhar sem distrações visuais.
   - Função exclusiva de foco ao passar o rato: a janela recupera instantaneamente 100% de opacidade assim que o cursor se aproxima, permitindo um controlo imediato.
-• 🧲 Atração magnética e acoplamento em múltiplos monitores:
+???�� Atração magnética e acoplamento em múltiplos monitores:
   - Correção de posicionamento em vários ecrãs: a janela principal e o visualizador atraem-se e unem-se perfeitamente quando abertos em conjunto.
-• 💡 Anel pulsante e dicas visuais para novos utilizadores:
+???�� Anel pulsante e dicas visuais para novos utilizadores:
   - Introdução de animações e orientações intuitivas que mostram claramente como fixar a janela ou ajustar a transparência.
 ```
 
@@ -43,26 +43,26 @@ O Win2Pod Bridge é uma ponte de transmissão de áudio moderna, ultraleve e de 
 O Windows não possui suporte nativo ao AirPlay 2, e as colunas Apple HomePod exigem um emparelhamento encriptado transiente HomeKit. O Win2Pod Bridge resolve isto de ponta a ponta com uma implementação em software puro em Rust. Sem modificações de hardware, sem chips MFi e sem serviços pesados em segundo plano!
 
 ============================================================
-🌟 RECURSOS PRINCIPAIS E DESTAQUES (KEY FEATURES)
+?? RECURSOS PRINCIPAIS E DESTAQUES (KEY FEATURES)
 ============================================================
 
-• 🛡️ Auto Pre-Amp & Equalizador profissional de 10 bandas:
+???���?Auto Pre-Amp & Equalizador profissional de 10 bandas:
   - O equalizador de 10 bandas conta com controlo automático de ganho. Ao amplificar qualquer frequência, atenua dinamicamente o pré-amplificador para eliminar distorções digitais (clipping), com um limitador de pico transparente e linear.
-• 🔄 Redirecionamento global de áudio (Self-Healing Audio Routing):
+???? Redirecionamento global de áudio (Self-Healing Audio Routing):
   - Monitorização ativa dos dispositivos de som do Windows. Se as colunas predefinidas forem desligadas, o Win2Pod alterna automaticamente para outro dispositivo físico ativo, garantindo que o som nunca fica bloqueado.
-• 🔔 Dica da área de notificação em 2 linhas compactas (Compact Two-Line Tooltip):
-  - Estrutura clara em duas linhas: a linha 1 apresenta o estado de transmissão do HomePod / AirPlay e volume (ex.: "🔊 A transmitir: Sala (9%)" ou Sem som); a linha 2 apresenta o nível de bateria dos AirPods (ex.: "🎧 AirPods 3: ● L 100%").
-• 🎧 Handoff inteligente bidirecional AirPods ↔ HomePod:
+???? Dica da área de notificação em 2 linhas compactas (Compact Two-Line Tooltip):
+  - Estrutura clara em duas linhas: a linha 1 apresenta o estado de transmissão do HomePod / AirPlay e volume (ex.: "?? A transmitir: Sala (9%)" ou Sem som); a linha 2 apresenta o nível de bateria dos AirPods (ex.: "?�� AirPods 3: ??L 100%").
+???�� Handoff inteligente bidirecional AirPods ??HomePod:
   - Ao colocar os auriculares, o áudio transfere-se automaticamente para os AirPods, regressando com precisão ao HomePod assim que os guarda na caixa!
-• Novo balanço estéreo com ponteiro dinâmico (◄ Centro ►):
-  - Orientação direcional intuitiva: Exibe «◄ Centro ►» na posição central e muda dinamicamente para «◄ E 30%» ou «30% D ►» ao ajustar.
-• 🧲 Janelas magnéticas com ancoragem automática (Magnetic Window Snapping):
-  - O painel principal e o visualizador 3D atraem-se magneticamente às margens do ecrã e movimentam-se em conjunto.
-• 🎨 Visualizador 3D interativo Paint Pulse:
+??Novo balanço estéreo com ponteiro dinâmico (??Centro ??:
+  - Orientação direcional intuitiva: Exibe «??Centro ?��?na posição central e muda dinamicamente para «??E 30%» ou «30% D ?��?ao ajustar.
+???�� Janelas magnéticas com ancoragem automática (Magnetic Window Snapping):
+  - O painel principal e o visualizador 3D atraem-se magneticamente ?s margens do ecrã e movimentam-se em conjunto.
+???�� Visualizador 3D interativo Paint Pulse:
   - Renderização impressionista em tempo real acelerada por GPU inspirada em Van Gogh, animada pelo espetro sonoro.
-• ⌨️ Atalho de teclado global configurável:
+???��? Atalho de teclado global configurável:
   - Abra ou oculte o painel em qualquer aplicação ou jogo com uma combinação de teclas personalizável (por defeito: Ctrl + Shift + P).
-• 🌐 Suporte multilíngue completo:
+???? Suporte multilíngue completo:
   - Interface nativa em 14 idiomas com deteção automática da linguagem do sistema.
 ```
 
@@ -70,5 +70,5 @@ O Windows não possui suporte nativo ao AirPlay 2, e as colunas Apple HomePod ex
 
 ## 4. Palavras-chave de Pesquisa (Search Keywords / Tags - Máx. 7 termos)
 ```text
-AirPlay, HomePod, Transmissão Áudio, AirPods, Equalizador, Receptor AirPlay, Som PC
+AirPlay, HomePod, Transmissão ?udio, AirPods, Equalizador, Receptor AirPlay, Som PC
 ```

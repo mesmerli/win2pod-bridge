@@ -1,17 +1,17 @@
 # Daftar Microsoft Store - Bahasa Indonesia (id-ID)
-# Win2Pod Bridge - Versi 0.1.21
+# Win2Pod Bridge - Versi 0.1.22
 
 ## 0. Yang Baru dalam Versi Ini (What's new in this version - Untuk Partner Center)
 ```text
-[Pembaruan Win2Pod Bridge 0.1.21 - Efek Jin Halus & Semi-Transparan Cerdas]
-â€¢ ğŸ§ Efek Minimalkan Jin Bergaya macOS (Muelle Genie Effect):
+[Pembaruan Win2Pod Bridge 0.1.22 - Efek Jin Halus & Semi-Transparan Cerdas]
+???? Efek Minimalkan Jin Bergaya macOS (Muelle Genie Effect):
   - Integrasi efek minimalkan Genie S-Curve per garis pemindaian yang terinspirasi oleh proyek sumber terbuka muelle. Jendela tersedot dengan mulus ke taskbar saat diminimalkan dan pulih seketika tanpa jeda.
-â€¢ ğŸªŸ Semi-Transparansi Perangkat Keras Windows Asli (WS_EX_LAYERED) & Hover Peek Cerdas:
+???? Semi-Transparansi Perangkat Keras Windows Asli (WS_EX_LAYERED) & Hover Peek Cerdas:
   - Jendela visualizer mengambang mendukung transparansi yang dapat disesuaikan (20% ~ 100%), tidak mengganggu alur kerja Anda.
   - Fitur eksklusif Hover Peek: saat kursor mouse mendekat, jendela langsung kembali ke opasitas 100% untuk kontrol yang mudah dan nyaman.
-â€¢ ğŸ§² Penyelarasan Magnetis & Penggabungan Jendela Multi-Monitor:
+???§² Penyelarasan Magnetis & Penggabungan Jendela Multi-Monitor:
   - Memperbaiki ketidaksejajaran pada pengaturan multi-layar: jendela utama dan visualizer saling menempel dan menyatu dengan mulus saat dibuka bersamaan.
-â€¢ ğŸ’¡ Lingkaran Nafas & Panduan Visual Pengguna Baru:
+???’¡ Lingkaran Nafas & Panduan Visual Pengguna Baru:
   - Menambahkan animasi panduan elegan untuk membantu pengguna baru menyematkan jendela dan menyesuaikan transparansi pada peluncuran pertama.
 ```
 
@@ -43,30 +43,30 @@ Win2Pod Bridge adalah jembatan streaming audio modern, ringan, dan berkinerja ti
 Windows tidak mendukung AirPlay 2 secara bawaan, dan speaker HomePod memerlukan pemasangan enkripsi transien HomeKit. Win2Pod Bridge menyelesaikan masalah ini dari ujung ke ujung dengan implementasi perangkat lunak murni dalam Rust. Tanpa modifikasi perangkat keras, tanpa chip MFi, dan tanpa layanan latar belakang yang berat!
 
 ============================================================
-ğŸŒŸ FITUR UTAMA & KEMAMPUAN (KEY FEATURES)
+?? FITUR UTAMA & KEMAMPUAN (KEY FEATURES)
 ============================================================
 
-â€¢ ğŸ“² PENERIMA AUDIO AIRPLAY (AIRPLAY RECEIVER)
+???“² PENERIMA AUDIO AIRPLAY (AIRPLAY RECEIVER)
   - Speaker PC Nirkabel: Streaming musik dan video langsung dari Pusat Kontrol iPhone, iPad, atau Mac ke speaker PC Anda.
   - Decoding ALAC Lossless: Decoding bit-perfect mempertahankan keaslian suara studio rekaman.
   - Rentang Dinamis Maksimal: Decoding lokal pada 1.0 (0 dB Unity Gain) tanpa kompresi volume iOS.
   - Remote Media & Sampul Album: Kendalikan Trek Sebelumnya/Berikutnya/Putar/Jeda langsung dari PC dengan sinkronisasi sampul album.
 
-â€¢ ğŸ›¡ï¸ Auto Pre-Amp & Equalizer Profesional 10-Band:
+???›¡ï¸?Auto Pre-Amp & Equalizer Profesional 10-Band:
   - Equalizer grafis 10-band dengan manajemen headroom otomatis. Meningkatkan band frekuensi secara otomatis menerapkan atenuasi pra-amp untuk menghilangkan distorsi kliping, dipasangkan dengan pembatas puncak transparan.
-â€¢ ğŸ”„ Perutean Audio Mandiri (Self-Healing Audio Routing):
+???? Perutean Audio Mandiri (Self-Healing Audio Routing):
   - Pemantauan aktif perangkat audio Windows. Jika perangkat audio terputus, Win2Pod beralih otomatis ke perangkat aktif lainnya agar audio tidak pernah macet.
-â€¢ ğŸ”” Tooltip Baki Sistem Ringkas Dua Baris:
+???? Tooltip Baki Sistem Ringkas Dua Baris:
   - Baris 1 menampilkan status pemutaran HomePod dan volume; baris 2 menampilkan status baterai AirPods secara rapi tanpa teks terpotong.
-â€¢ ğŸ§ Handoff Cerdas Dua Arah AirPods â†” HomePod:
+???§ Handoff Cerdas Dua Arah AirPods ??HomePod:
   - Audio otomatis beralih ke AirPods saat Anda memakainya, dan kembali ke HomePod secara mulus saat disimpan di wadah pengisi daya!
-â€¢ ğŸ§² Penempelan Jendela Magnetik:
+???§² Penempelan Jendela Magnetik:
   - Panel utama dan Visualizer 3D saling menempel secara magnetis ke tepi layar dan bergerak bersamaan.
-â€¢ ğŸ¨ Visualizer 3D Paint Pulse Interaktif:
+???¨ Visualizer 3D Paint Pulse Interaktif:
   - Rendering seni lukisan minyak bergaya Van Gogh yang diakselerasi GPU dan digerakkan oleh irama musik Anda.
-â€¢ âŒ¨ï¸ Tombol Pintas Global yang Dapat Disesuaikan:
+???¨ï? Tombol Pintas Global yang Dapat Disesuaikan:
   - Tampilkan atau sembunyikan panel kendali dari game atau aplikasi apa pun dengan mudah (Default: Ctrl + Shift + P).
-â€¢ ğŸŒ Dukungan Multibahasa Lengkap:
+???? Dukungan Multibahasa Lengkap:
   - Tersedia dalam 14 bahasa dengan deteksi otomatis bahasa sistem Windows.
 ```
 

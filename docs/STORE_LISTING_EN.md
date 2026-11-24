@@ -1,23 +1,21 @@
 # Microsoft Store Listing - English (en-US)
-# Win2Pod Bridge - Version 0.1.21
+# Win2Pod Bridge - Version 0.1.22
 
 ## 0. What's New in This Version (Release Notes - Paste into Partner Center)
 ```text
-[Win2Pod Bridge 0.1.21 Major Update - Mac-Style Genie Effect, Layered Opacity & Intelligent Hover Peek]
-• 🧞‍♂️ Mac-Style Muelle Genie S-Curve Minimize Effect:
-  - Authentic macOS fluid funnel minimize animation powered by per-scanline (1px) sub-pixel anti-aliasing and Hermite cubic spline math, eliminating stepping artifacts.
-  - Dynamically targets the exact physical coordinates of the Win2Pod system tray icon for a seamless, immersive tuck-away feel.
-• 🪟 Native Layered Window Opacity & Intelligent Hover Peek:
-  - GPU-accelerated Win32 WS_EX_LAYERED blending with smooth 20% ~ 100% opacity tuning that keeps windows out of your way while coding or browsing.
-  - Hover Peek: instantly springs to 100% solid contrast when the mouse hovers over the window, fading gently back to background opacity upon exit.
-  - Fast Gesture Control: hover and scroll Alt + Mouse Wheel to fluidly adjust opacity in 5% increments without opening settings.
-• 🧲 Seamless Home Summon Cluster Union & Role-Based Caption Buttons:
-  - Fully resolved cluster severance when summoning the Main window from tray into an active Mini Player group—all 4 windows now join harmoniously.
-  - Three-tier window roles: Master (🧲) commands the group with an ambient glow border, while Slave (📎) windows automatically streamline redundant title bar buttons.
-  - Dual-mode controls: click to minimize the entire cluster, or Shift+Click to solo minimize; atomic group-wide topmost pinning synchronization.
-• 💡 Discover Modular Workstation Onboarding Beacon & Balloon:
-  - App icon on the title bar pulses with an ambient cyan sine-wave halo beacon alongside a floating frosted-glass card to guide new users to the 3-column workstation.
-  - Self-healing dismissal: permanently silences future balloons once explored or dismissed for an unobtrusive experience.
+[Win2Pod Bridge 0.1.22 Major Performance & Stability Update - GSMTC Event Storm Elimination & Zero-Flicker Minimize FSM]
+• ⚡ Windows GSMTC Media Integration Optimization & CPU Storm Elimination:
+  - Completely resolved high CPU usage across Win2Pod (22%) and Windows "System Media Transport Controls Session Manager Service" (16%) caused by continuous timeline updates from media players like KKBOX.
+  - Introduced typed TrackEvent specialization, cleanly decoupling track metadata, playback status, and timeline updates.
+  - Smart Timeline Filtering: normal playback time ticks are silently ignored with local extrapolation (0% CPU), updating position anchors only when genuine manual seeks occur.
+  - Thumbnail Cache Invariant: eliminates redundant cross-process IPC image transfers when playing the same track.
+• 🪟 Refined Cluster Minimize State Machine & Zero-Flicker Genie Effect:
+  - Fully eliminated child window flickering at their original positions before tucking into the root window during Genie minimize.
+  - Pruned over-engineered side effects in favor of an elegant, deterministic 4-state FSM (Normal, Minimizing, Minimized, Restoring) with automatic timeout recovery.
+  - Implemented Normal Rect reading and cluster animation barriers to preserve multi-window dock topologies without accidental severance during transitions.
+  - Removed per-frame polling shims to ensure all window visibility strictly follows user interactions and animation lifecycles.
+• 🛡️ Clean Code Architecture & Zero Compiler Warnings:
+  - Achieved 0 compiler warnings, 0 errors, and 100% pass across all 56 unit tests.
 ```
 
 ## 1. Product Name
