@@ -516,7 +516,6 @@ pub fn run_ao_system_engine(
         while !stop.load(Ordering::Relaxed) {
             if crate::controller::DEFAULT_DEVICE_CHANGED.swap(false, Ordering::SeqCst) {
                 tracing::info!("Audio device change signaled, recycling system AO capture...");
-                renderer = None;
                 break;
             }
 

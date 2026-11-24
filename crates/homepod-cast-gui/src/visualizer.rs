@@ -14,7 +14,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 static VISUALIZER_HWND: AtomicIsize = AtomicIsize::new(0);
 static VISUALIZER_FULLSCREEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static VISUALIZER_HUD_MAIN_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static VISUALIZER_HUD_MAIN_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static VISUALIZER_DEV_NAME: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 static VISUALIZER_LANG: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 static APPLIED_LANG: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
@@ -302,13 +302,12 @@ pub fn hide_visualizer_with_cluster() {
 }
 
 pub fn restore_visualizer_with_cluster() {
-    if VISUALIZER_HIDDEN_WITH_CLUSTER.swap(false, Ordering::SeqCst) {
-        let hwnd = get_visualizer_hwnd();
-        if !hwnd.is_null() && unsafe { IsWindow(hwnd) != 0 } {
-            unsafe {
-                ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-                SetTimer(hwnd, TIMER_AUDIO_SPECTRUM, 16, None);
-            }
+    VISUALIZER_HIDDEN_WITH_CLUSTER.store(false, Ordering::SeqCst);
+    let hwnd = get_visualizer_hwnd();
+    if !hwnd.is_null() && unsafe { IsWindow(hwnd) != 0 } {
+        unsafe {
+            ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            SetTimer(hwnd, TIMER_AUDIO_SPECTRUM, 16, None);
         }
     }
 }
@@ -413,9 +412,12 @@ pub unsafe fn update_visualizer_title(hwnd: HWND) {
         let state_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut VisualizerState;
         if !state_ptr.is_null() {
             if let Some(ref wv) = (*state_ptr).webview {
+                let is_docked = crate::snapping::is_main_in_cluster(crate::snapping::WindowKind::Visualizer);
                 let script = format!(
-                    "if (typeof window.updateTitleBadge === 'function') window.updateTitleBadge({:?});",
-                    badge_str
+                    "if (typeof window.updateTitleBadge === 'function') window.updateTitleBadge({:?});\
+                     if (typeof window.handleVisDockChanged === 'function') window.handleVisDockChanged({});",
+                    badge_str,
+                    if is_docked { "true" } else { "false" }
                 );
                 let _ = wv.evaluate_script(&script);
             }
@@ -955,13 +957,15 @@ unsafe fn run_visualizer_window() {
         };
         let init_opacity = crate::snapping::get_window_opacity(crate::snapping::WindowKind::Visualizer);
         let init_peek = crate::snapping::is_hover_peek_enabled();
+        let init_docked = crate::snapping::is_main_in_cluster(crate::snapping::WindowKind::Visualizer);
         let initial_url = format!(
-            "app://visualizer/index.html?lang={}&pinned={}&badge={}&opacity={}&peek={}",
+            "app://visualizer/index.html?lang={}&pinned={}&badge={}&opacity={}&peek={}&docked={}",
             lang_code,
             if initial_pinned { 1 } else { 0 },
             badge_query,
             (init_opacity * 100.0).round() as i32,
             if init_peek { 1 } else { 0 },
+            if init_docked { 1 } else { 0 },
         );
         let builder = builder.with_url(&initial_url);
 
@@ -985,10 +989,12 @@ unsafe fn run_visualizer_window() {
             let script = format!(
                 "if (typeof window.setLanguage === 'function') window.setLanguage({:?});\
                  if (typeof window.handleVisPinChanged === 'function') window.handleVisPinChanged({}, false);\
-                 if (typeof window.updateTitleBadge === 'function') window.updateTitleBadge({:?});",
+                 if (typeof window.updateTitleBadge === 'function') window.updateTitleBadge({:?});\
+                 if (typeof window.handleVisDockChanged === 'function') window.handleVisDockChanged({}, false);",
                 lang_code,
                 if initial_pinned { "true" } else { "false" },
-                badge_str
+                badge_str,
+                if init_docked { "true" } else { "false" }
             );
             let _ = wv.evaluate_script(&script);
             if let Ok(mut applied) = APPLIED_LANG.lock() {

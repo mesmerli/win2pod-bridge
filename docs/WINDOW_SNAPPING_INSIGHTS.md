@@ -493,10 +493,49 @@ flowchart TD
 | **半透明視窗懸浮互動** | 平時安靜半透明，滑鼠移入自動 100% 窺視，Alt+滾輪微調 | `apply_native_window_opacity` + `Hover Peek` |
 | **新使用者首次啟動** | 標題列按鈕呼吸微光 + 懸浮導引氣泡，體驗後永久隱藏 | `workstation_discovered` 狀態持久化 |
 | **點擊任一合體視窗 X** | 連鎖關閉該連通群組中的所有合體視窗 | `close_window_cluster` 遍歷關閉 |
+| **群組最小化神燈效果** | 子視窗向根節點優雅收攏，母視窗帶動全群組以 S 曲線吸入工作列 | 4 態極簡狀態機 + 幾何拓撲阻斷鎖 |
 
 ---
 
-## 11. 結語
+## 11. 叢集最小化與阿拉丁神燈效果（Genie Effect）：從過度設計反思到極簡狀態機
+
+### 11.1 問題與演進背景
+在實作群組視窗最小化（子視窗向根視窗收攏，接著根視窗以 macOS 風格 S 曲線神燈效果吸入工作列）時，曾出現過以下異常：
+1. **子視窗在原位閃爍（Flicker）**：當子視窗縮入根視窗後、即將開始阿拉丁效果時，子視窗突然在原來的螢幕位置「閃爍一下」才消失。
+2. **過度設計的反噬（Over-engineering Trap）**：為了解決多視窗最小化狀態與 OS 物理狀態的一致性，曾引入一套複雜的架構（Proposal C：試圖在狀態機內加入 `reconcile_context_with_os_truth`、`verify_and_enforce_cluster_normal`、事件枚舉、拓撲變更廣播等）。結果非但沒有解決問題，反而引入了多處空樁（Dummy Stubs）與難以預期的競態條件。
+
+### 11.2 破案：閃爍的真正元兇
+經過精準的 Win32 API 呼叫鏈排查，發現子視窗閃爍根本不是狀態機「狀態不對」，而是**外圍存在輪詢拉扯**：
+1. **egui 渲染每幀強迫顯示**：
+   在 `gui.rs` 的次視窗視口管理中，原本有一段 `ensure_standalone_viewport_sync` 輪詢邏輯，**在每幀渲染時只要發現次視窗設定為開啟，就強制呼叫 `ShowWindow(SW_SHOWNOACTIVATE)`**！
+   當收攏動畫把子視窗隱藏（`SW_HIDE`）後，下一個渲染幀的 `ensure_standalone_viewport_sync` 馬上把子視窗重新彈開，造成畫面在原位置閃動。
+2. **侵入式 OS 校驗的副作用**：
+   在動畫剛啟動的過渡期（`Minimizing`），視窗的物理狀態正處於向根節點收攏的瞬態，但複雜校驗程式碼誤判其「不符合常態」，強制觸發了還原顯示。
+
+### 11.3 核心解法：極簡狀態機與拓撲保護
+我們將過度複雜的狀態機全面剪枝，回歸乾淨極簡的 4 態模型：
+
+```mermaid
+stateDiagram-v2
+    [*] --> Normal
+    Normal --> Minimizing: can_start_cluster_minimize
+    Minimizing --> Minimized: finish_cluster_minimize (動畫結束)
+    Minimizing --> Minimized: 逾時自癒 (>450ms)
+    Minimized --> Restoring: can_start_cluster_restore
+    Restoring --> Normal: finish_cluster_restore (動畫結束)
+    Restoring --> Normal: 逾時自癒 (>450ms)
+```
+
+1. **徹底移除輪詢拉扯**：
+   直接刪除 `gui.rs` 中的 `ensure_standalone_viewport_sync`，視窗的顯示與隱藏完全交由動畫狀態機與使用者顯式操作決定，不再有背景拉扯。
+2. **拓撲常態坐標保護（Normal Rect Preservation）**：
+   在 `rebuild_dock_tree()` 中，使用 `get_window_normal_rect`（讀取 `GetWindowPlacement` 的 `rcNormalPosition`）替代 `GetWindowRect`。即使視窗正處於最小化（Iconic）或收攏隱藏（`SW_HIDE`），拓撲幾何仍能準確讀取真實坐標，絕不將收攏視窗踢出叢集。
+3. **過渡期拓撲保護屏障（`is_in_collapsed_or_anim`）**：
+   在拓撲邊緣判斷時加入防護屏障：若節點所屬叢集正在收攏、最小化或動效過渡中，強制保留既有磁吸邊，杜絕動畫過程中的誤剪枝。
+
+---
+
+## 12. 結語
 
 視窗磁吸吸附表面上看似只是「計算座標貼齊」，但一旦引入**多視窗自由組合、主從聯動、生命週期異步化與跨架構渲染框架（Win32 + egui + wry）**，其複雜度便會呈幾何級數上升。
 

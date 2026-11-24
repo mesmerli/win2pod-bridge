@@ -125,6 +125,47 @@ kbd { font: 11px var(--font); border: 1px solid var(--line-strong); border-radiu
 }
 .v-action-btn:hover { background: var(--soft-hover); color: #fff; border-color: var(--line-strong); }
 .v-action-btn.active { background: var(--accent); color: #fff; border-color: rgba(255, 255, 255, 0.3); }
+#bMainWin {
+  position: relative;
+  color: rgb(160, 160, 160);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+#bMainWin:hover {
+  color: rgb(220, 220, 220);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+#bMainWin.active {
+  color: rgb(140, 210, 255);
+  background: rgb(25, 45, 60);
+  border-color: rgb(70, 150, 210);
+  box-shadow: 0 0 8px rgba(100, 200, 255, 0.35);
+}
+#bMainWin.active:hover {
+  color: rgb(180, 230, 255);
+  background: rgb(35, 60, 80);
+  border-color: rgb(90, 180, 240);
+  box-shadow: 0 0 12px rgba(100, 220, 255, 0.5);
+}
+@keyframes home-dock-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(100, 220, 255, 0.7);
+    transform: scale(0.96);
+  }
+  40% {
+    box-shadow: 0 0 16px 5px rgba(100, 220, 255, 0.6);
+    transform: scale(1.12);
+  }
+  100% {
+    box-shadow: 0 0 8px rgba(100, 200, 255, 0.35);
+    transform: scale(1);
+  }
+}
+.dock-pulse-anim {
+  animation: home-dock-pulse 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
 #bPin {
   position: relative;
   color: rgb(160, 160, 160);
@@ -323,6 +364,18 @@ kbd { font: 11px var(--font); border: 1px solid var(--line-strong); border-radiu
   box-shadow: 0 0 16px var(--accent-glow);
   transform: scale(1.06);
 }
+#bMainWinFs.active {
+  background: rgba(25, 45, 60, 0.9);
+  border-color: rgb(70, 150, 210);
+  color: rgb(140, 210, 255);
+  box-shadow: 0 0 14px rgba(100, 200, 255, 0.45);
+}
+#bMainWinFs.active:hover {
+  background: rgba(35, 60, 80, 0.95);
+  border-color: rgb(90, 180, 240);
+  color: rgb(180, 230, 255);
+  box-shadow: 0 0 18px rgba(100, 220, 255, 0.65);
+}
 
 body.fullscreen #v-titlebar { display: none !important; }
 body.fullscreen #fsActions { display: flex !important; }
@@ -467,8 +520,12 @@ body.fullscreen #fsActions { display: flex !important; }
 
 <script>
 window.__pendingLang = null;
+window.__pendingDock = null;
 window.setLanguage = function(lang) {
   window.__pendingLang = lang;
+};
+window.handleVisDockChanged = function(docked, showPulse) {
+  window.__pendingDock = { docked: !!docked, showPulse: showPulse };
 };
 window.addEventListener('error', function(e) {
   var s = document.getElementById('status');
@@ -504,6 +561,7 @@ const QS = new URLSearchParams(location.search);
 const $ = id => document.getElementById(id);
 let isFullscreen = false;
 let isVisPinned = QS.get('pinned') === '1' || QS.get('pinned') === 'true';
+let isVisDocked = QS.get('docked') === '1' || QS.get('docked') === 'true';
 let currentOpacity = parseInt(QS.get('opacity') || '100', 10);
 let isHoverPeek = QS.get('peek') !== '0';
 
@@ -511,6 +569,8 @@ const I18N = {
   'zh-Hant': {
     loading: '油彩調色中…',
     top_main: '回到 Win2Pod 主視窗 (W)',
+    top_main_dock: '🧲 將主視窗磁吸至此處 (W)',
+    top_main_focus: '主視窗已吸附至此群組（點擊聚焦）(W)',
     top_full: '全螢幕切換 (F)',
     top_windowed: '視窗化 (F)',
     top_pin: '釘選在最上層',
@@ -565,6 +625,8 @@ const I18N = {
   'zh-Hans': {
     loading: '油彩调色中…',
     top_main: '回到 Win2Pod 主窗口 (W)',
+    top_main_dock: '🧲 将主窗口磁吸至此处 (W)',
+    top_main_focus: '主窗口已吸附至此群组（点击聚焦）(W)',
     top_full: '全屏切换 (F)',
     top_windowed: '窗口化 (F)',
     top_pin: '固定在最上层',
@@ -619,6 +681,8 @@ const I18N = {
   'en-US': {
     loading: 'Mixing paint…',
     top_main: 'Return to Win2Pod Main Window (W)',
+    top_main_dock: '🧲 Dock Main Window here (W)',
+    top_main_focus: 'Main window is docked here (Click to focus) (W)',
     top_full: 'Toggle Fullscreen (F)',
     top_windowed: 'Exit Fullscreen (F)',
     top_pin: 'Always on Top',
@@ -673,6 +737,8 @@ const I18N = {
   'ja': {
     loading: '絵の具を調合中…',
     top_main: 'Win2Pod メイン画面に戻る (W)',
+    top_main_dock: '🧲 メインウィンドウをここに磁着 (W)',
+    top_main_focus: 'メインウィンドウはここに磁着中（クリックでフォーカス） (W)',
     top_full: '全画面表示切替 (F)',
     top_windowed: 'ウィンドウ表示 (F)',
     top_pin: '常に最前面に固定',
@@ -727,6 +793,8 @@ const I18N = {
   'ko': {
     loading: '유화 조색 중…',
     top_main: 'Win2Pod 메인 창으로 돌아가기 (W)',
+    top_main_dock: '🧲 메인 창을 여기에 자석 결합 (W)',
+    top_main_focus: '메인 창이 여기에 자석 결합됨 (클릭하여 포커스) (W)',
     top_full: '전체 화면 전환 (F)',
     top_windowed: '창 모드 (F)',
     top_pin: '항상 위에 고정',
@@ -781,6 +849,8 @@ const I18N = {
   'fr': {
     loading: 'Mélange des peintures…',
     top_main: 'Retour à la fenêtre principale Win2Pod (W)',
+    top_main_dock: '🧲 Aimante la fenêtre principale ici (W)',
+    top_main_focus: 'La fenêtre principale est aimantée ici (Cliquer pour focaliser) (W)',
     top_full: 'Basculer en plein écran (F)',
     top_windowed: 'Quitter le plein écran (F)',
     top_pin: 'Garder au premier plan',
@@ -835,6 +905,8 @@ const I18N = {
   'de': {
     loading: 'Farben werden gemischt…',
     top_main: 'Zurück zum Win2Pod-Hauptfenster (W)',
+    top_main_dock: '🧲 Hauptfenster hier andocken (W)',
+    top_main_focus: 'Hauptfenster ist hier angedockt (Klicken zum Fokussieren) (W)',
     top_full: 'Vollbild umschalten (F)',
     top_windowed: 'Vollbild beenden (F)',
     top_pin: 'Immer im Vordergrund',
@@ -889,6 +961,8 @@ const I18N = {
   'es': {
     loading: 'Mezclando pinturas…',
     top_main: 'Volver a la ventana principal de Win2Pod (W)',
+    top_main_dock: '🧲 Acoplar la ventana principal aquí (W)',
+    top_main_focus: 'La ventana principal está acoplada aquí (Haz clic para enfocar) (W)',
     top_full: 'Alternar pantalla completa (F)',
     top_windowed: 'Modo ventana (F)',
     top_pin: 'Fijar en primer plano',
@@ -943,6 +1017,8 @@ const I18N = {
   'it': {
     loading: 'Miscelazione colori…',
     top_main: 'Torna alla finestra principale di Win2Pod (W)',
+    top_main_dock: '🧲 Aggancia la finestra principale qui (W)',
+    top_main_focus: 'La finestra principale è agganciata qui (Fai clic per mettere a fuoco) (W)',
     top_full: 'Schermo intero (F)',
     top_windowed: 'Finestra (F)',
     top_pin: 'Sempre in primo piano',
@@ -997,6 +1073,8 @@ const I18N = {
   'pt-BR': {
     loading: 'Misturando tintas…',
     top_main: 'Voltar à janela principal do Win2Pod (W)',
+    top_main_dock: '🧲 Encaixar a janela principal aqui (W)',
+    top_main_focus: 'A janela principal está encaixada aqui (Clique para focar) (W)',
     top_full: 'Alternar tela cheia (F)',
     top_windowed: 'Modo janela (F)',
     top_pin: 'Fixar no topo',
@@ -1051,6 +1129,8 @@ const I18N = {
   'ru': {
     loading: 'Смешивание красок…',
     top_main: 'Вернуться в главное окно Win2Pod (W)',
+    top_main_dock: '🧲 Примагнитить главное окно сюда (W)',
+    top_main_focus: 'Главное окно примагничено сюда (Нажмите для фокуса) (W)',
     top_full: 'Переключить полноэкранный режим (F)',
     top_windowed: 'Оконный режим (F)',
     top_pin: 'Закрепить поверх всех окон',
@@ -1134,6 +1214,63 @@ function updatePinButtonUI() {
   }
 }
 
+function triggerDockPulse() {
+  try {
+    ['bMainWin', 'bMainWinFs'].forEach(id => {
+      const el = $(id);
+      if (el) {
+        el.classList.remove('dock-pulse-anim');
+        void el.offsetWidth;
+        el.classList.add('dock-pulse-anim');
+        setTimeout(() => {
+          el.classList.remove('dock-pulse-anim');
+        }, 600);
+      }
+    });
+  } catch (e) {
+    console.error('triggerDockPulse error:', e);
+  }
+}
+
+function updateHomeButtonUI() {
+  try {
+    const dict = I18N[currentLang] || I18N['zh-Hant'] || I18N['en-US'];
+    const titleText = isVisDocked
+      ? ((dict && dict.top_main_focus) || (dict && dict.top_main) || '主視窗已吸附至此群組（點擊聚焦）(W)')
+      : ((dict && dict.top_main_dock) || (dict && dict.top_main) || '🧲 將主視窗磁吸至此處 (W)');
+
+    const btn = $('bMainWin');
+    if (btn) {
+      btn.setAttribute('aria-pressed', String(isVisDocked));
+      btn.classList.toggle('active', isVisDocked);
+      btn.title = titleText;
+    }
+    const btnFs = $('bMainWinFs');
+    if (btnFs) {
+      btnFs.setAttribute('aria-pressed', String(isVisDocked));
+      btnFs.classList.toggle('active', isVisDocked);
+      btnFs.title = titleText;
+    }
+  } catch (e) {
+    console.error('updateHomeButtonUI error:', e);
+  }
+}
+
+window.handleVisDockChanged = function(docked, showPulse = true) {
+  const wasDocked = isVisDocked;
+  isVisDocked = !!docked;
+  updateHomeButtonUI();
+
+  if (isVisDocked && !wasDocked && showPulse) {
+    triggerDockPulse();
+  }
+};
+
+if (window.__pendingDock) {
+  window.handleVisDockChanged(window.__pendingDock.docked, window.__pendingDock.showPulse);
+  window.__pendingDock = null;
+}
+
 function applyLanguage(langCode) {
   let lang = langCode || 'zh-Hant';
   if (lang.startsWith('zh-Hans') || lang === 'zh-CN' || lang === 'zh-SG') lang = 'zh-Hans';
@@ -1171,6 +1308,7 @@ function applyLanguage(langCode) {
   });
 
   updatePinButtonUI();
+  updateHomeButtonUI();
   const btnTopFull = $('bTopFull');
   if (btnTopFull) {
     btnTopFull.title = isFullscreen ? dict.top_windowed : dict.top_full;

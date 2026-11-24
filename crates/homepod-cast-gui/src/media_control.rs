@@ -80,27 +80,35 @@ pub fn is_playing_or_recently_playing(recent_window: Duration) -> (bool, bool) {
     (playing, recently_playing)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TrackEvent {
+    PropertiesChanged,
+    PlaybackChanged,
+    TimelineChanged,
+    SessionChanged,
+}
+
 fn attach_session_listeners(
     session: &GlobalSystemMediaTransportControlsSession,
-    notify_tx: &tokio::sync::mpsc::UnboundedSender<()>,
+    notify_tx: &tokio::sync::mpsc::UnboundedSender<TrackEvent>,
 ) {
     let tx1 = notify_tx.clone();
     let handler1 = TypedEventHandler::new(move |_sender, _args| {
-        let _ = tx1.send(());
+        let _ = tx1.send(TrackEvent::PropertiesChanged);
         Ok(())
     });
     let _ = session.MediaPropertiesChanged(&handler1);
 
     let tx2 = notify_tx.clone();
     let handler2 = TypedEventHandler::new(move |_sender, _args| {
-        let _ = tx2.send(());
+        let _ = tx2.send(TrackEvent::PlaybackChanged);
         Ok(())
     });
     let _ = session.PlaybackInfoChanged(&handler2);
 
     let tx3 = notify_tx.clone();
     let handler3 = TypedEventHandler::new(move |_sender, _args| {
-        let _ = tx3.send(());
+        let _ = tx3.send(TrackEvent::TimelineChanged);
         Ok(())
     });
     let _ = session.TimelinePropertiesChanged(&handler3);
@@ -139,7 +147,7 @@ pub fn spawn_media_tracker() {
                         let tx_mgr = notify_tx.clone();
                         let session_changed_handler = TypedEventHandler::new(
                             move |_sender, _args| {
-                                let _ = tx_mgr.send(());
+                                let _ = tx_mgr.send(TrackEvent::SessionChanged);
                                 Ok(())
                             },
                         );
@@ -148,7 +156,7 @@ pub fn spawn_media_tracker() {
                         let tx_sessions = notify_tx.clone();
                         let sessions_changed_handler = TypedEventHandler::new(
                             move |_sender, _args| {
-                                let _ = tx_sessions.send(());
+                                let _ = tx_sessions.send(TrackEvent::SessionChanged);
                                 Ok(())
                             },
                         );
@@ -174,24 +182,40 @@ pub fn spawn_media_tracker() {
                         Some(cmd) = rx.recv() => {
                             execute_media_command(cmd, &state).await;
                             tokio::time::sleep(Duration::from_millis(100)).await;
-                            if let Some(info) = fetch_media_properties().await {
-                                let is_playing = info.is_playing;
-                                if let Ok(mut lock) = state.write() {
-                                    let prev_playing_instant = lock.last_playing_instant;
-                                    *lock = info;
-                                    if lock.is_playing {
-                                        lock.last_playing_instant = Some(Instant::now());
-                                    } else {
-                                        lock.last_playing_instant = prev_playing_instant;
+                            let session_opt = session_manager.as_ref().and_then(|mgr| mgr.GetCurrentSession().ok());
+                            if let Some(ref session) = session_opt {
+                                let prev_track = state.read().ok().map(|g| g.clone());
+                                if let Some(info) = fetch_media_properties_from_session(session, prev_track.as_ref()).await {
+                                    let is_playing = info.is_playing;
+                                    if let Ok(mut lock) = state.write() {
+                                        let prev_playing_instant = lock.last_playing_instant;
+                                        *lock = info;
+                                        if lock.is_playing {
+                                            lock.last_playing_instant = Some(Instant::now());
+                                        } else {
+                                            lock.last_playing_instant = prev_playing_instant;
+                                        }
                                     }
+                                    crate::handoff::on_playback_status_changed(is_playing);
                                 }
-                                crate::handoff::on_playback_status_changed(is_playing);
                             }
                         }
-                        Some(()) = notify_rx.recv() => {
-                            // Debounce burst event notifications (e.g. MediaPropertiesChanged + PlaybackInfoChanged firing simultaneously)
-                            tokio::time::sleep(Duration::from_millis(60)).await;
-                            while notify_rx.try_recv().is_ok() {}
+                        Some(first_ev) = notify_rx.recv() => {
+                            // Accumulate burst event notifications with a short debounce window
+                            let mut has_session_changed = first_ev == TrackEvent::SessionChanged;
+                            let mut has_properties_changed = first_ev == TrackEvent::PropertiesChanged;
+                            let mut has_playback_changed = first_ev == TrackEvent::PlaybackChanged;
+                            let mut has_timeline_changed = first_ev == TrackEvent::TimelineChanged;
+
+                            tokio::time::sleep(Duration::from_millis(40)).await;
+                            while let Ok(ev) = notify_rx.try_recv() {
+                                match ev {
+                                    TrackEvent::SessionChanged => has_session_changed = true,
+                                    TrackEvent::PropertiesChanged => has_properties_changed = true,
+                                    TrackEvent::PlaybackChanged => has_playback_changed = true,
+                                    TrackEvent::TimelineChanged => has_timeline_changed = true,
+                                }
+                            }
 
                             // If manager was not initialized at startup, retry requesting manager
                             if session_manager.is_none() {
@@ -200,7 +224,7 @@ pub fn spawn_media_tracker() {
                                         let tx_mgr = notify_tx.clone();
                                         let session_changed_handler = TypedEventHandler::new(
                                             move |_sender, _args| {
-                                                let _ = tx_mgr.send(());
+                                                let _ = tx_mgr.send(TrackEvent::SessionChanged);
                                                 Ok(())
                                             },
                                         );
@@ -210,32 +234,76 @@ pub fn spawn_media_tracker() {
                                 }
                             }
 
-                            if let Some(ref mgr) = session_manager {
-                                if let Ok(session) = mgr.GetCurrentSession() {
-                                    let cur_app = session.SourceAppUserModelId().map(|s| s.to_string()).unwrap_or_default();
-                                    if last_app_user_id != cur_app {
-                                        last_app_user_id = cur_app;
-                                        attach_session_listeners(&session, &notify_tx);
-                                    }
-                                } else {
-                                    last_app_user_id.clear();
-                                }
-                            }
+                            let session_opt = session_manager.as_ref().and_then(|mgr| mgr.GetCurrentSession().ok());
 
-                            let info_opt = fetch_media_properties().await;
-                            if let Some(info) = info_opt {
-                                let is_playing = info.is_playing;
-                                if let Ok(mut lock) = state.write() {
-                                    let prev_playing_instant = lock.last_playing_instant;
-                                    *lock = info;
-                                    if lock.is_playing {
-                                        lock.last_playing_instant = Some(Instant::now());
-                                    } else {
-                                        lock.last_playing_instant = prev_playing_instant;
+                            if let Some(ref session) = session_opt {
+                                let cur_app = session.SourceAppUserModelId().map(|s| s.to_string()).unwrap_or_default();
+                                if has_session_changed && (last_app_user_id != cur_app || last_app_user_id.is_empty()) {
+                                    last_app_user_id = cur_app;
+                                    attach_session_listeners(session, &notify_tx);
+                                    has_properties_changed = true;
+                                }
+
+                                if has_properties_changed {
+                                    let prev_track = state.read().ok().map(|g| g.clone());
+                                    if let Some(info) = fetch_media_properties_from_session(session, prev_track.as_ref()).await {
+                                        let is_playing = info.is_playing;
+                                        if let Ok(mut lock) = state.write() {
+                                            let prev_playing_instant = lock.last_playing_instant;
+                                            *lock = info;
+                                            if lock.is_playing {
+                                                lock.last_playing_instant = Some(Instant::now());
+                                            } else {
+                                                lock.last_playing_instant = prev_playing_instant;
+                                            }
+                                        }
+                                        crate::handoff::on_playback_status_changed(is_playing);
+                                    }
+                                } else if has_playback_changed {
+                                    // Lightweight PlaybackInfo update - ZERO cross-process COM metadata or thumbnail overhead
+                                    let is_playing = session
+                                        .GetPlaybackInfo()
+                                        .ok()
+                                        .and_then(|info| info.PlaybackStatus().ok())
+                                        .map(|s| s == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing)
+                                        .unwrap_or(false);
+
+                                    let (pos, dur) = compute_timeline_position(session, is_playing);
+                                    if let Ok(mut lock) = state.write() {
+                                        lock.is_playing = is_playing;
+                                        lock.position_secs = pos;
+                                        if dur > 0.0 {
+                                            lock.duration_secs = dur;
+                                        }
+                                        lock.last_updated = Some(Instant::now());
+                                        if is_playing {
+                                            lock.last_playing_instant = Some(Instant::now());
+                                        }
+                                    }
+                                    crate::handoff::on_playback_status_changed(is_playing);
+                                } else if has_timeline_changed {
+                                    // Smart Timeline Filtering:
+                                    // KKBOX (and iTunes) tick TimelinePropertiesChanged multiple times per second.
+                                    // Compare reported position with our smooth local extrapolation:
+                                    // If difference is small (<= 1.5s), it is normal playback ticking -> IGNORE to save CPU!
+                                    // Only update if difference > 1.5s, indicating genuine user seek.
+                                    let is_playing = state.read().ok().map(|g| g.is_playing).unwrap_or(false);
+                                    let (real_pos, dur) = compute_timeline_position(session, is_playing);
+                                    let current_calc_pos = state.read().ok().map(|g| g.current_position_secs()).unwrap_or(0.0);
+
+                                    if (real_pos - current_calc_pos).abs() > 1.5 {
+                                        if let Ok(mut lock) = state.write() {
+                                            lock.position_secs = real_pos;
+                                            if dur > 0.0 {
+                                                lock.duration_secs = dur;
+                                            }
+                                            lock.last_updated = Some(Instant::now());
+                                        }
                                     }
                                 }
-                                crate::handoff::on_playback_status_changed(is_playing);
                             } else {
+                                // No active session
+                                last_app_user_id.clear();
                                 if let Ok(mut lock) = state.write() {
                                     if lock.has_session {
                                         lock.has_session = false;
@@ -252,28 +320,11 @@ pub fn spawn_media_tracker() {
         .expect("Failed to spawn media tracker thread");
 }
 
-async fn fetch_media_properties() -> Option<MediaTrackInfo> {
-    let manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().ok()?.await.ok()?;
-    let session = manager.GetCurrentSession().ok()?;
-    let source_app_id = session.SourceAppUserModelId().map(|s| s.to_string()).unwrap_or_default();
-    let props = session.TryGetMediaPropertiesAsync().ok()?.await.ok()?;
-
-    let title = props.Title().map(|s| s.to_string()).unwrap_or_default();
-    let artist = props.Artist().map(|s| s.to_string()).unwrap_or_default();
-    let album = props.AlbumTitle().map(|s| s.to_string()).unwrap_or_default();
-
-    if title.is_empty() && artist.is_empty() {
-        return None;
-    }
-
-    let is_playing = session
-        .GetPlaybackInfo()
-        .ok()
-        .and_then(|info| info.PlaybackStatus().ok())
-        .map(|s| s == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing)
-        .unwrap_or(false);
-
-    let (position_secs, duration_secs) = if let Ok(timeline) = session.GetTimelineProperties() {
+fn compute_timeline_position(
+    session: &GlobalSystemMediaTransportControlsSession,
+    is_playing: bool,
+) -> (f64, f64) {
+    if let Ok(timeline) = session.GetTimelineProperties() {
         let raw_pos = timeline.Position().ok().map(|t| (t.Duration as f64 / 10_000_000.0).max(0.0)).unwrap_or(0.0);
         let dur = timeline.EndTime().ok().map(|t| (t.Duration as f64 / 10_000_000.0).max(0.0)).unwrap_or(0.0);
         let update_time = timeline.LastUpdatedTime().ok().map(|dt| dt.UniversalTime).unwrap_or(0);
@@ -303,29 +354,66 @@ async fn fetch_media_properties() -> Option<MediaTrackInfo> {
         (real_pos, dur)
     } else {
         (0.0, 0.0)
-    };
+    }
+}
 
-    let mut thumbnail_bytes = None;
-    if let Ok(thumb_ref) = props.Thumbnail() {
-        if let Ok(stream_op) = thumb_ref.OpenReadAsync() {
-            if let Ok(stream) = stream_op.await {
-                if let Ok(size) = stream.Size() {
-                    if size > 0 && size < 10 * 1024 * 1024 {
-                        if let Ok(reader) = DataReader::CreateDataReader(&stream) {
-                            if let Ok(load_op) = reader.LoadAsync(size as u32) {
-                                if load_op.await.is_ok() {
-                                    let mut buf = vec![0u8; size as usize];
-                                    if reader.ReadBytes(&mut buf).is_ok() {
-                                        thumbnail_bytes = Some(buf);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+async fn fetch_thumbnail(
+    props: &windows::Media::Control::GlobalSystemMediaTransportControlsSessionMediaProperties,
+) -> Option<Vec<u8>> {
+    let thumb_ref = props.Thumbnail().ok()?;
+    let stream_op = thumb_ref.OpenReadAsync().ok()?;
+    let stream = stream_op.await.ok()?;
+    let size = stream.Size().ok()?;
+    if size == 0 || size >= 10 * 1024 * 1024 {
+        return None;
+    }
+    let reader = DataReader::CreateDataReader(&stream).ok()?;
+    let load_op = reader.LoadAsync(size as u32).ok()?;
+    if load_op.await.is_ok() {
+        let mut buf = vec![0u8; size as usize];
+        if reader.ReadBytes(&mut buf).is_ok() {
+            return Some(buf);
         }
     }
+    None
+}
+
+async fn fetch_media_properties_from_session(
+    session: &GlobalSystemMediaTransportControlsSession,
+    prev_track: Option<&MediaTrackInfo>,
+) -> Option<MediaTrackInfo> {
+    let source_app_id = session.SourceAppUserModelId().map(|s| s.to_string()).unwrap_or_default();
+    let props = session.TryGetMediaPropertiesAsync().ok()?.await.ok()?;
+
+    let title = props.Title().map(|s| s.to_string()).unwrap_or_default();
+    let artist = props.Artist().map(|s| s.to_string()).unwrap_or_default();
+    let album = props.AlbumTitle().map(|s| s.to_string()).unwrap_or_default();
+
+    if title.is_empty() && artist.is_empty() {
+        return None;
+    }
+
+    let is_playing = session
+        .GetPlaybackInfo()
+        .ok()
+        .and_then(|info| info.PlaybackStatus().ok())
+        .map(|s| s == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing)
+        .unwrap_or(false);
+
+    let (position_secs, duration_secs) = compute_timeline_position(session, is_playing);
+
+    // Thumbnail Caching:
+    // If title, artist and album match the previous track and we already have cached thumbnail bytes,
+    // REUSE the cached bytes instead of re-downloading megabytes of image over cross-process COM stream!
+    let thumbnail_bytes = if let Some(prev) = prev_track {
+        if prev.thumbnail_bytes.is_some() && prev.title == title && prev.artist == artist && prev.album == album {
+            prev.thumbnail_bytes.clone()
+        } else {
+            fetch_thumbnail(&props).await
+        }
+    } else {
+        fetch_thumbnail(&props).await
+    };
 
     Some(MediaTrackInfo {
         title,
@@ -340,6 +428,12 @@ async fn fetch_media_properties() -> Option<MediaTrackInfo> {
         last_updated: Some(Instant::now()),
         last_playing_instant: if is_playing { Some(Instant::now()) } else { None },
     })
+}
+
+async fn fetch_media_properties() -> Option<MediaTrackInfo> {
+    let manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().ok()?.await.ok()?;
+    let session = manager.GetCurrentSession().ok()?;
+    fetch_media_properties_from_session(&session, None).await
 }
 
 /// Helper to launch a protocol URI or shell target directly without spawning any console/terminal window.

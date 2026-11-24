@@ -12,7 +12,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicU32, Ordering};
 use std::sync::Mutex;
-use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Dwm::{
     DwmSetWindowAttribute, DWMWA_FORCE_ICONIC_REPRESENTATION, DWMWA_HAS_ICONIC_BITMAP,
 };
@@ -454,30 +454,6 @@ pub fn get_window_role(kind: WindowKind) -> WindowRole {
     })
 }
 
-// Backward compatibility types
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChainAnchor {
-    Main,
-    Visualizer,
-    MiniPlayer,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct EqualizerDockBond {
-    pub is_bonded: bool,
-    pub anchor: ChainAnchor,
-    pub side: DockSide,
-    pub offset_x: i32,
-    pub offset_y: i32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct MiniPlayerDockBond {
-    pub is_bonded: bool,
-    pub side: DockSide,
-    pub offset_x: i32,
-    pub offset_y: i32,
-}
 
 // --- Window Title Query & HWND Discovery ---
 
@@ -881,15 +857,19 @@ pub unsafe fn rebuild_dock_tree() {
             continue;
         }
         let hwnd = get_window_hwnd(kind);
-        if !hwnd.is_null() && IsWindow(hwnd) != 0 && IsIconic(hwnd) == 0 {
+        if !hwnd.is_null() && IsWindow(hwnd) != 0 {
             if kind == WindowKind::Visualizer && crate::visualizer::is_visualizer_fullscreen() {
                 continue;
             }
-            let mut r: RECT = std::mem::zeroed();
-            GetWindowRect(hwnd, &mut r);
-            rects.insert(kind, r);
-            active.push(kind);
-            update_known_rect(kind, r);
+            // 使用 get_window_normal_rect 獲取真實常態坐標：
+            // 即便視窗當前處於最小化（Iconic）或叢集收攏隱藏（SW_HIDE），依然讀取其 rcNormalPosition 或快取坐標，
+            // 絕不可將已最小化或收攏的視窗自拓撲叢集中剃除！
+            let r = get_window_normal_rect(kind);
+            if (r.right - r.left) > 50 && (r.bottom - r.top) > 50 {
+                rects.insert(kind, r);
+                active.push(kind);
+                update_known_rect(kind, r);
+            }
         }
     }
 
@@ -919,6 +899,22 @@ pub unsafe fn rebuild_dock_tree() {
             if !active.contains(&a) || !active.contains(&b) {
                 return false;
             }
+            // 關鍵不變量保護：若視窗或其所屬叢集正處於收攏隱藏、最小化、或正在進行過渡動畫，
+            // 嚴禁在重新拓撲時破壞該磁吸關係鏈！
+            let is_in_collapsed_or_anim = |k: WindowKind| -> bool {
+                let root = get_component_root(k);
+                matches!(get_cluster_state(root), ClusterState::Minimized)
+                    || is_kind_cluster_minimizing(k)
+                    || is_kind_cluster_restoring(k)
+                    || {
+                        let h = get_window_hwnd(k);
+                        !h.is_null() && unsafe { IsIconic(h) != 0 || IsWindowVisible(h) == 0 }
+                    }
+            };
+            if is_in_collapsed_or_anim(a) || is_in_collapsed_or_anim(b) {
+                return true;
+            }
+
             if let (Some(r_a), Some(r_b)) = (rects.get(&a), rects.get(&b)) {
                 are_rects_docked(r_a, r_b, 24)
             } else {
@@ -942,7 +938,7 @@ pub unsafe fn rebuild_dock_tree() {
     // Update caption buttons: Root/standalone -> visible (true), Slave -> hidden (false)
     for &kind in &active {
         let hwnd = get_window_hwnd(kind);
-        if !hwnd.is_null() && IsWindow(hwnd) != 0 {
+        if !hwnd.is_null() && IsWindow(hwnd) != 0 && IsWindowVisible(hwnd) != 0 && IsIconic(hwnd) == 0 {
             let is_slave = new_tree.get(&kind).map(|b| b.is_bonded).unwrap_or(false);
             set_window_caption_buttons(hwnd, !is_slave);
         }
@@ -950,7 +946,7 @@ pub unsafe fn rebuild_dock_tree() {
 
     // Update visualizer title with magnetic dock symbol (📎 / 🧲 / none)
     let vis_hwnd = get_window_hwnd(WindowKind::Visualizer);
-    if !vis_hwnd.is_null() && IsWindow(vis_hwnd) != 0 {
+    if !vis_hwnd.is_null() && IsWindow(vis_hwnd) != 0 && IsWindowVisible(vis_hwnd) != 0 && IsIconic(vis_hwnd) == 0 {
         crate::visualizer::update_visualizer_title(vis_hwnd);
     }
 
@@ -1004,14 +1000,15 @@ pub fn handle_window_closed(closed_kind: WindowKind) {
                 continue;
             }
             let hwnd = get_window_hwnd(kind);
-            if !hwnd.is_null() && IsWindow(hwnd) != 0 && IsIconic(hwnd) == 0 {
+            if !hwnd.is_null() && IsWindow(hwnd) != 0 {
                 if kind == WindowKind::Visualizer && crate::visualizer::is_visualizer_fullscreen() {
                     continue;
                 }
-                let mut r: RECT = std::mem::zeroed();
-                GetWindowRect(hwnd, &mut r);
-                rects.insert(kind, r);
-                active.push(kind);
+                let r = get_window_normal_rect(kind);
+                if (r.right - r.left) > 50 && (r.bottom - r.top) > 50 {
+                    rects.insert(kind, r);
+                    active.push(kind);
+                }
             }
         }
 
@@ -1152,15 +1149,132 @@ pub fn get_cluster_members(kind: WindowKind) -> Vec<WindowKind> {
 }
 
 static BRINGING_CLUSTER_TO_TOP: AtomicBool = AtomicBool::new(false);
-static IS_MINIMIZING_CLUSTER: AtomicBool = AtomicBool::new(false);
-static IS_RESTORING_CLUSTER: AtomicBool = AtomicBool::new(false);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClusterState {
+    Normal,
+    Minimizing(std::time::Instant),
+    Minimized,
+    Restoring(std::time::Instant),
+}
+
+static CLUSTER_FSM: Mutex<Option<HashMap<WindowKind, ClusterState>>> = Mutex::new(None);
+
+pub fn get_cluster_state(root: WindowKind) -> ClusterState {
+    let mut guard = CLUSTER_FSM.lock().unwrap_or_else(|e| e.into_inner());
+    let map = guard.get_or_insert_with(HashMap::new);
+    let state = map.entry(root).or_insert(ClusterState::Normal);
+    match *state {
+        ClusterState::Minimizing(start) => {
+            if start.elapsed() > std::time::Duration::from_millis(450) {
+                *state = ClusterState::Minimized;
+            }
+        }
+        ClusterState::Restoring(start) => {
+            if start.elapsed() > std::time::Duration::from_millis(450) {
+                *state = ClusterState::Normal;
+            }
+        }
+        _ => {}
+    }
+    *state
+}
+
+pub fn set_cluster_state(root: WindowKind, new_state: ClusterState) {
+    let mut guard = CLUSTER_FSM.lock().unwrap_or_else(|e| e.into_inner());
+    let map = guard.get_or_insert_with(HashMap::new);
+    map.insert(root, new_state);
+}
+
+pub fn can_start_cluster_minimize(root: WindowKind) -> bool {
+    let mut guard = CLUSTER_FSM.lock().unwrap_or_else(|e| e.into_inner());
+    let map = guard.get_or_insert_with(HashMap::new);
+    let state = map.entry(root).or_insert(ClusterState::Normal);
+    match *state {
+        ClusterState::Normal => {
+            *state = ClusterState::Minimizing(std::time::Instant::now());
+            true
+        }
+        ClusterState::Minimizing(start) => {
+            if start.elapsed() > std::time::Duration::from_millis(450) {
+                *state = ClusterState::Minimizing(std::time::Instant::now());
+                true
+            } else {
+                false
+            }
+        }
+        _ => false,
+    }
+}
+
+pub fn can_start_cluster_restore(root: WindowKind) -> bool {
+    let mut guard = CLUSTER_FSM.lock().unwrap_or_else(|e| e.into_inner());
+    let map = guard.get_or_insert_with(HashMap::new);
+    let state = map.entry(root).or_insert(ClusterState::Normal);
+    match *state {
+        ClusterState::Minimized => {
+            *state = ClusterState::Restoring(std::time::Instant::now());
+            true
+        }
+        ClusterState::Restoring(start) => {
+            if start.elapsed() > std::time::Duration::from_millis(450) {
+                *state = ClusterState::Restoring(std::time::Instant::now());
+                true
+            } else {
+                false
+            }
+        }
+        _ => false,
+    }
+}
+
+pub fn finish_cluster_minimize(root: WindowKind) {
+    set_cluster_state(root, ClusterState::Minimized);
+}
+
+pub fn finish_cluster_restore(root: WindowKind) {
+    set_cluster_state(root, ClusterState::Normal);
+}
 
 pub fn is_cluster_minimizing() -> bool {
-    IS_MINIMIZING_CLUSTER.load(Ordering::SeqCst)
+    let mut guard = CLUSTER_FSM.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(map) = guard.as_mut() {
+        map.values().any(|&s| match s {
+            ClusterState::Minimizing(start) => start.elapsed() <= std::time::Duration::from_millis(450),
+            _ => false,
+        })
+    } else {
+        false
+    }
 }
 
 pub fn is_cluster_restoring() -> bool {
-    IS_RESTORING_CLUSTER.load(Ordering::SeqCst)
+    let mut guard = CLUSTER_FSM.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(map) = guard.as_mut() {
+        map.values().any(|&s| match s {
+            ClusterState::Restoring(start) => start.elapsed() <= std::time::Duration::from_millis(450),
+            _ => false,
+        })
+    } else {
+        false
+    }
+}
+
+pub fn is_kind_cluster_minimizing(kind: WindowKind) -> bool {
+    let root = get_component_root(kind);
+    matches!(get_cluster_state(root), ClusterState::Minimizing(_))
+}
+
+pub fn is_kind_cluster_restoring(kind: WindowKind) -> bool {
+    let root = get_component_root(kind);
+    matches!(get_cluster_state(root), ClusterState::Restoring(_))
+}
+
+pub fn clear_all_cluster_fsm() {
+    let mut guard = CLUSTER_FSM.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(map) = guard.as_mut() {
+        map.clear();
+    }
 }
 
 /// Brings all windows belonging to the same cluster as `active_kind` to the top of the Z-order,
@@ -1336,8 +1450,11 @@ pub unsafe fn restore_and_realign_all_children(parent_kind: WindowKind, parent_h
         if child_kind == WindowKind::Visualizer && crate::visualizer::is_visualizer_fullscreen() {
             continue;
         }
-        if IsIconic(child_hwnd) != 0 {
+        if IsIconic(child_hwnd) != 0 || IsWindowVisible(child_hwnd) == 0 {
             ShowWindow(child_hwnd, SW_SHOWNOACTIVATE);
+            if child_kind == WindowKind::Visualizer {
+                crate::visualizer::restore_visualizer_with_cluster();
+            }
         }
         let mut child_rect: RECT = std::mem::zeroed();
         GetWindowRect(child_hwnd, &mut child_rect);
@@ -1369,19 +1486,43 @@ pub unsafe fn get_window_normal_rect(kind: WindowKind) -> RECT {
     if hwnd.is_null() || IsWindow(hwnd) == 0 {
         return RECT { left: 0, top: 0, right: 0, bottom: 0 };
     }
-    if IsIconic(hwnd) != 0 {
+    let is_iconic = IsIconic(hwnd) != 0;
+    let mut r: RECT = std::mem::zeroed();
+    GetWindowRect(hwnd, &mut r);
+
+    // 若視窗處於最小化，或 GetWindowRect 回傳負坐標（如被神燈離屏移至 -32000），一律優先回退至 rcNormalPosition
+    if is_iconic || r.left < -1000 || r.top < -1000 || (r.right - r.left) <= 50 || (r.bottom - r.top) <= 50 {
         let mut wp: WINDOWPLACEMENT = std::mem::zeroed();
         wp.length = std::mem::size_of::<WINDOWPLACEMENT>() as u32;
         if GetWindowPlacement(hwnd, &mut wp) != 0 {
-            let r = wp.rcNormalPosition;
-            if r.left >= -1000 && r.top >= -1000 {
-                return r;
+            let pr = wp.rcNormalPosition;
+            if pr.left >= -1000 && pr.top >= -1000 && (pr.right - pr.left) > 50 && (pr.bottom - pr.top) > 50 {
+                return pr;
+            }
+        }
+        if let Ok(guard) = LAST_KNOWN_RECTS.lock() {
+            if let Some(map) = guard.as_ref() {
+                if let Some(kr) = map.get(&kind) {
+                    if kr.left >= -1000 && kr.top >= -1000 && (kr.right - kr.left) > 50 && (kr.bottom - kr.top) > 50 {
+                        return *kr;
+                    }
+                }
             }
         }
     }
-    let mut r: RECT = std::mem::zeroed();
-    GetWindowRect(hwnd, &mut r);
-    r
+
+    if r.left >= -1000 && r.top >= -1000 && (r.right - r.left) > 50 && (r.bottom - r.top) > 50 {
+        r
+    } else {
+        let s = kind.default_size();
+        let (def_w, def_h) = (s[0] as i32, s[1] as i32);
+        RECT {
+            left: 100,
+            top: 100,
+            right: 100 + def_w,
+            bottom: 100 + def_h,
+        }
+    }
 }
 
 const GWLP_HWNDPARENT: i32 = -8;
@@ -1590,28 +1731,29 @@ pub unsafe fn disable_dwm_iconic_preview(hwnd: HWND) {
     );
 }
 
+
 /// 以主控視窗為向心核心（方案 A），執行逆向彈簧吸攏過場動畫並連鎖最小化群組視窗
 pub unsafe fn collapse_cluster_animated(kind: WindowKind) {
     if !SNAPPING_ENABLED.load(Ordering::Relaxed) {
         let hwnd = get_window_hwnd(kind);
         if !hwnd.is_null() && IsWindow(hwnd) != 0 {
-            ShowWindow(hwnd, SW_MINIMIZE);
+            minimize_window_solo(kind);
         }
         return;
     }
 
-    if IS_MINIMIZING_CLUSTER.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+    let root = get_component_root(kind);
+    if !can_start_cluster_minimize(root) {
         return;
     }
 
-    let root = get_component_root(kind);
     let members = get_cluster_members(root);
 
     if members.len() <= 1 {
-        IS_MINIMIZING_CLUSTER.store(false, Ordering::SeqCst);
+        finish_cluster_minimize(root);
         let hwnd = get_window_hwnd(kind);
         if !hwnd.is_null() && IsWindow(hwnd) != 0 {
-            ShowWindow(hwnd, SW_MINIMIZE);
+            minimize_window_solo(kind);
         }
         return;
     }
@@ -1619,7 +1761,7 @@ pub unsafe fn collapse_cluster_animated(kind: WindowKind) {
     // 1. 獲取根節點主視窗幾何 Rect（作為向心塌縮的終點目標）
     let root_hwnd = get_window_hwnd(root);
     if root_hwnd.is_null() || IsWindow(root_hwnd) == 0 {
-        IS_MINIMIZING_CLUSTER.store(false, Ordering::SeqCst);
+        finish_cluster_minimize(root);
         return;
     }
     let root_r = get_window_normal_rect(root);
@@ -1640,6 +1782,7 @@ pub unsafe fn collapse_cluster_animated(kind: WindowKind) {
     #[derive(Clone)]
     struct ChildAnimData {
         hwnd_val: isize,
+        child_kind: WindowKind,
         start_r: RECT,
         delay: f32,
     }
@@ -1661,6 +1804,7 @@ pub unsafe fn collapse_cluster_animated(kind: WindowKind) {
             };
             children.push(ChildAnimData {
                 hwnd_val: m_hwnd as isize,
+                child_kind: m,
                 start_r,
                 delay,
             });
@@ -1668,9 +1812,39 @@ pub unsafe fn collapse_cluster_animated(kind: WindowKind) {
     }
 
     if children.is_empty() {
-        IS_MINIMIZING_CLUSTER.store(false, Ordering::SeqCst);
-        ShowWindow(root_hwnd, SW_MINIMIZE);
-        return;
+        if members.len() <= 1 {
+            finish_cluster_minimize(root);
+            minimize_window_solo(root);
+            return;
+        } else {
+            // 群組子視窗若已處於收攏或隱藏狀態，切勿呼叫 minimize_window_solo 破壞磁吸關係鏈！
+            // 直接由母體安全執行最小化收納
+            let m_h = root_hwnd;
+            if !m_h.is_null() && IsWindow(m_h) != 0 {
+                crate::genie_effect::disable_window_dwm_transitions(m_h);
+                let (hbmp, rect) = crate::genie_effect::capture_window_snapshot(m_h);
+                if hbmp != 0 {
+                    crate::genie_effect::play_genie_s_curve_effect_with_finish(
+                        hbmp,
+                        m_h as usize,
+                        rect.left,
+                        rect.top,
+                        rect.right - rect.left,
+                        rect.bottom - rect.top,
+                        crate::genie_effect::GenieTarget::Taskbar,
+                        move || {
+                            finish_cluster_minimize(root);
+                        },
+                    );
+                } else {
+                    ShowWindow(m_h, SW_MINIMIZE);
+                    finish_cluster_minimize(root);
+                }
+            } else {
+                finish_cluster_minimize(root);
+            }
+            return;
+        }
     }
 
     // 4. 在背景執行緒執行 8 步（約 88ms）極速逆向向心彈簧過場動畫
@@ -1717,17 +1891,40 @@ pub unsafe fn collapse_cluster_animated(kind: WindowKind) {
                     }
 
                     // 徹底根除往左下角飛：子視窗在母體背後直接 SW_HIDE 靜默收納，不觸發 DWM 經典左下角飛行動畫！
-                    ShowWindow(h, SW_HIDE);
+                    if child.child_kind == WindowKind::Visualizer {
+                        crate::visualizer::hide_visualizer_with_cluster();
+                    } else {
+                        ShowWindow(h, SW_HIDE);
+                    }
+                    update_known_rect(child.child_kind, child.start_r);
                 }
             }
 
             // 最後最小化主視窗（母體）：由母體代表整個群組單一、流暢地飛向工作列圖示！
             let m_h = root_hwnd_val as HWND;
             if IsWindow(m_h) != 0 {
-                ShowWindow(m_h, SW_MINIMIZE);
+                crate::genie_effect::disable_window_dwm_transitions(m_h);
+                let (hbmp, rect) = crate::genie_effect::capture_window_snapshot(m_h);
+                if hbmp != 0 {
+                    crate::genie_effect::play_genie_s_curve_effect_with_finish(
+                        hbmp,
+                        root_hwnd_val as usize,
+                        rect.left,
+                        rect.top,
+                        rect.right - rect.left,
+                        rect.bottom - rect.top,
+                        crate::genie_effect::GenieTarget::Taskbar,
+                        move || {
+                            finish_cluster_minimize(root);
+                        },
+                    );
+                } else {
+                    ShowWindow(m_h, SW_MINIMIZE);
+                    finish_cluster_minimize(root);
+                }
+            } else {
+                finish_cluster_minimize(root);
             }
-
-            IS_MINIMIZING_CLUSTER.store(false, Ordering::SeqCst);
         }
     });
 }
@@ -1747,8 +1944,66 @@ pub unsafe fn minimize_window_solo(kind: WindowKind) {
         if kind == WindowKind::Main && crate::tray::is_window_hidden_to_tray() {
             return;
         }
-        ShowWindow(hwnd, SW_MINIMIZE);
+        crate::genie_effect::disable_window_dwm_transitions(hwnd);
+        let (hbmp, rect) = crate::genie_effect::capture_window_snapshot(hwnd);
+        if hbmp != 0 {
+            crate::genie_effect::play_genie_s_curve_effect(
+                hbmp,
+                hwnd as usize,
+                rect.left,
+                rect.top,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
+                crate::genie_effect::GenieTarget::Taskbar,
+            );
+        } else {
+            ShowWindow(hwnd, SW_MINIMIZE);
+        }
     }
+}
+
+/// Restores a window and its cluster using reverse Genie S-curve transition from taskbar
+pub unsafe fn restore_window_animated(kind: WindowKind, hwnd: HWND) {
+    let root = get_component_root(kind);
+    let root_hwnd = get_window_hwnd(root);
+    let target_hwnd = if !root_hwnd.is_null() && IsWindow(root_hwnd) != 0 { root_hwnd } else { hwnd };
+    let normal_r = get_window_normal_rect(root);
+    let was_collapsed = can_start_cluster_restore(root);
+
+    let target_hwnd_val = target_hwnd as usize;
+    let on_finish = move || {
+        let h = target_hwnd_val as HWND;
+        unsafe {
+            if IsWindow(h) != 0 {
+                crate::genie_effect::disable_window_dwm_transitions(h);
+                ShowWindow(h, SW_RESTORE);
+
+                let members = get_cluster_members(root);
+                let has_hidden_or_iconic_children = members.iter().any(|&m| {
+                    if m == root {
+                        return false;
+                    }
+                    let m_h = get_window_hwnd(m);
+                    !m_h.is_null() && IsWindow(m_h) != 0 && (IsIconic(m_h) != 0 || IsWindowVisible(m_h) == 0)
+                });
+
+                if was_collapsed || has_hidden_or_iconic_children {
+                    expand_cluster_animated(root, h);
+                } else {
+                    bring_cluster_to_top(root, h);
+                    finish_cluster_restore(root);
+                }
+            }
+        }
+    };
+
+    crate::genie_effect::play_reverse_genie_s_curve_effect(
+        normal_r.left,
+        normal_r.top,
+        target_hwnd as usize,
+        crate::genie_effect::GenieTarget::Taskbar,
+        on_finish,
+    );
 }
 
 /// 根據當前 Dock Tree，以 `root` 的坐標為基準，遞迴計算出該群組所有附屬子視窗的目標螢幕停靠坐標。
@@ -1812,16 +2067,15 @@ pub unsafe fn expand_cluster_animated(root: WindowKind, root_hwnd: HWND) {
         if !root_hwnd.is_null() && IsWindow(root_hwnd) != 0 {
             ShowWindow(root_hwnd, SW_RESTORE);
         }
+        finish_cluster_restore(root);
         return;
     }
 
-    if IS_RESTORING_CLUSTER.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
-        return;
-    }
+    set_cluster_state(root, ClusterState::Restoring(std::time::Instant::now()));
 
     let members = get_cluster_members(root);
     if members.len() <= 1 {
-        IS_RESTORING_CLUSTER.store(false, Ordering::SeqCst);
+        finish_cluster_restore(root);
         if !root_hwnd.is_null() && IsWindow(root_hwnd) != 0 {
             ShowWindow(root_hwnd, SW_RESTORE);
         }
@@ -1886,6 +2140,9 @@ pub unsafe fn expand_cluster_animated(root: WindowKind, root_hwnd: HWND) {
             if IsIconic(m_hwnd) != 0 || IsWindowVisible(m_hwnd) == 0 {
                 ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
             }
+            if m == WindowKind::Visualizer {
+                crate::visualizer::restore_visualizer_with_cluster();
+            }
 
             children.push(ChildExpandAnimData {
                 hwnd_val: m_hwnd as isize,
@@ -1899,7 +2156,7 @@ pub unsafe fn expand_cluster_animated(root: WindowKind, root_hwnd: HWND) {
     }
 
     if children.is_empty() {
-        IS_RESTORING_CLUSTER.store(false, Ordering::SeqCst);
+        finish_cluster_restore(root);
         return;
     }
 
@@ -1966,7 +2223,9 @@ pub unsafe fn expand_cluster_animated(root: WindowKind, root_hwnd: HWND) {
             // 同步工作列歸一屬性
             sync_cluster_taskbar_ownership();
 
-            IS_RESTORING_CLUSTER.store(false, Ordering::SeqCst);
+            crate::gui::request_ui_repaint();
+
+            finish_cluster_restore(root);
         }
     });
 }
@@ -2025,47 +2284,6 @@ pub fn get_dock_bond() -> DockBond {
             offset_y: 0,
         })
     })
-}
-
-pub fn set_mini_player_dock_bond(mini_rect: &RECT, main_rect: &RECT) {
-    set_dock_relation(WindowKind::MiniPlayer, WindowKind::Main, mini_rect, main_rect);
-}
-
-pub fn break_mini_player_dock_bond() {
-    break_dock_relation(WindowKind::MiniPlayer);
-}
-
-pub fn get_mini_player_dock_bond() -> MiniPlayerDockBond {
-    with_dock_tree(|tree| {
-        if let Some(b) = tree.get(&WindowKind::MiniPlayer) {
-            MiniPlayerDockBond {
-                is_bonded: b.is_bonded,
-                side: b.side,
-                offset_x: b.offset_x,
-                offset_y: b.offset_y,
-            }
-        } else {
-            MiniPlayerDockBond {
-                is_bonded: false,
-                side: DockSide::None,
-                offset_x: 0,
-                offset_y: 0,
-            }
-        }
-    })
-}
-
-pub fn set_equalizer_dock_bond(eq_rect: &RECT, anchor_rect: &RECT, anchor: ChainAnchor) {
-    let parent = match anchor {
-        ChainAnchor::MiniPlayer => WindowKind::MiniPlayer,
-        ChainAnchor::Visualizer => WindowKind::Visualizer,
-        ChainAnchor::Main => WindowKind::Main,
-    };
-    set_dock_relation(WindowKind::Equalizer, parent, eq_rect, anchor_rect);
-}
-
-pub fn break_equalizer_dock_bond() {
-    break_dock_relation(WindowKind::Equalizer);
 }
 
 /// 將主視窗、迷你播放器、等化器與視覺效果視窗依據 3 欄模組化工作站幾何完美對齊並建立磁吸群組。
@@ -2163,9 +2381,10 @@ pub unsafe fn layout_modular_workstation(
         (false, std::mem::zeroed(), 0, 0)
     };
 
-    // 4. 取得視覺效果視窗目前的實際寬高與矩形（若有開啟）
+    // 4. 取得視覺效果視窗目前的實際寬高與矩形（若有開啟且非全螢幕）
     let (has_vis, vis_rect, vis_w, vis_h) = if !vis_hwnd.is_null()
         && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0
+        && !crate::visualizer::is_visualizer_fullscreen()
     {
         let (r, w, h) = get_window_normal_rect(vis_hwnd, 100, 100);
         (true, r, w, h)
@@ -2667,33 +2886,6 @@ where
     }
 }
 
-pub fn get_equalizer_dock_bond() -> EqualizerDockBond {
-    with_dock_tree(|tree| {
-        if let Some(b) = tree.get(&WindowKind::Equalizer) {
-            let anchor = match b.parent {
-                WindowKind::MiniPlayer => ChainAnchor::MiniPlayer,
-                WindowKind::Visualizer => ChainAnchor::Visualizer,
-                _ => ChainAnchor::Main,
-            };
-            EqualizerDockBond {
-                is_bonded: b.is_bonded,
-                anchor,
-                side: b.side,
-                offset_x: b.offset_x,
-                offset_y: b.offset_y,
-            }
-        } else {
-            EqualizerDockBond {
-                is_bonded: false,
-                anchor: ChainAnchor::Main,
-                side: DockSide::None,
-                offset_x: 0,
-                offset_y: 0,
-            }
-        }
-    })
-}
-
 // --- Generalized Movement & Release Handlers ---
 
 pub unsafe fn handle_window_moving(kind: WindowKind, hwnd: HWND, rect_ptr: *mut RECT) {
@@ -3003,8 +3195,22 @@ unsafe extern "system" fn unified_window_subclass_proc(
                     if kind == WindowKind::Main {
                         crate::tray::ensure_window_on_screen(hwnd);
                     }
-                    if !is_cluster_minimizing() && !is_cluster_restoring() {
-                        restore_cluster(kind, hwnd);
+                    if !is_kind_cluster_minimizing(kind) && !is_kind_cluster_restoring(kind) {
+                        let root = get_component_root(kind);
+                        let members = get_cluster_members(root);
+                        let has_hidden_or_iconic_children = members.iter().any(|&m| {
+                            if m == root {
+                                return false;
+                            }
+                            let m_h = get_window_hwnd(m);
+                            !m_h.is_null() && IsWindow(m_h) != 0 && (IsIconic(m_h) != 0 || IsWindowVisible(m_h) == 0)
+                        });
+                        let was_collapsed = can_start_cluster_restore(root);
+                        if was_collapsed || has_hidden_or_iconic_children {
+                            expand_cluster_animated(root, hwnd);
+                        } else {
+                            restore_cluster(kind, hwnd);
+                        }
                     }
                 }
             }
@@ -3021,8 +3227,8 @@ unsafe extern "system" fn unified_window_subclass_proc(
             if active_type != WA_INACTIVE as u32
                 && !is_minimized
                 && IsIconic(hwnd) == 0
-                && !is_cluster_minimizing()
-                && !is_cluster_restoring()
+                && !is_kind_cluster_minimizing(kind)
+                && !is_kind_cluster_restoring(kind)
                 && SNAPPING_ENABLED.load(Ordering::Relaxed)
             {
                 bring_cluster_to_top(kind, hwnd);
@@ -3034,6 +3240,19 @@ unsafe extern "system" fn unified_window_subclass_proc(
             if sc == SC_MINIMIZE {
                 if role == WindowRole::ClusterMaster || role == WindowRole::ClusterSlave {
                     minimize_cluster(kind);
+                    return 0;
+                } else {
+                    minimize_window_solo(kind);
+                    return 0;
+                }
+            } else if sc == SC_RESTORE {
+                let mut pt: POINT = std::mem::zeroed();
+                GetCursorPos(&mut pt);
+                if pt.x > 0 && pt.y > 0 {
+                    crate::genie_effect::record_taskbar_button_coord(pt.x, pt.y);
+                }
+                if crate::genie_effect::has_cached_snapshot_for_hwnd(hwnd as usize) {
+                    restore_window_animated(kind, hwnd);
                     return 0;
                 }
             }
@@ -3074,6 +3293,7 @@ pub unsafe fn install_window_subclass(kind: WindowKind, hwnd: HWND) {
     if hwnd.is_null() || IsWindow(hwnd) == 0 {
         return;
     }
+    crate::genie_effect::disable_window_dwm_transitions(hwnd);
     match kind {
         WindowKind::Main => {
             crate::tray::set_main_hwnd(hwnd as isize);
@@ -3758,7 +3978,7 @@ pub unsafe fn bring_fleet_to_top() {
         ShowWindow(main_hwnd, SW_RESTORE);
     }
 
-    // 2. Collect all active visible fleet windows in bottom-to-top order
+    // 2. Elevate all active visible fleet windows in bottom-to-top order atomically
     let fleet = [
         (WindowKind::Visualizer, vis_hwnd),
         (WindowKind::Equalizer, eq_hwnd),
@@ -3766,6 +3986,7 @@ pub unsafe fn bring_fleet_to_top() {
         (WindowKind::Main, main_hwnd),
     ];
 
+    let mut valid_windows = Vec::with_capacity(4);
     for &(kind, hwnd) in &fleet {
         if hwnd.is_null() || IsWindow(hwnd) == 0 {
             continue;
@@ -3776,32 +3997,34 @@ pub unsafe fn bring_fleet_to_top() {
         if IsWindowVisible(hwnd) == 0 {
             continue;
         }
+        valid_windows.push((kind, hwnd));
+    }
 
-        let is_top = is_window_pinned(kind)
-            || (kind == WindowKind::Visualizer && crate::visualizer::is_visualizer_fullscreen());
-
-        // Elevate window above third-party applications
-        SetWindowPos(
-            hwnd,
-            HWND_TOPMOST,
-            0,
-            0,
-            0,
-            0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-        );
-        if !is_top {
-            SetWindowPos(
-                hwnd,
-                HWND_NOTOPMOST,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-            );
+    if !valid_windows.is_empty() {
+        let mut hdwp = BeginDeferWindowPos(valid_windows.len() as i32);
+        for &(kind, hwnd) in &valid_windows {
+            let is_top = is_window_pinned(kind)
+                || (kind == WindowKind::Visualizer && crate::visualizer::is_visualizer_fullscreen());
+            let insert_after = if is_top { HWND_TOPMOST } else { HWND_NOTOPMOST };
+            if !hdwp.is_null() {
+                hdwp = DeferWindowPos(
+                    hdwp,
+                    hwnd,
+                    insert_after,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                );
+            }
         }
-        crate::tray::ensure_window_on_screen(hwnd);
+        if !hdwp.is_null() {
+            EndDeferWindowPos(hdwp);
+        }
+        for &(_, hwnd) in &valid_windows {
+            crate::tray::ensure_window_on_screen(hwnd);
+        }
     }
 
     // 3. For clustered windows, restore and preserve cluster relative Z-order & bonding
@@ -3865,11 +4088,12 @@ mod tests {
                 m.clear();
             }
         }
+        clear_all_cluster_fsm();
     }
 
     #[test]
     fn test_dock_side_and_bonded_pos() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
         // Main window at (100, 100), size 400x500 -> right=500, bottom=600
         let main_rect = RECT { left: 100, top: 100, right: 500, bottom: 600 };
@@ -3897,7 +4121,7 @@ mod tests {
 
     #[test]
     fn test_dock_tree_hierarchy_and_cycle_prevention() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         let main_r = RECT { left: 100, top: 100, right: 500, bottom: 600 };
@@ -3928,7 +4152,7 @@ mod tests {
 
     #[test]
     fn test_symmetric_snapping_assignment() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         let main_r = RECT { left: 100, top: 100, right: 500, bottom: 600 };
@@ -3966,7 +4190,7 @@ mod tests {
 
     #[test]
     fn test_dock_tree_graph_bfs_case2_main_vis_mini() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         let main_r = RECT { left: 0, top: 0, right: 400, bottom: 600 };
@@ -4014,7 +4238,7 @@ mod tests {
 
     #[test]
     fn test_subcluster_root_selection_and_button_roles() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         // Subcluster without Main: MiniPlayer (Lv 2) <-> Equalizer (Lv 3)
@@ -4041,7 +4265,7 @@ mod tests {
 
     #[test]
     fn test_cluster_members_retrieval_and_bring_to_top() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         // 1. Single standalone window
@@ -4081,7 +4305,7 @@ mod tests {
 
     #[test]
     fn test_spawn_priority_cascade_and_center_fallback() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         // 1. Main window only: next window should spawn at Main's Right-Top (Slot 1)
@@ -4174,7 +4398,7 @@ mod tests {
 
     #[test]
     fn test_summon_and_dock_breaks_separated_dock_edges() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         // 1. Initially, Main and MiniPlayer are docked together
@@ -4211,7 +4435,7 @@ mod tests {
 
     #[test]
     fn test_window_role_detection() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         // Standalone initially
@@ -4236,7 +4460,7 @@ mod tests {
 
     #[test]
     fn test_cluster_minimize_guard_and_role_handling() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         assert!(!is_cluster_minimizing());
@@ -4263,7 +4487,7 @@ mod tests {
 
     #[test]
     fn test_root_close_reassembles_remaining_cluster_in_place() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         // 1. Main at (100, 100, 500, 600)
@@ -4364,7 +4588,7 @@ mod tests {
 
     #[test]
     fn test_per_window_pinning_and_cluster_propagation() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         // 1. Reset all dock edges and pin states
@@ -4414,7 +4638,7 @@ mod tests {
 
     #[test]
     fn test_anchor_precedence_assimilation() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         // 1. 初始化重設所有視窗狀態與拓撲關係
@@ -4473,7 +4697,7 @@ mod tests {
 
     #[test]
     fn test_window_opacity_and_hover_peek() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
         let orig_mini_op = get_window_opacity(WindowKind::MiniPlayer);
         let orig_vis_op = get_window_opacity(WindowKind::Visualizer);
@@ -4510,7 +4734,7 @@ mod tests {
 
     #[test]
     fn test_minimize_window_solo() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         let main_r = RECT { left: 100, top: 100, right: 500, bottom: 600 };
@@ -4549,7 +4773,7 @@ mod tests {
 
     #[test]
     fn test_cluster_taskbar_ownership_sync_simulation() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         // 1. Standalone initially
@@ -4598,7 +4822,7 @@ mod tests {
 
     #[test]
     fn test_compute_cluster_docked_targets() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         // 建立 Main(root) -> MiniPlayer(Right) -> Equalizer(Bottom) 的三級串聯結構
@@ -4653,16 +4877,18 @@ mod tests {
 
     #[test]
     fn test_expand_cluster_animated_lock() {
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        reset_all();
         assert!(!is_cluster_restoring());
-        IS_RESTORING_CLUSTER.store(true, Ordering::SeqCst);
+        set_cluster_state(WindowKind::Main, ClusterState::Restoring(std::time::Instant::now()));
         assert!(is_cluster_restoring());
-        IS_RESTORING_CLUSTER.store(false, Ordering::SeqCst);
+        finish_cluster_restore(WindowKind::Main);
         assert!(!is_cluster_restoring());
     }
 
     #[test]
     fn test_collapsed_silent_hide_simulation() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         let main_r = RECT { left: 100, top: 100, right: 560, bottom: 780 };
@@ -4681,7 +4907,7 @@ mod tests {
 
     #[test]
     fn test_is_main_in_cluster_and_cluster_summon() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         // 1. MiniPlayer 與 Equalizer 組成小群組
@@ -4708,7 +4934,7 @@ mod tests {
 
     #[test]
     fn test_hud_pinned_state_backup_and_restoration() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         // 1. Setup cluster: Main + MiniPlayer + Equalizer
@@ -4761,7 +4987,7 @@ mod tests {
 
     #[test]
     fn test_home_summon_joins_mini_cluster_with_visualizer() {
-        let _lock = TEST_LOCK.lock().unwrap();
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();
 
         // 1. 設置工作站拆分後的殘留群組：MiniPlayer + Equalizer + Visualizer
@@ -4811,5 +5037,180 @@ mod tests {
         assert!(final_cluster_from_mini.contains(&WindowKind::Visualizer));
         assert!(final_cluster_from_mini.contains(&WindowKind::Equalizer));
         assert!(final_cluster_from_mini.contains(&WindowKind::MiniPlayer));
+    }
+
+    #[test]
+    fn test_per_cluster_collapsed_state_isolation() {
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        reset_all();
+
+        // 1. Group 1: Main + Equalizer
+        let main_r = RECT { left: 100, top: 100, right: 560, bottom: 780 };
+        let eq_r = RECT { left: 560, top: 100, right: 1020, bottom: 440 };
+        set_dock_relation(WindowKind::Equalizer, WindowKind::Main, &eq_r, &main_r);
+        assert_eq!(get_component_root(WindowKind::Equalizer), WindowKind::Main);
+
+        // 2. Group 2: MiniPlayer + Visualizer
+        let mini_r = RECT { left: 1100, top: 100, right: 1560, bottom: 440 };
+        let vis_r = RECT { left: 1100, top: 440, right: 1560, bottom: 780 };
+        set_dock_relation(WindowKind::Visualizer, WindowKind::MiniPlayer, &vis_r, &mini_r);
+        assert_eq!(get_component_root(WindowKind::Visualizer), WindowKind::MiniPlayer);
+
+        // 3. Both groups collapse independently
+        set_cluster_state(WindowKind::Main, ClusterState::Minimized);
+        set_cluster_state(WindowKind::MiniPlayer, ClusterState::Minimized);
+
+        assert_eq!(get_cluster_state(WindowKind::Main), ClusterState::Minimized);
+        assert_eq!(get_cluster_state(WindowKind::MiniPlayer), ClusterState::Minimized);
+
+        // 4. Restore Group 2 (MiniPlayer) first
+        assert!(can_start_cluster_restore(WindowKind::MiniPlayer));
+        assert_ne!(get_cluster_state(WindowKind::MiniPlayer), ClusterState::Minimized);
+
+        // Critical check: Group 1 (Main) MUST STILL BE MINIMIZED! No state leak or overwrite!
+        assert_eq!(get_cluster_state(WindowKind::Main), ClusterState::Minimized);
+
+        // 5. Restore Group 1 (Main)
+        assert!(can_start_cluster_restore(WindowKind::Main));
+        assert_ne!(get_cluster_state(WindowKind::Main), ClusterState::Minimized);
+    }
+
+    #[test]
+    fn test_cluster_fsm_lifecycle_and_timeout() {
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        reset_all();
+
+        let root = WindowKind::Main;
+        assert_eq!(get_cluster_state(root), ClusterState::Normal);
+
+        // 1. Can start minimize
+        assert!(can_start_cluster_minimize(root));
+        assert!(is_kind_cluster_minimizing(root));
+        assert!(is_cluster_minimizing());
+
+        // While minimizing, cannot start another minimize
+        assert!(!can_start_cluster_minimize(root));
+
+        // Finish minimize
+        finish_cluster_minimize(root);
+        assert_eq!(get_cluster_state(root), ClusterState::Minimized);
+        assert!(!is_cluster_minimizing());
+
+        // 2. Can start restore
+        assert!(can_start_cluster_restore(root));
+        assert!(is_kind_cluster_restoring(root));
+        assert!(is_cluster_restoring());
+
+        // Finish restore
+        finish_cluster_restore(root);
+        assert_eq!(get_cluster_state(root), ClusterState::Normal);
+        assert!(!is_cluster_restoring());
+
+        // 3. Timeout self-healing simulation (> 450ms)
+        let past = std::time::Instant::now() - std::time::Duration::from_millis(500);
+        set_cluster_state(root, ClusterState::Minimizing(past));
+        assert_eq!(get_cluster_state(root), ClusterState::Minimized, "Minimizing past 450ms must auto-resolve to Minimized");
+
+        set_cluster_state(root, ClusterState::Restoring(past));
+        assert_eq!(get_cluster_state(root), ClusterState::Normal, "Restoring past 450ms must auto-resolve to Normal");
+    }
+
+    #[test]
+    fn test_rebuild_dock_tree_preserves_minimized_cluster_bonds() {
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        reset_all();
+
+        // 1. Setup layout: Main alone, Group 2: MiniPlayer, Equalizer, Visualizer
+        let main_r = RECT { left: 100, top: 100, right: 500, bottom: 600 };
+        let mini_r = RECT { left: 600, top: 100, right: 1000, bottom: 350 };
+        let eq_r = RECT { left: 600, top: 350, right: 1000, bottom: 600 };
+        let vis_r = RECT { left: 1000, top: 100, right: 1400, bottom: 600 };
+
+        update_known_rect(WindowKind::Main, main_r);
+        update_known_rect(WindowKind::MiniPlayer, mini_r);
+        update_known_rect(WindowKind::Equalizer, eq_r);
+        update_known_rect(WindowKind::Visualizer, vis_r);
+
+        // Group 2 dock relations: Equalizer -> MiniPlayer, Visualizer -> MiniPlayer
+        set_dock_relation(WindowKind::Equalizer, WindowKind::MiniPlayer, &eq_r, &mini_r);
+        set_dock_relation(WindowKind::Visualizer, WindowKind::MiniPlayer, &vis_r, &mini_r);
+
+        let g2_members = get_cluster_members(WindowKind::MiniPlayer);
+        assert_eq!(g2_members.len(), 3, "Group 2 must have 3 members initially");
+        assert!(g2_members.contains(&WindowKind::MiniPlayer));
+        assert!(g2_members.contains(&WindowKind::Equalizer));
+        assert!(g2_members.contains(&WindowKind::Visualizer));
+
+        // 2. Step 2: Minimize Group 2
+        set_cluster_state(WindowKind::MiniPlayer, ClusterState::Minimized);
+
+        // 3. Step 3: Minimize Main Window (calls minimize_window_solo which invokes rebuild_dock_tree)
+        unsafe {
+            rebuild_dock_tree();
+        }
+
+        // 4. Verify that Group 2's dock relations were NOT wiped out by rebuilding while minimized!
+        let g2_members_after = get_cluster_members(WindowKind::MiniPlayer);
+        assert_eq!(
+            g2_members_after.len(),
+            3,
+            "Rebuilding dock tree must NOT wipe out minimized cluster members! Found: {:?}",
+            g2_members_after
+        );
+        assert!(g2_members_after.contains(&WindowKind::Equalizer));
+        assert!(g2_members_after.contains(&WindowKind::Visualizer));
+
+        // 5. Restore Group 2
+        set_cluster_state(WindowKind::MiniPlayer, ClusterState::Normal);
+        let g2_members_restored = get_cluster_members(WindowKind::MiniPlayer);
+        assert_eq!(g2_members_restored.len(), 3);
+    }
+
+    #[test]
+    fn test_cluster_fsm_transitions_and_handover() {
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        reset_all();
+
+        let root = WindowKind::MiniPlayer;
+
+        // 1. Strict Transition testing
+        assert_eq!(get_cluster_state(root), ClusterState::Normal);
+
+        // Normal -> Minimizing
+        assert!(can_start_cluster_minimize(root));
+        assert!(is_kind_cluster_minimizing(root));
+
+        // Duplicate minimize rejected while active minimizing
+        assert!(!can_start_cluster_minimize(root));
+
+        // Minimizing -> Minimized
+        finish_cluster_minimize(root);
+        assert_eq!(get_cluster_state(root), ClusterState::Minimized);
+
+        // Minimized -> Restoring
+        assert!(can_start_cluster_restore(root));
+        assert!(is_kind_cluster_restoring(root));
+
+        // Restoring -> Normal
+        finish_cluster_restore(root);
+        assert_eq!(get_cluster_state(root), ClusterState::Normal);
+
+        // 2. Topology Handover: Root change simulation
+        let main_r = RECT { left: 100, top: 100, right: 500, bottom: 600 };
+        let mini_r = RECT { left: 500, top: 100, right: 900, bottom: 350 };
+        update_known_rect(WindowKind::Main, main_r);
+        update_known_rect(WindowKind::MiniPlayer, mini_r);
+
+        set_dock_relation(WindowKind::MiniPlayer, WindowKind::Main, &mini_r, &main_r);
+        assert_eq!(get_component_root(WindowKind::MiniPlayer), WindowKind::Main);
+
+        let main_state = get_cluster_state(WindowKind::Main);
+        assert_eq!(main_state, ClusterState::Normal);
+
+        // Detach MiniPlayer: becomes independent root
+        break_dock_relation(WindowKind::MiniPlayer);
+
+        assert_eq!(get_component_root(WindowKind::MiniPlayer), WindowKind::MiniPlayer);
+        assert_eq!(get_cluster_state(WindowKind::MiniPlayer), ClusterState::Normal);
     }
 }

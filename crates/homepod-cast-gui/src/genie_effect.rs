@@ -5,7 +5,7 @@
 //! Fully decoupled visual overlay running on a background thread.
 //! Does NOT touch main window HWND lifecycle or focus.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
 static ABORT_FLAG: AtomicBool = AtomicBool::new(false);
 
@@ -18,6 +18,23 @@ pub struct CachedGenieSnapshot {
 }
 
 static LAST_SNAPSHOT: std::sync::Mutex<Option<CachedGenieSnapshot>> = std::sync::Mutex::new(None);
+static SNAPSHOTS: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<usize, CachedGenieSnapshot>>,
+> = std::sync::OnceLock::new();
+
+fn get_snapshots() -> &'static std::sync::Mutex<std::collections::HashMap<usize, CachedGenieSnapshot>> {
+    SNAPSHOTS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+pub static LAST_TASKBAR_BUTTON_X: AtomicI32 = AtomicI32::new(i32::MIN);
+pub static LAST_TASKBAR_BUTTON_Y: AtomicI32 = AtomicI32::new(i32::MIN);
+
+pub fn record_taskbar_button_coord(x: i32, y: i32) {
+    if x > 0 && y > 0 {
+        LAST_TASKBAR_BUTTON_X.store(x, Ordering::SeqCst);
+        LAST_TASKBAR_BUTTON_Y.store(y, Ordering::SeqCst);
+    }
+}
 
 /// Query if a cached snapshot is available for reverse genie restore
 pub fn has_cached_genie_snapshot() -> bool {
@@ -25,6 +42,61 @@ pub fn has_cached_genie_snapshot() -> bool {
         guard.is_some()
     } else {
         false
+    }
+}
+
+pub fn has_cached_snapshot_for_hwnd(hwnd_val: usize) -> bool {
+    if let Ok(map) = get_snapshots().lock() {
+        if map.contains_key(&hwnd_val) {
+            return true;
+        }
+    }
+    if let Ok(guard) = LAST_SNAPSHOT.lock() {
+        guard.is_some()
+    } else {
+        false
+    }
+}
+
+/// Captures a 1:1 window screenshot bitmap into memory for Genie effect
+pub unsafe fn capture_window_snapshot(
+    hwnd: windows_sys::Win32::Foundation::HWND,
+) -> (usize, windows_sys::Win32::Foundation::RECT) {
+    use windows_sys::Win32::Foundation::RECT;
+    use windows_sys::Win32::Graphics::Gdi::{
+        BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, GetDC, ReleaseDC, SelectObject, SRCCOPY,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect;
+
+    let mut rect: RECT = std::mem::zeroed();
+    GetWindowRect(hwnd, &mut rect);
+    let w = rect.right - rect.left;
+    let h = rect.bottom - rect.top;
+    if w <= 50 || h <= 50 {
+        return (0, rect);
+    }
+    let screen_dc = GetDC(std::ptr::null_mut());
+    let mem_dc = CreateCompatibleDC(screen_dc);
+    let hbmp = CreateCompatibleBitmap(screen_dc, w, h);
+    let old_bmp = SelectObject(mem_dc, hbmp);
+    BitBlt(mem_dc, 0, 0, w, h, screen_dc, rect.left, rect.top, SRCCOPY);
+    SelectObject(mem_dc, old_bmp);
+    DeleteDC(mem_dc);
+    ReleaseDC(std::ptr::null_mut(), screen_dc);
+    (hbmp as usize, rect)
+}
+
+/// Disables DWM transitions (minimize/restore animations) for this window so our custom
+/// Genie animation has zero interference or flash with Windows DWM. (Follows Muelle `calm_windows`).
+pub unsafe fn disable_window_dwm_transitions(hwnd: windows_sys::Win32::Foundation::HWND) {
+    if !hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(hwnd) != 0 {
+        let disabled: i32 = 1;
+        windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute(
+            hwnd,
+            windows_sys::Win32::Graphics::Dwm::DWMWA_TRANSITIONS_FORCEDISABLED as u32,
+            &disabled as *const _ as *const _,
+            std::mem::size_of::<i32>() as u32,
+        );
     }
 }
 
@@ -85,6 +157,15 @@ impl Genie {
     }
 }
 
+/// Destination target for the macOS-style S-curve Genie effect
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GenieTarget {
+    /// Minimize to Taskbar (工作列): keeps Taskbar button, animates into taskbar button rect, SW_MINIMIZE
+    Taskbar,
+    /// Hide/Close to Tray (工作匣/系統匣): removes Taskbar button, animates into notification area tray icon
+    Tray,
+}
+
 /// Trigger the macOS-style S-curve Genie effect using window screenshot bitmap
 pub fn play_genie_s_curve_effect(
     hbmp_handle: usize,
@@ -93,11 +174,38 @@ pub fn play_genie_s_curve_effect(
     start_y: i32,
     start_w: i32,
     start_h: i32,
-) {
+    target: GenieTarget,
+) -> bool {
+    play_genie_s_curve_effect_with_finish(
+        hbmp_handle,
+        orig_hwnd,
+        start_x,
+        start_y,
+        start_w,
+        start_h,
+        target,
+        || {},
+    )
+}
+
+pub fn play_genie_s_curve_effect_with_finish<F>(
+    hbmp_handle: usize,
+    orig_hwnd: usize,
+    start_x: i32,
+    start_y: i32,
+    start_w: i32,
+    start_h: i32,
+    target: GenieTarget,
+    on_finish: F,
+) -> bool
+where
+    F: FnOnce() + Send + 'static,
+{
     #[cfg(test)]
     {
-        let _ = (hbmp_handle, orig_hwnd, start_x, start_y, start_w, start_h);
-        return;
+        let _ = (hbmp_handle, orig_hwnd, start_x, start_y, start_w, start_h, target);
+        on_finish();
+        return true;
     }
 
     #[cfg(not(test))]
@@ -107,23 +215,27 @@ pub fn play_genie_s_curve_effect(
         std::thread::Builder::new()
             .name("genie-scurve-fx".into())
             .spawn(move || {
-                run_genie_s_curve_animation(hbmp_handle, orig_hwnd, start_x, start_y, start_w, start_h);
+                run_genie_s_curve_animation(hbmp_handle, orig_hwnd, start_x, start_y, start_w, start_h, target, on_finish);
             })
             .ok();
+        true
     }
 }
 
 #[cfg(not(test))]
-fn run_genie_s_curve_animation(
+fn run_genie_s_curve_animation<F>(
     hbmp_handle: usize,
     orig_hwnd_val: usize,
     start_x: i32,
     start_y: i32,
     start_w: i32,
     start_h: i32,
-) {
+    target: GenieTarget,
+    on_finish: F,
+) where
+    F: FnOnce() + Send + 'static, {
     use std::time::Instant;
-    use windows_sys::Win32::Foundation::{HWND, POINT, RECT, SIZE};
+    use windows_sys::Win32::Foundation::{HWND, POINT, SIZE};
     use windows_sys::Win32::Graphics::Gdi::{
         CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDIBits, SelectObject,
         AC_SRC_ALPHA, AC_SRC_OVER, BLENDFUNCTION, BI_RGB, BITMAPINFO, BITMAPINFOHEADER,
@@ -131,11 +243,11 @@ fn run_genie_s_curve_animation(
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DestroyWindow,
-        FindWindowExW, FindWindowW, GetSystemMetrics, GetWindowLongW, GetWindowRect,
+        GetWindowLongW, GetWindowPlacement, SetWindowPlacement, WINDOWPLACEMENT,
         RegisterClassExW, SetWindowLongW, SetWindowPos, ShowWindow,
         UpdateLayeredWindow,
-        GWL_EXSTYLE, HWND_NOTOPMOST, SM_CXSCREEN, SM_CYSCREEN,
-        SW_SHOWNOACTIVATE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER,
+        GWL_EXSTYLE, HWND_NOTOPMOST,
+        SW_MINIMIZE, SW_SHOWNOACTIVATE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER,
         ULW_ALPHA, WNDCLASSEXW, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
         WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
     };
@@ -147,19 +259,34 @@ fn run_genie_s_curve_animation(
             let hwnd = hwnd_val as HWND;
             unsafe {
                 if windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(hwnd) != 0 {
-                    let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
-                    let new_ex = (ex | WS_EX_TOOLWINDOW as i32) & !(WS_EX_APPWINDOW as i32);
-                    SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
-                    crate::snapping::delete_taskbar_tab_pub(hwnd);
-                    SetWindowPos(
-                        hwnd,
-                        HWND_NOTOPMOST,
-                        -32000,
-                        -32000,
-                        0,
-                        0,
-                        SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-                    );
+                    if target == GenieTarget::Tray {
+                        let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
+                        let new_ex = (ex | WS_EX_TOOLWINDOW as i32) & !(WS_EX_APPWINDOW as i32);
+                        SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
+                        crate::snapping::delete_taskbar_tab_pub(hwnd);
+                        SetWindowPos(
+                            hwnd,
+                            HWND_NOTOPMOST,
+                            -32000,
+                            -32000,
+                            0,
+                            0,
+                            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                        );
+                    } else {
+                        // Minimize to Taskbar:
+                        // Move off-screen during animation so DWM has no visible surface to glitch
+                        disable_window_dwm_transitions(hwnd);
+                        SetWindowPos(
+                            hwnd,
+                            HWND_NOTOPMOST,
+                            -32000,
+                            -32000,
+                            0,
+                            0,
+                            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                        );
+                    }
                 }
             }
         }
@@ -170,6 +297,7 @@ fn run_genie_s_curve_animation(
     let hbmp_src: HBITMAP = hbmp_handle as HBITMAP;
     if hbmp_src.is_null() || start_w <= 10 || start_h <= 10 {
         hide_orig_window(orig_hwnd_val);
+        on_finish();
         return;
     }
 
@@ -203,16 +331,23 @@ fn run_genie_s_curve_animation(
         DeleteObject(hbmp_src); // Free original HBITMAP immediately
 
         // Cache snapshot for reverse genie restore
+        let snap_obj = CachedGenieSnapshot {
+            pixels: src_pixels.clone(),
+            width: start_w,
+            height: start_h,
+        };
+        if let Ok(mut map) = get_snapshots().lock() {
+            map.insert(orig_hwnd_val, snap_obj.clone());
+        }
         if let Ok(mut guard) = LAST_SNAPSHOT.lock() {
-            *guard = Some(CachedGenieSnapshot {
-                pixels: src_pixels.clone(),
-                width: start_w,
-                height: start_h,
-            });
+            *guard = Some(snap_obj);
         }
 
-        // 2. Locate precise target tray coordinate
-        let (tray_x, tray_y) = locate_tray_coord();
+        // 2. Locate precise target coordinate (Tray or Taskbar)
+        let (slot_x, slot_y) = match target {
+            GenieTarget::Tray => locate_tray_coord(),
+            GenieTarget::Taskbar => locate_taskbar_coord(orig_hwnd_val as HWND, start_x + start_w / 2),
+        };
 
         let genie = Genie {
             window: Edges {
@@ -222,10 +357,10 @@ fn run_genie_s_curve_animation(
                 bottom: (start_y + start_h) as f32,
             },
             slot: Edges {
-                left: (tray_x - 14) as f32,
-                top: (tray_y - 14) as f32,
-                right: (tray_x + 14) as f32,
-                bottom: (tray_y + 14) as f32,
+                left: (slot_x - 14) as f32,
+                top: (slot_y - 14) as f32,
+                right: (slot_x + 14) as f32,
+                bottom: (slot_y + 14) as f32,
             },
         };
 
@@ -270,6 +405,7 @@ fn run_genie_s_curve_animation(
 
         if hwnd.is_null() {
             windows_sys::Win32::Graphics::Gdi::ReleaseDC(std::ptr::null_mut(), screen_dc);
+            on_finish();
             return;
         }
 
@@ -298,6 +434,7 @@ fn run_genie_s_curve_animation(
         if hbmp_render.is_null() || pixel_ptr.is_null() {
             DeleteDC(hdc_render);
             DestroyWindow(hwnd);
+            on_finish();
             return;
         }
 
@@ -307,7 +444,7 @@ fn run_genie_s_curve_animation(
 
         let pixels = std::slice::from_raw_parts_mut(pixel_ptr as *mut u32, (win_w * win_h) as usize);
 
-        let duration_ms = 170.0; // 170ms ultra-fast swift macOS Genie duration (matched with restore speed)
+        let duration_ms = 240.0; // Option A: 240ms Muelle fast genie minimize duration
         let start_time = Instant::now();
 
         let win_size = SIZE { cx: win_w, cy: win_h };
@@ -444,15 +581,207 @@ fn run_genie_s_curve_animation(
             hide_orig_window(orig_hwnd_val);
         }
 
-        // Cleanup resources
+        if target == GenieTarget::Taskbar {
+            let orig_h = orig_hwnd_val as HWND;
+            if !orig_h.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(orig_h) != 0 {
+                disable_window_dwm_transitions(orig_h);
+                // 1. 關鍵時序防護：先在離屏坐標 (-32000, -32000) 處直接執行最小化！
+                //    此時視窗處於螢幕工作區之外，DWM 在原始螢幕坐標上完全沒有任何可繪製表面，物理上杜絕任何閃現！
+                ShowWindow(orig_h, SW_MINIMIZE);
+
+                // 2. 視窗此時已進入最小化（Iconic）狀態，此時寫入常態還原坐標 (rcNormalPosition)。
+                //    Win32 規範：對已最小化的視窗寫入 rcNormalPosition，系統僅靜默更新其還原坐標，絕不會將視窗呈現在螢幕上！
+                let mut wp: WINDOWPLACEMENT = std::mem::zeroed();
+                wp.length = std::mem::size_of::<WINDOWPLACEMENT>() as u32;
+                if GetWindowPlacement(orig_h, &mut wp) != 0 {
+                    wp.rcNormalPosition.left = start_x;
+                    wp.rcNormalPosition.top = start_y;
+                    wp.rcNormalPosition.right = start_x + start_w;
+                    wp.rcNormalPosition.bottom = start_y + start_h;
+                    SetWindowPlacement(orig_h, &wp);
+                }
+            }
+        } else {
+            // Defer working set trimming until animation has completed
+            crate::tray::schedule_trim_working_set();
+        }
+
+        // Cleanup resources: 母體完成離屏最小化後再銷毀神燈動畫分身視窗，確保視覺無縫閉環
         SelectObject(hdc_render, old_rnd);
         DeleteDC(hdc_render);
         DeleteObject(hbmp_render);
         DestroyWindow(hwnd);
 
-        // Defer working set trimming until animation has completed
-        crate::tray::trim_working_set();
+        on_finish();
     }
+}
+
+#[cfg(not(test))]
+fn is_taskbar_left_aligned() -> bool {
+    unsafe {
+        use windows_sys::Win32::System::Registry::{
+            RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY_CURRENT_USER, KEY_READ,
+        };
+        const SUBKEY: &[u16] = &[
+            b'S' as u16, b'o' as u16, b'f' as u16, b't' as u16, b'w' as u16, b'a' as u16,
+            b'r' as u16, b'e' as u16, b'\\' as u16, b'M' as u16, b'i' as u16, b'c' as u16,
+            b'r' as u16, b'o' as u16, b's' as u16, b'o' as u16, b'f' as u16, b't' as u16,
+            b'\\' as u16, b'W' as u16, b'i' as u16, b'n' as u16, b'd' as u16, b'o' as u16,
+            b'w' as u16, b's' as u16, b'\\' as u16, b'C' as u16, b'u' as u16, b'r' as u16,
+            b'r' as u16, b'e' as u16, b'n' as u16, b't' as u16, b'V' as u16, b'e' as u16,
+            b'r' as u16, b's' as u16, b'i' as u16, b'o' as u16, b'n' as u16, b'\\' as u16,
+            b'E' as u16, b'x' as u16, b'p' as u16, b'l' as u16, b'o' as u16, b'r' as u16,
+            b'e' as u16, b'r' as u16, b'\\' as u16, b'A' as u16, b'd' as u16, b'v' as u16,
+            b'a' as u16, b'n' as u16, b'c' as u16, b'e' as u16, b'd' as u16, 0,
+        ];
+        const VAL_NAME: &[u16] = &[
+            b'T' as u16, b'a' as u16, b's' as u16, b'k' as u16, b'b' as u16, b'a' as u16,
+            b'r' as u16, b'A' as u16, b'l' as u16, 0,
+        ];
+
+        let mut hkey = std::ptr::null_mut();
+        if RegOpenKeyExW(HKEY_CURRENT_USER, SUBKEY.as_ptr(), 0, KEY_READ, &mut hkey) == 0 {
+            let mut val: u32 = 0;
+            let mut val_len: u32 = std::mem::size_of::<u32>() as u32;
+            let mut val_type: u32 = 0;
+            let status = RegQueryValueExW(
+                hkey,
+                VAL_NAME.as_ptr(),
+                std::ptr::null_mut(),
+                &mut val_type,
+                &mut val as *mut u32 as *mut u8,
+                &mut val_len,
+            );
+            RegCloseKey(hkey);
+            if status == 0 {
+                return val == 0;
+            }
+        }
+        false
+    }
+}
+
+#[cfg(not(test))]
+fn locate_taskbar_coord(hwnd: windows_sys::Win32::Foundation::HWND, win_center_x: i32) -> (i32, i32) {
+    unsafe {
+        use windows_sys::Win32::Foundation::{POINT, RECT};
+        use windows_sys::Win32::Graphics::Gdi::{
+            GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+        };
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            FindWindowExW, FindWindowW, GetCursorPos, GetSystemMetrics, GetWindowRect,
+            SM_CXSCREEN, SM_CYSCREEN,
+        };
+
+        // 1. Get monitor info for the window's monitor
+        let monitor = if !hwnd.is_null() {
+            MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
+        } else {
+            std::ptr::null_mut()
+        };
+
+        let mut mi: MONITORINFO = std::mem::zeroed();
+        mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        let (mon_rect, work_rect) = if !monitor.is_null() && GetMonitorInfoW(monitor, &mut mi) != 0 {
+            (mi.rcMonitor, mi.rcWork)
+        } else {
+            let sw = GetSystemMetrics(SM_CXSCREEN);
+            let sh = GetSystemMetrics(SM_CYSCREEN);
+            let mon = RECT { left: 0, top: 0, right: sw, bottom: sh };
+            let work = RECT { left: 0, top: 0, right: sw, bottom: (sh - 48).max(0) };
+            (mon, work)
+        };
+
+        // Taskbar Y is typically the center of the taskbar bar
+        let taskbar_y = if work_rect.bottom < mon_rect.bottom {
+            (work_rect.bottom + mon_rect.bottom) / 2
+        } else if work_rect.top > mon_rect.top {
+            (mon_rect.top + work_rect.top) / 2
+        } else {
+            mon_rect.bottom - 24
+        };
+
+        // 2. Check if current cursor is on this taskbar (e.g. user clicked restore/minimize on taskbar)
+        let mut cur_pt: POINT = std::mem::zeroed();
+        if GetCursorPos(&mut cur_pt) != 0 {
+            let on_taskbar = (cur_pt.y >= work_rect.bottom && cur_pt.y <= mon_rect.bottom)
+                || (work_rect.top > mon_rect.top && cur_pt.y <= work_rect.top);
+            if on_taskbar && cur_pt.x >= mon_rect.left && cur_pt.x <= mon_rect.right {
+                record_taskbar_button_coord(cur_pt.x, taskbar_y);
+                return (cur_pt.x, taskbar_y);
+            }
+        }
+
+        // 3. Check previously recorded taskbar button coordinate
+        let rx = LAST_TASKBAR_BUTTON_X.load(Ordering::SeqCst);
+        let ry = LAST_TASKBAR_BUTTON_Y.load(Ordering::SeqCst);
+        if rx >= mon_rect.left && rx <= mon_rect.right && ry != i32::MIN {
+            return (rx, taskbar_y);
+        }
+
+        // 4. Check if legacy Win10 task list (MSTaskListWClass) is present
+        const SHELL_TRAY: [u16; 14] = [
+            b'S' as u16, b'h' as u16, b'e' as u16, b'l' as u16, b'l' as u16, b'_' as u16,
+            b'T' as u16, b'r' as u16, b'a' as u16, b'y' as u16, b'W' as u16, b'n' as u16,
+            b'd' as u16, 0,
+        ];
+        const REBAR_CLASS: [u16; 14] = [
+            b'R' as u16, b'e' as u16, b'B' as u16, b'a' as u16, b'r' as u16, b'W' as u16,
+            b'i' as u16, b'n' as u16, b'd' as u16, b'o' as u16, b'w' as u16, b'3' as u16,
+            b'2' as u16, 0,
+        ];
+        const TASKLIST_CLASS: [u16; 17] = [
+            b'M' as u16, b'S' as u16, b'T' as u16, b'a' as u16, b's' as u16, b'k' as u16,
+            b'L' as u16, b'i' as u16, b's' as u16, b't' as u16, b'W' as u16, b'C' as u16,
+            b'l' as u16, b'a' as u16, b's' as u16, b's' as u16, 0,
+        ];
+
+        let shell_tray = FindWindowW(SHELL_TRAY.as_ptr(), std::ptr::null());
+        if !shell_tray.is_null() {
+            let rebar = FindWindowExW(shell_tray, std::ptr::null_mut(), REBAR_CLASS.as_ptr(), std::ptr::null());
+            let tasklist = if !rebar.is_null() {
+                FindWindowExW(rebar, std::ptr::null_mut(), TASKLIST_CLASS.as_ptr(), std::ptr::null())
+            } else {
+                FindWindowExW(shell_tray, std::ptr::null_mut(), TASKLIST_CLASS.as_ptr(), std::ptr::null())
+            };
+
+            if !tasklist.is_null() {
+                let mut rc_task: RECT = std::mem::zeroed();
+                if GetWindowRect(tasklist, &mut rc_task) != 0 && rc_task.right > rc_task.left + 40 {
+                    let clamped_x = win_center_x.clamp(rc_task.left + 24, rc_task.right - 24);
+                    return (clamped_x, taskbar_y);
+                }
+            }
+        }
+
+        // 5. Modern Windows 11 Taskbar alignment
+        let is_left = is_taskbar_left_aligned();
+        let clamped_x = if is_left {
+            // Left-aligned: Start (~48px) + Search (~260px) + TaskView/Widgets (~80px) = ~390px.
+            // App icons start around mon_rect.left + 480. Clamped to safe range avoiding search box.
+            let min_x = mon_rect.left + 480;
+            let max_x = (mon_rect.left + 900).min(mon_rect.right - 100);
+            win_center_x.clamp(min_x, max_x)
+        } else {
+            // Center-aligned: Buttons clustered around center of monitor
+            let center_x = (mon_rect.left + mon_rect.right) / 2;
+            let min_x = (center_x - 160).max(mon_rect.left + 100);
+            let max_x = (center_x + 160).min(mon_rect.right - 100);
+            win_center_x.clamp(min_x, max_x)
+        };
+
+        (clamped_x, taskbar_y)
+    }
+}
+
+#[cfg(test)]
+fn locate_taskbar_coord(_hwnd: windows_sys::Win32::Foundation::HWND, win_center_x: i32) -> (i32, i32) {
+    let rx = LAST_TASKBAR_BUTTON_X.load(Ordering::SeqCst);
+    let ry = LAST_TASKBAR_BUTTON_Y.load(Ordering::SeqCst);
+    if rx != i32::MIN && ry != i32::MIN {
+        return (rx, ry);
+    }
+    (win_center_x.clamp(200, 800), 1056)
 }
 
 #[cfg(not(test))]
@@ -504,11 +833,12 @@ fn locate_tray_coord() -> (i32, i32) {
     }
 }
 
-/// Trigger the reverse macOS-style S-curve Genie effect (expanding from tray slot back into window)
+/// Trigger the reverse macOS-style S-curve Genie effect (expanding from tray slot or taskbar back into window)
 pub fn play_reverse_genie_s_curve_effect<F>(
     target_x: i32,
     target_y: i32,
     orig_hwnd: usize,
+    source: GenieTarget,
     on_finish: F,
 ) -> bool
 where
@@ -516,7 +846,7 @@ where
 {
     #[cfg(test)]
     {
-        let _ = (target_x, target_y, orig_hwnd);
+        let _ = (target_x, target_y, orig_hwnd, source);
         on_finish();
         return true;
     }
@@ -526,12 +856,18 @@ where
         abort_genie_effect();
 
         let snapshot = {
+            if let Ok(map) = get_snapshots().lock() {
+                map.get(&orig_hwnd).cloned()
+            } else {
+                None
+            }
+        }.or_else(|| {
             if let Ok(guard) = LAST_SNAPSHOT.lock() {
                 guard.clone()
             } else {
                 None
             }
-        };
+        });
 
         let Some(snap) = snapshot else {
             on_finish();
@@ -541,7 +877,7 @@ where
         std::thread::Builder::new()
             .name("rev-genie-fx".into())
             .spawn(move || {
-                run_reverse_genie_animation(snap, target_x, target_y, orig_hwnd, on_finish);
+                run_reverse_genie_animation(snap, target_x, target_y, orig_hwnd, source, on_finish);
             })
             .ok();
 
@@ -554,7 +890,8 @@ fn run_reverse_genie_animation<F>(
     snap: CachedGenieSnapshot,
     target_x: i32,
     target_y: i32,
-    _orig_hwnd_val: usize,
+    orig_hwnd_val: usize,
+    source: GenieTarget,
     on_finish: F,
 ) where
     F: FnOnce() + Send + 'static,
@@ -570,13 +907,16 @@ fn run_reverse_genie_animation<F>(
         CreateWindowExW, DefWindowProcW, DestroyWindow,
         RegisterClassExW, ShowWindow,
         UpdateLayeredWindow,
-        SW_SHOWNOACTIVATE, ULW_ALPHA, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+        SW_HIDE, SW_SHOWNOACTIVATE, ULW_ALPHA, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
         WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
     };
 
     ABORT_FLAG.store(false, Ordering::SeqCst);
 
-    let (tray_x, tray_y) = locate_tray_coord();
+    let (slot_x, slot_y) = match source {
+        GenieTarget::Tray => locate_tray_coord(),
+        GenieTarget::Taskbar => locate_taskbar_coord(orig_hwnd_val as HWND, target_x + snap.width / 2),
+    };
 
     let start_w = snap.width;
     let start_h = snap.height;
@@ -592,10 +932,10 @@ fn run_reverse_genie_animation<F>(
             bottom: (target_y + start_h) as f32,
         },
         slot: Edges {
-            left: (tray_x - 14) as f32,
-            top: (tray_y - 14) as f32,
-            right: (tray_x + 14) as f32,
-            bottom: (tray_y + 14) as f32,
+            left: (slot_x - 14) as f32,
+            top: (slot_y - 14) as f32,
+            right: (slot_x + 14) as f32,
+            bottom: (slot_y + 14) as f32,
         },
     };
 
@@ -675,7 +1015,7 @@ fn run_reverse_genie_animation<F>(
         let old_rnd = SelectObject(hdc_render, hbmp_render);
         let pixels = std::slice::from_raw_parts_mut(pixel_ptr as *mut u32, (win_w * win_h) as usize);
 
-        let duration_ms = 170.0; // 170ms ultra-fast (half time) swift macOS-style Genie restore duration
+        let duration_ms = 220.0; // Option A: 220ms Muelle fast restore duration
         let start_time = Instant::now();
 
         let win_size = SIZE { cx: win_w, cy: win_h };
@@ -685,15 +1025,8 @@ fn run_reverse_genie_animation<F>(
         let orig_height = (genie.window.bottom - genie.window.top).max(1.0);
         let mut first_frame = true;
 
-        while !ABORT_FLAG.load(Ordering::SeqCst) {
-            let elapsed = start_time.elapsed().as_secs_f32() * 1000.0;
-            if elapsed >= duration_ms {
-                break;
-            }
-
-            let t_norm = (elapsed / duration_ms).clamp(0.0, 1.0);
+        let render_frame = |t_norm: f32, pixels: &mut [u32]| -> bool {
             let progress = (1.0 - t_norm).clamp(0.0, 1.0);
-
             let bend = Genie::bend(progress);
             let shift = Genie::slide(progress) * (genie.slot.bottom - genie.window.top).max(0.0);
 
@@ -701,8 +1034,7 @@ fn run_reverse_genie_animation<F>(
             let screen_bottom = (genie.window.bottom + shift).min(genie.slot.bottom);
 
             if screen_top >= genie.slot.bottom {
-                std::thread::sleep(std::time::Duration::from_millis(8));
-                continue;
+                return false;
             }
 
             pixels.fill(0);
@@ -775,6 +1107,20 @@ fn run_reverse_genie_animation<F>(
                     pixels[dst_row_offset + (ix as usize)] = (a << 24) | (pr << 16) | (pg << 8) | pb;
                 }
             }
+            true
+        };
+
+        while !ABORT_FLAG.load(Ordering::SeqCst) {
+            let elapsed = start_time.elapsed().as_secs_f32() * 1000.0;
+            if elapsed >= duration_ms {
+                break;
+            }
+
+            let t_norm = (elapsed / duration_ms).clamp(0.0, 1.0);
+            if !render_frame(t_norm, pixels) {
+                std::thread::sleep(std::time::Duration::from_millis(8));
+                continue;
+            }
 
             let blend = BLENDFUNCTION {
                 BlendOp: AC_SRC_OVER as u8,
@@ -803,9 +1149,34 @@ fn run_reverse_genie_animation<F>(
             std::thread::sleep(std::time::Duration::from_millis(11));
         }
 
-        // Handover: Animation reached target position, display the real main window and destroy animation window
+        // Guaranteed Final Frame: If not aborted, render the 100% full unbent frame
+        if !ABORT_FLAG.load(Ordering::SeqCst) {
+            if render_frame(1.0, pixels) {
+                let blend = BLENDFUNCTION {
+                    BlendOp: AC_SRC_OVER as u8,
+                    BlendFlags: 0,
+                    SourceConstantAlpha: 255,
+                    AlphaFormat: AC_SRC_ALPHA as u8,
+                };
+                UpdateLayeredWindow(
+                    hwnd,
+                    std::ptr::null_mut(),
+                    &pt_win,
+                    &win_size,
+                    hdc_render,
+                    &pt_zero,
+                    0,
+                    &blend,
+                    ULW_ALPHA,
+                );
+            }
+        }
+
+        // Handover: Animation reached target position, display the real main window
         on_finish();
 
+        // Immediately hide and destroy the layered animation window so there is zero overlap latency
+        ShowWindow(hwnd, SW_HIDE);
         SelectObject(hdc_render, old_rnd);
         DeleteDC(hdc_render);
         DeleteObject(hbmp_render);
@@ -855,10 +1226,34 @@ mod tests {
         use std::sync::Arc;
         let executed = Arc::new(AtomicBool::new(false));
         let exec_clone = executed.clone();
-        let res = play_reverse_genie_s_curve_effect(100, 100, 0, move || {
+        let res = play_reverse_genie_s_curve_effect(100, 100, 0, GenieTarget::Taskbar, move || {
             exec_clone.store(true, Ordering::SeqCst);
         });
         assert!(res);
         assert!(executed.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn test_taskbar_coord() {
+        LAST_TASKBAR_BUTTON_X.store(i32::MIN, Ordering::SeqCst);
+        LAST_TASKBAR_BUTTON_Y.store(i32::MIN, Ordering::SeqCst);
+
+        let (x, y) = locate_taskbar_coord(std::ptr::null_mut(), 500);
+        assert_eq!(x, 500);
+        assert_eq!(y, 1056);
+
+        let (x_min, _) = locate_taskbar_coord(std::ptr::null_mut(), 50);
+        assert_eq!(x_min, 200);
+
+        let (x_max, _) = locate_taskbar_coord(std::ptr::null_mut(), 1500);
+        assert_eq!(x_max, 800);
+
+        record_taskbar_button_coord(678, 1040);
+        let (rec_x, rec_y) = locate_taskbar_coord(std::ptr::null_mut(), 50);
+        assert_eq!(rec_x, 678);
+        assert_eq!(rec_y, 1040);
+
+        LAST_TASKBAR_BUTTON_X.store(i32::MIN, Ordering::SeqCst);
+        LAST_TASKBAR_BUTTON_Y.store(i32::MIN, Ordering::SeqCst);
     }
 }

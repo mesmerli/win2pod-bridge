@@ -292,6 +292,7 @@ pub fn hide_main_window_only(hwnd: HWND, _ctx: &egui::Context) {
                 rect.top,
                 w,
                 h,
+                crate::genie_effect::GenieTarget::Tray,
             );
         } else {
             // Fallback: If no screenshot bitmap available, hide and move immediately
@@ -309,7 +310,7 @@ pub fn hide_main_window_only(hwnd: HWND, _ctx: &egui::Context) {
                 0,
                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
             );
-            trim_working_set();
+            schedule_trim_working_set();
         }
     }
 }
@@ -350,8 +351,8 @@ pub fn show_window_actual_finish(hwnd: HWND, x: i32, y: i32, ctx: &egui::Context
     unsafe {
         use windows_sys::Win32::UI::WindowsAndMessaging::{
             GetWindowLongW, SetWindowLongW, SetWindowPos,
-            GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOP, HWND_TOPMOST,
-            SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SWP_NOACTIVATE,
+            GWL_EXSTYLE, HWND_TOP,
+            SWP_FRAMECHANGED, SWP_NOSIZE, SWP_SHOWWINDOW,
             WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
         };
 
@@ -361,18 +362,16 @@ pub fn show_window_actual_finish(hwnd: HWND, x: i32, y: i32, ctx: &egui::Context
         SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
         crate::snapping::add_taskbar_tab_pub(hwnd);
 
+        // Position and show main window at target coordinates directly
         SetWindowPos(
             hwnd,
-            HWND_TOPMOST,
+            HWND_TOP,
             x,
             y,
             0,
             0,
             SWP_NOSIZE | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
         );
-        if !IS_ALWAYS_ON_TOP.load(Ordering::SeqCst) && !crate::visualizer::is_visualizer_fullscreen() {
-            SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-        }
 
         // Restore any bonded or detached visualizer window that was hidden with the cluster/app
         crate::visualizer::restore_visualizer_with_cluster();
@@ -380,16 +379,14 @@ pub fn show_window_actual_finish(hwnd: HWND, x: i32, y: i32, ctx: &egui::Context
         let eq_hwnd = crate::snapping::get_equalizer_hwnd();
         if !eq_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(eq_hwnd) != 0 {
             windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(eq_hwnd, windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNOACTIVATE);
-            SetWindowPos(eq_hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
 
         let mini_hwnd = crate::snapping::get_mini_player_hwnd();
         if !mini_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(mini_hwnd) != 0 {
             windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(mini_hwnd, windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNOACTIVATE);
-            SetWindowPos(mini_hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
 
-        // Elevate all fleet windows (including detached ones) and preserve clustered relations
+        // Elevate all fleet windows (including detached ones) and preserve clustered relations atomically
         crate::snapping::bring_fleet_to_top();
         crate::snapping::sync_cluster_taskbar_ownership();
 
@@ -404,6 +401,8 @@ pub fn show_window_from_tray(hwnd: HWND, ctx: &egui::Context) {
     if hwnd.is_null() {
         return;
     }
+    cancel_pending_trim();
+    ctx.request_repaint();
     record_shown_time();
     unsafe {
         IS_APP_FLEET_HIDDEN.store(false, Ordering::SeqCst);
@@ -429,11 +428,34 @@ pub fn show_window_from_tray(hwnd: HWND, ctx: &egui::Context) {
             show_window_actual_finish(target_hwnd as HWND, x, y, &ctx_clone);
         };
 
-        if !crate::genie_effect::play_reverse_genie_s_curve_effect(x, y, hwnd as usize, restore_action) {
+        if !crate::genie_effect::play_reverse_genie_s_curve_effect(x, y, hwnd as usize, crate::genie_effect::GenieTarget::Tray, restore_action) {
             // Fallback: If no cached snapshot available, restore immediately
             show_window_actual_finish(hwnd, x, y, ctx);
         }
     }
+}
+
+static PENDING_TRIM_GEN: AtomicU64 = AtomicU64::new(0);
+
+/// Schedules a debounced working set trim after 8 seconds of inactivity in tray.
+/// If the window is restored before the timer fires, the trim is cleanly canceled.
+pub fn schedule_trim_working_set() {
+    let gen = PENDING_TRIM_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    std::thread::Builder::new()
+        .name("ws-trim-debounce".to_string())
+        .spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(8));
+            if PENDING_TRIM_GEN.load(Ordering::SeqCst) == gen && is_window_hidden_to_tray() {
+                trim_working_set();
+                tracing::debug!("Working set trimmed after debounce delay");
+            }
+        })
+        .ok();
+}
+
+/// Cancels any scheduled debounced working set trim.
+pub fn cancel_pending_trim() {
+    PENDING_TRIM_GEN.fetch_add(1, Ordering::SeqCst);
 }
 
 /// Trims the process working set, instructing the Windows Memory Manager to flush inactive
@@ -512,33 +534,51 @@ pub unsafe fn ensure_window_on_screen(hwnd: HWND) -> bool {
 }
 
 pub unsafe fn force_foreground(hwnd: HWND) {
-    use windows_sys::Win32::System::Threading::GetCurrentThreadId;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId,
         SetForegroundWindow, SetWindowPos, HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE,
-        SW_RESTORE, SW_SHOW,
+        SWP_NOACTIVATE, SW_RESTORE, SW_SHOW,
     };
 
-    ShowWindow(hwnd, SW_SHOW);
-    ShowWindow(hwnd, SW_RESTORE);
-
-    let fg = GetForegroundWindow();
-    let fg_thread = GetWindowThreadProcessId(fg, std::ptr::null_mut());
-    let cur_thread = GetCurrentThreadId();
-
-    if fg_thread != 0 && fg_thread != cur_thread {
-        AttachThreadInput(cur_thread, fg_thread, 1);
-        BringWindowToTop(hwnd);
-        SetForegroundWindow(hwnd);
-        AttachThreadInput(cur_thread, fg_thread, 0);
-    } else {
-        BringWindowToTop(hwnd);
-        SetForegroundWindow(hwnd);
+    if hwnd.is_null() {
+        return;
     }
 
-    // Force Z-order placement to topmost and back so Windows DWM brings it above other windows
-    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    ShowWindow(hwnd, SW_SHOW);
+    if windows_sys::Win32::UI::WindowsAndMessaging::IsIconic(hwnd) != 0 {
+        ShowWindow(hwnd, SW_RESTORE);
+    }
+
+    let fg = GetForegroundWindow();
+    if fg == hwnd {
+        return;
+    }
+
+    let target_thread = GetWindowThreadProcessId(hwnd, std::ptr::null_mut());
+    let fg_thread = if !fg.is_null() {
+        GetWindowThreadProcessId(fg, std::ptr::null_mut())
+    } else {
+        0
+    };
+
+    // Attach target GUI thread to fg_thread ONLY if target_thread is valid and different from fg_thread.
+    // Note: Never attach from a background worker thread, only the window's owning GUI thread!
+    let attached = if fg_thread != 0 && target_thread != 0 && fg_thread != target_thread {
+        AttachThreadInput(target_thread, fg_thread, 1) != 0
+    } else {
+        false
+    };
+
+    BringWindowToTop(hwnd);
+    SetForegroundWindow(hwnd);
+
+    if attached {
+        AttachThreadInput(target_thread, fg_thread, 0);
+    }
+
+    // Single TOPMOST toggle to guarantee bringing above third-party windows if needed
     if !IS_ALWAYS_ON_TOP.load(Ordering::SeqCst) && !crate::visualizer::is_visualizer_fullscreen() {
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
     }
     SetForegroundWindow(hwnd);

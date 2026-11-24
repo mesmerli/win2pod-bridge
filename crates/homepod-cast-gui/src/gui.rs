@@ -514,16 +514,21 @@ impl eframe::App for FlyoutApp {
             let main_hwnd = crate::tray::get_main_hwnd();
             let mini_hwnd = crate::snapping::get_window_hwnd(crate::snapping::WindowKind::MiniPlayer);
             let eq_hwnd = crate::snapping::get_window_hwnd(crate::snapping::WindowKind::Equalizer);
-            let vis_hwnd = crate::snapping::get_window_hwnd(crate::snapping::WindowKind::Visualizer);
+            let is_vis_fs = crate::visualizer::is_visualizer_fullscreen();
+            let vis_hwnd = if is_vis_fs {
+                std::ptr::null_mut()
+            } else {
+                crate::snapping::get_window_hwnd(crate::snapping::WindowKind::Visualizer)
+            };
 
             let need_mini = self.mini_player_window_open;
             let need_eq = self.equalizer_window_open;
-            let need_vis = crate::visualizer::is_visualizer_open();
+            let need_vis = !is_vis_fs && crate::visualizer::is_visualizer_open();
 
             let all_ready = unsafe {
                 (!need_mini || (!mini_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(mini_hwnd) != 0))
                     && (!need_eq || (!eq_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(eq_hwnd) != 0))
-                    && (!need_vis || (!vis_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0 && !crate::visualizer::is_visualizer_fullscreen()))
+                    && (!need_vis || (!vis_hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0))
             };
 
             if all_ready {
@@ -547,9 +552,11 @@ impl eframe::App for FlyoutApp {
         let _hwnd = crate::tray::get_main_hwnd();
         let is_hidden = crate::tray::is_window_hidden_to_tray();
 
-        // When window transitions to hidden in tray, trim working set
+        // When window transitions to hidden in tray, schedule debounced working set trim
         if !self.last_hidden && is_hidden {
-            crate::tray::trim_working_set();
+            crate::tray::schedule_trim_working_set();
+        } else if self.last_hidden && !is_hidden {
+            crate::tray::cancel_pending_trim();
         }
         self.last_hidden = is_hidden;
 
@@ -2708,10 +2715,15 @@ impl FlyoutApp {
         }
     }
 
-    /// 一鍵呈現三欄模組化工作站（自動開啟並齊平磁吸：主視窗、迷你播放器、等化器與視覺效果）
+    /// 一鍵呈現模組化工作站：
+    /// - 常態下：呈現三欄四聯工作站（主視窗、迷你播放器、等化器與視覺效果齊平磁吸）。
+    /// - 全螢幕下（提案 B）：不脫離全螢幕，僅組裝雙欄浮空 HUD 工作站（主視窗、迷你播放器、等化器），全螢幕視覺視窗保持獨立不加入。
     pub fn assemble_modular_workstation(&mut self) {
-        if crate::visualizer::is_visualizer_fullscreen() {
-            crate::visualizer::exit_visualizer_fullscreen();
+        let is_vis_fs = crate::visualizer::is_visualizer_fullscreen();
+        if !is_vis_fs {
+            if !crate::visualizer::is_visualizer_open() {
+                crate::visualizer::open_visualizer();
+            }
         }
         if !self.mini_player_window_open {
             self.mini_player_window_open = true;
@@ -2721,18 +2733,24 @@ impl FlyoutApp {
             self.equalizer_window_open = true;
             self.equalizer_needs_initial_dock = false;
         }
-        if !crate::visualizer::is_visualizer_open() {
-            crate::visualizer::open_visualizer();
-        }
 
         // 若各成員視窗已開啟但處於最小化（Iconic）狀態，立即解除最小化並還原顯示
         unsafe {
-            for kind in [
-                crate::snapping::WindowKind::Main,
-                crate::snapping::WindowKind::MiniPlayer,
-                crate::snapping::WindowKind::Equalizer,
-                crate::snapping::WindowKind::Visualizer,
-            ] {
+            let kinds: &[crate::snapping::WindowKind] = if is_vis_fs {
+                &[
+                    crate::snapping::WindowKind::Main,
+                    crate::snapping::WindowKind::MiniPlayer,
+                    crate::snapping::WindowKind::Equalizer,
+                ]
+            } else {
+                &[
+                    crate::snapping::WindowKind::Main,
+                    crate::snapping::WindowKind::MiniPlayer,
+                    crate::snapping::WindowKind::Equalizer,
+                    crate::snapping::WindowKind::Visualizer,
+                ]
+            };
+            for &kind in kinds {
                 let hwnd = crate::snapping::get_window_hwnd(kind);
                 if !hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(hwnd) != 0 {
                     if windows_sys::Win32::UI::WindowsAndMessaging::IsIconic(hwnd) != 0 {
@@ -2748,9 +2766,14 @@ impl FlyoutApp {
         // Synchronize visualizer and cluster pinned state with master app pin state
         let main_pinned = crate::snapping::is_window_pinned(crate::snapping::WindowKind::Main);
         self.is_always_on_top = main_pinned;
-        crate::visualizer::set_visualizer_pinned(main_pinned);
+        if !is_vis_fs {
+            crate::visualizer::set_visualizer_pinned(main_pinned);
+        }
         unsafe {
             crate::snapping::set_cluster_pinned(crate::snapping::WindowKind::Main, main_pinned);
+        }
+        if is_vis_fs {
+            crate::visualizer::VISUALIZER_HUD_MAIN_SHOWN.store(true, std::sync::atomic::Ordering::SeqCst);
         }
         self.pending_modular_workstation_frames = 30;
         if let Some(ctx) = get_egui_ctx() {
@@ -2762,9 +2785,10 @@ impl FlyoutApp {
     pub fn render_modular_workstation_button(&mut self, ui: &mut egui::Ui) {
         let lang = self.state.language;
         let tooltip = lang.tooltip_modular_workstation();
+        let is_vis_fs = crate::visualizer::is_visualizer_fullscreen();
         let is_workstation_active = self.mini_player_window_open
             && self.equalizer_window_open
-            && crate::visualizer::is_visualizer_open();
+            && (is_vis_fs || crate::visualizer::is_visualizer_open());
         let is_new_user_guide = !self.workstation_onboarding_dismissed && !is_workstation_active;
 
         let btn_size = egui::vec2(22.0, 22.0);
@@ -3131,7 +3155,9 @@ impl FlyoutApp {
                             }
                         }
                     } else {
-                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                        unsafe {
+                            crate::snapping::minimize_window_solo(kind);
+                        }
                     }
                 }
 
@@ -7101,6 +7127,8 @@ mod tests {
 
     #[test]
     fn test_universal_popout_behavior() {
+        let _lock = crate::snapping::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::snapping::reset_all();
         use crate::snapping::WindowKind;
 
         // 1. Verify bidirectional mapping
@@ -7284,7 +7312,7 @@ mod tests {
 
     #[test]
     fn test_close_window_cluster_all() {
-        let _lock = crate::snapping::TEST_LOCK.lock().unwrap();
+        let _lock = crate::snapping::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         crate::snapping::reset_all();
 
         let mut app = FlyoutApp::new_mock();
