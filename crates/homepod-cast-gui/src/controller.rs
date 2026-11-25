@@ -174,6 +174,9 @@ pub struct ControllerState {
     pub prevent_sleep: bool,
     pub low_latency: bool,
     pub auto_connect: bool,
+    pub mascot_enabled: bool,
+    pub mascot_rhythm_dance: bool,
+    pub mascot_supporter_secret_revealed: bool,
     pub last_connected_name: Option<String>,
     pub device_volumes: std::collections::HashMap<String, f32>,
     pub is_audio_active: bool,
@@ -297,6 +300,9 @@ impl Default for ControllerState {
             prevent_sleep: load_prevent_sleep(),
             low_latency: load_low_latency(),
             auto_connect: load_auto_connect(),
+            mascot_enabled: load_mascot_enabled(),
+            mascot_rhythm_dance: load_mascot_rhythm_dance(),
+            mascot_supporter_secret_revealed: load_mascot_supporter_secret_revealed(),
             last_connected_name: load_last_connected_device().map(|t| t.name),
             device_volumes: std::collections::HashMap::new(),
             is_audio_active: false,
@@ -438,6 +444,9 @@ pub enum GuiCmd {
     SetPreventSleep(bool),
     SetLowLatency(bool),
     SetAutoConnect(bool),
+    SetMascotEnabled(bool),
+    SetMascotRhythmDance(bool),
+    SetMascotSupporterSecretRevealed(bool),
     SetAutostart(bool),
     SetHotkey(u32, u32),
     SetLanguage(Language),
@@ -4004,6 +4013,21 @@ pub fn spawn_controller(
                                 save_auto_connect(enabled);
                                 broadcast(&state);
                             }
+                            GuiCmd::SetMascotEnabled(enabled) => {
+                                state.mascot_enabled = enabled;
+                                save_mascot_enabled(enabled);
+                                broadcast(&state);
+                            }
+                            GuiCmd::SetMascotRhythmDance(enabled) => {
+                                state.mascot_rhythm_dance = enabled;
+                                save_mascot_rhythm_dance(enabled);
+                                broadcast(&state);
+                            }
+                            GuiCmd::SetMascotSupporterSecretRevealed(revealed) => {
+                                state.mascot_supporter_secret_revealed = revealed;
+                                save_mascot_supporter_secret_revealed(revealed);
+                                broadcast(&state);
+                            }
                             GuiCmd::SetAutostart(enabled) => {
                                 state.autostart = enabled;
                                 if let Err(e) = crate::autostart::set_autostart(enabled) {
@@ -5338,11 +5362,21 @@ pub struct AppConfig {
     #[serde(default = "default_false")]
     pub equalizer_pinned: bool,
     #[serde(default = "default_opacity")]
+    pub main_window_opacity: f32,
+    #[serde(default = "default_opacity")]
     pub mini_player_opacity: f32,
+    #[serde(default = "default_opacity")]
+    pub equalizer_opacity: f32,
     #[serde(default = "default_opacity")]
     pub visualizer_opacity: f32,
     #[serde(default = "default_true")]
     pub hover_peek_enabled: bool,
+    #[serde(default = "default_true")]
+    pub mascot_enabled: bool,
+    #[serde(default = "default_true")]
+    pub mascot_rhythm_dance: bool,
+    #[serde(default = "default_false")]
+    pub mascot_supporter_secret_revealed: bool,
     #[serde(default = "default_true")]
     pub airpods_auto_routing: bool,
     #[serde(default = "default_true")]
@@ -5410,6 +5444,9 @@ impl Default for AppConfig {
             prevent_sleep: default_true(),
             low_latency: default_true(),
             auto_connect: default_true(),
+            mascot_enabled: default_true(),
+            mascot_rhythm_dance: default_true(),
+            mascot_supporter_secret_revealed: false,
             last_device: None,
             last_route_type: None,
             hotkey: default_hotkey(),
@@ -5423,7 +5460,9 @@ impl Default for AppConfig {
             visualizer_pinned: default_false(),
             mini_player_pinned: default_false(),
             equalizer_pinned: default_false(),
+            main_window_opacity: default_opacity(),
             mini_player_opacity: default_opacity(),
+            equalizer_opacity: default_opacity(),
             visualizer_opacity: default_visualizer_opacity(),
             hover_peek_enabled: default_true(),
             airpods_auto_routing: default_true(),
@@ -5652,6 +5691,30 @@ pub fn save_auto_connect(enabled: bool) {
     update_config(|c| c.auto_connect = enabled);
 }
 
+pub fn load_mascot_enabled() -> bool {
+    load_config().mascot_enabled
+}
+
+pub fn save_mascot_enabled(enabled: bool) {
+    update_config(|c| c.mascot_enabled = enabled);
+}
+
+pub fn load_mascot_rhythm_dance() -> bool {
+    load_config().mascot_rhythm_dance
+}
+
+pub fn save_mascot_rhythm_dance(enabled: bool) {
+    update_config(|c| c.mascot_rhythm_dance = enabled);
+}
+
+pub fn load_mascot_supporter_secret_revealed() -> bool {
+    load_config().mascot_supporter_secret_revealed
+}
+
+pub fn save_mascot_supporter_secret_revealed(revealed: bool) {
+    update_config(|c| c.mascot_supporter_secret_revealed = revealed);
+}
+
 pub fn load_last_connected_device() -> Option<LastConnectedTarget> {
     load_config().last_device
 }
@@ -5808,6 +5871,20 @@ pub fn load_window_pinned(kind: crate::snapping::WindowKind) -> bool {
     }
 }
 
+pub fn load_main_window_opacity() -> f32 {
+    let op = load_config().main_window_opacity;
+    if (op - 0.75).abs() < 1e-4 {
+        1.0
+    } else {
+        op.clamp(0.2, 1.0)
+    }
+}
+
+pub fn save_main_window_opacity(val: f32) {
+    let clamped = val.clamp(0.2, 1.0);
+    update_config(|c| c.main_window_opacity = clamped);
+}
+
 pub fn load_mini_player_opacity() -> f32 {
     let op = load_config().mini_player_opacity;
     if (op - 0.75).abs() < 1e-4 {
@@ -5820,6 +5897,20 @@ pub fn load_mini_player_opacity() -> f32 {
 pub fn save_mini_player_opacity(val: f32) {
     let clamped = val.clamp(0.2, 1.0);
     update_config(|c| c.mini_player_opacity = clamped);
+}
+
+pub fn load_equalizer_opacity() -> f32 {
+    let op = load_config().equalizer_opacity;
+    if (op - 0.75).abs() < 1e-4 {
+        1.0
+    } else {
+        op.clamp(0.2, 1.0)
+    }
+}
+
+pub fn save_equalizer_opacity(val: f32) {
+    let clamped = val.clamp(0.2, 1.0);
+    update_config(|c| c.equalizer_opacity = clamped);
 }
 
 pub fn load_visualizer_opacity() -> f32 {
@@ -5856,17 +5947,19 @@ pub fn save_window_opacity(_kind: crate::snapping::WindowKind, _opacity: f32) {
     }
     #[allow(unreachable_code)]
     match _kind {
+        crate::snapping::WindowKind::Main => save_main_window_opacity(_opacity),
         crate::snapping::WindowKind::MiniPlayer => save_mini_player_opacity(_opacity),
+        crate::snapping::WindowKind::Equalizer => save_equalizer_opacity(_opacity),
         crate::snapping::WindowKind::Visualizer => save_visualizer_opacity(_opacity),
-        _ => {}
     }
 }
 
 pub fn load_window_opacity(kind: crate::snapping::WindowKind) -> f32 {
     match kind {
+        crate::snapping::WindowKind::Main => load_main_window_opacity(),
         crate::snapping::WindowKind::MiniPlayer => load_mini_player_opacity(),
+        crate::snapping::WindowKind::Equalizer => load_equalizer_opacity(),
         crate::snapping::WindowKind::Visualizer => load_visualizer_opacity(),
-        _ => 1.0,
     }
 }
 

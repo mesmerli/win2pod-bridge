@@ -6,7 +6,7 @@
 # PublisherName:   mesmerli
 # PFN:             mesmerli.Win2PodBridge_6t1y50ntn36fm
 # Store ID:        9N9ZC9MB9SB3
-# Version:         0.1.22.0
+# Version:         0.1.24.0
 # ==============================================================================
 
 $ErrorActionPreference = "Stop"

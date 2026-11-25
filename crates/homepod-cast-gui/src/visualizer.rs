@@ -523,6 +523,20 @@ const WM_USER_SET_LANGUAGE: u32 = WM_USER + 104;
 const WM_USER_SET_PIN: u32 = WM_USER + 105;
 const WM_USER_FOCUS_WEBVIEW: u32 = WM_USER + 106;
 const WM_USER_UPDATE_TITLE: u32 = WM_USER + 107;
+const WM_USER_SYNC_OPACITY: u32 = WM_USER + 108;
+
+pub fn sync_visualizer_opacity(pct: u32, show_hud: bool) {
+    let hwnd = get_visualizer_hwnd();
+    if !hwnd.is_null() && unsafe { IsWindow(hwnd) != 0 } {
+        unsafe {
+            PostMessageW(hwnd, WM_USER_SYNC_OPACITY, pct as WPARAM, if show_hud { 1 } else { 0 });
+        }
+    }
+}
+
+pub fn sync_visualizer_opacity_hud(pct: u32) {
+    sync_visualizer_opacity(pct, true);
+}
 
 pub fn focus_visualizer() {
     let hwnd = VISUALIZER_HWND.load(Ordering::SeqCst) as HWND;
@@ -534,7 +548,6 @@ pub fn focus_visualizer() {
 }
 
 static VIS_HOVERED: AtomicBool = AtomicBool::new(false);
-static VIS_SUPPRESS_PEEK: AtomicBool = AtomicBool::new(false);
 
 pub unsafe fn apply_visualizer_opacity(hwnd: HWND) {
     if hwnd.is_null() || IsWindow(hwnd) == 0 {
@@ -543,18 +556,24 @@ pub unsafe fn apply_visualizer_opacity(hwnd: HWND) {
     let is_fullscreen = is_visualizer_fullscreen();
     let user_op = crate::snapping::get_window_opacity(crate::snapping::WindowKind::Visualizer);
     let peek_enabled = crate::snapping::is_hover_peek_enabled();
-    let is_hovered = VIS_HOVERED.load(Ordering::Relaxed);
-    let suppress_peek = VIS_SUPPRESS_PEEK.load(Ordering::Relaxed);
+    let is_click_through = crate::snapping::is_click_through_active(crate::snapping::WindowKind::Visualizer);
 
-    let target_op = if is_fullscreen {
-        1.0
-    } else if peek_enabled && is_hovered && !suppress_peek {
+    crate::snapping::update_window_click_through(crate::snapping::WindowKind::Visualizer, hwnd);
+
+    let is_hovered = (!is_click_through || is_fullscreen) && VIS_HOVERED.load(Ordering::Relaxed);
+    let suppress_peek = crate::snapping::is_peek_suppressed(crate::snapping::WindowKind::Visualizer);
+
+    let target_op = if is_fullscreen || (peek_enabled && is_hovered && !suppress_peek) {
         1.0
     } else {
         user_op
     };
 
-    crate::snapping::apply_native_window_opacity(hwnd, target_op);
+    let (effective_op, _animating) = crate::snapping::step_animated_window_opacity(
+        crate::snapping::WindowKind::Visualizer,
+        target_op,
+    );
+    crate::snapping::apply_native_window_opacity(hwnd, effective_op);
 }
 
 struct VisualizerState {
@@ -594,6 +613,16 @@ unsafe fn set_pin(hwnd: HWND, state: &mut VisualizerState, pinned: bool) {
 }
 
 unsafe fn toggle_pin(hwnd: HWND, state: &mut VisualizerState) {
+    let current_op = (crate::snapping::get_window_opacity(crate::snapping::WindowKind::Visualizer) * 100.0).round() as u32;
+    // 狀態機防呆：若視覺視窗處於半透明態 (current_op < 100) 且已置頂，單擊取消釘選代表退出幽靈模式：
+    // 自動恢復 100% 實體並取消置頂（回到 State 1 常規視窗），徹底消滅「半透明卻未置頂」的無效死態！
+    if state.is_pinned && current_op < 100 {
+        crate::snapping::record_ghost_exit();
+        crate::snapping::set_single_window_opacity_tuning(crate::snapping::WindowKind::Visualizer, 1.0);
+        set_pin(hwnd, state, false);
+        return;
+    }
+
     let new_pinned = !state.is_pinned;
     set_pin(hwnd, state, new_pinned);
 
@@ -657,7 +686,6 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
         }
     } else {
         restore_hud_pinned_states();
-        VIS_SUPPRESS_PEEK.store(false, Ordering::SeqCst);
         state.is_fullscreen = false;
         VISUALIZER_FULLSCREEN.store(false, Ordering::SeqCst);
         VISUALIZER_HUD_MAIN_SHOWN.store(false, Ordering::SeqCst);
@@ -909,14 +937,71 @@ unsafe fn run_visualizer_window() {
                 unsafe {
                     crate::snapping::handle_home_summon_request(crate::snapping::WindowKind::Visualizer);
                 }
+            } else if body.contains("wake_ghost_solo") {
+                crate::snapping::wake_single_window_ghost(crate::snapping::WindowKind::Visualizer);
+                unsafe {
+                    PostMessageW(hwnd_capture as HWND, WM_USER_SET_PIN, 1, 0);
+                    apply_visualizer_opacity(hwnd_capture as HWND);
+                }
+            } else if body.contains("wake_ghost") {
+                let role = crate::snapping::get_window_role(crate::snapping::WindowKind::Visualizer);
+                if role == crate::snapping::WindowRole::Standalone {
+                    crate::snapping::wake_single_window_ghost(crate::snapping::WindowKind::Visualizer);
+                } else {
+                    crate::snapping::wake_cluster_ghost(crate::snapping::WindowKind::Visualizer);
+                }
+                unsafe {
+                    PostMessageW(hwnd_capture as HWND, WM_USER_SET_PIN, 1, 0);
+                    apply_visualizer_opacity(hwnd_capture as HWND);
+                }
+            } else if body.contains("toggle_opacity_solo") {
+                let _next_pct = crate::snapping::toggle_single_window_opacity_quick(crate::snapping::WindowKind::Visualizer);
+                let is_pinned = crate::snapping::is_window_pinned(crate::snapping::WindowKind::Visualizer);
+                unsafe {
+                    PostMessageW(hwnd_capture as HWND, WM_USER_SET_PIN, if is_pinned { 1 } else { 0 }, 0);
+                    apply_visualizer_opacity(hwnd_capture as HWND);
+                }
+            } else if body.contains("toggle_opacity") {
+                let _next_pct = crate::snapping::toggle_cluster_opacity_quick(crate::snapping::WindowKind::Visualizer);
+                let is_pinned = crate::snapping::is_window_pinned(crate::snapping::WindowKind::Visualizer);
+                unsafe {
+                    PostMessageW(hwnd_capture as HWND, WM_USER_SET_PIN, if is_pinned { 1 } else { 0 }, 0);
+                    apply_visualizer_opacity(hwnd_capture as HWND);
+                }
+            } else if body.starts_with("set_opacity_solo:") {
+                let val_str = body.trim_start_matches("set_opacity_solo:");
+                if let Ok(pct) = val_str.parse::<f32>() {
+                    let op = (pct / 100.0).clamp(0.2, 1.0);
+                    crate::snapping::set_single_window_opacity_tuning(crate::snapping::WindowKind::Visualizer, op);
+                    if op < 1.0 && !crate::snapping::is_window_pinned(crate::snapping::WindowKind::Visualizer) {
+                        unsafe {
+                            PostMessageW(hwnd_capture as HWND, WM_USER_SET_PIN, 1, 0);
+                        }
+                    }
+                    unsafe {
+                        apply_visualizer_opacity(hwnd_capture as HWND);
+                    }
+                }
             } else if body.starts_with("set_opacity:") {
                 let val_str = body.trim_start_matches("set_opacity:");
                 if let Ok(pct) = val_str.parse::<f32>() {
                     let op = (pct / 100.0).clamp(0.2, 1.0);
-                    crate::snapping::set_window_opacity(crate::snapping::WindowKind::Visualizer, op);
+                    crate::snapping::set_cluster_opacity(crate::snapping::WindowKind::Visualizer, op);
+                    if op < 1.0 && !crate::snapping::is_window_pinned(crate::snapping::WindowKind::Visualizer) {
+                        unsafe {
+                            PostMessageW(hwnd_capture as HWND, WM_USER_SET_PIN, 1, 0);
+                        }
+                    }
                     unsafe {
                         apply_visualizer_opacity(hwnd_capture as HWND);
                     }
+                }
+            } else if body.starts_with("opacity_menu_open:") {
+                let val_str = body.trim_start_matches("opacity_menu_open:");
+                let is_open = val_str == "1" || val_str == "true";
+                crate::snapping::set_opacity_menu_open(crate::snapping::WindowKind::Visualizer, is_open);
+                unsafe {
+                    apply_visualizer_opacity(hwnd_capture as HWND);
                 }
             } else if body.starts_with("set_hover_peek:") {
                 let val_str = body.trim_start_matches("set_hover_peek:");
@@ -928,7 +1013,9 @@ unsafe fn run_visualizer_window() {
             } else if body.starts_with("suppress_peek:") {
                 let val_str = body.trim_start_matches("suppress_peek:");
                 let suppress = val_str == "1" || val_str == "true";
-                VIS_SUPPRESS_PEEK.store(suppress, Ordering::SeqCst);
+                if suppress {
+                    crate::snapping::trigger_cluster_opacity_tuning(crate::snapping::WindowKind::Visualizer);
+                }
                 unsafe {
                     apply_visualizer_opacity(hwnd_capture as HWND);
                 }
@@ -967,7 +1054,7 @@ unsafe fn run_visualizer_window() {
             if init_peek { 1 } else { 0 },
             if init_docked { 1 } else { 0 },
         );
-        let builder = builder.with_url(&initial_url);
+        let builder = builder.with_url(&initial_url).with_transparent(true);
 
     match builder.build(&wrapper) {
         Ok(wv) => {
@@ -1089,6 +1176,22 @@ unsafe extern "system" fn visualizer_wnd_proc(
         WM_USER_UPDATE_TITLE => {
             unsafe {
                 update_visualizer_title(hwnd);
+            }
+            0
+        }
+        WM_USER_SYNC_OPACITY => {
+            let pct = wparam as u32;
+            let show_hud = lparam != 0;
+            let state_ptr = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut VisualizerState };
+            if !state_ptr.is_null() {
+                unsafe {
+                    if let Some(ref wv) = (*state_ptr).webview {
+                        let script = format!(
+                            "if (typeof window.syncOpacityFromHost === 'function') window.syncOpacityFromHost({pct}, {show_hud});"
+                        );
+                        let _ = wv.evaluate_script(&script);
+                    }
+                }
             }
             0
         }
@@ -1269,6 +1372,16 @@ unsafe extern "system" fn visualizer_wnd_proc(
             let y = ((lparam >> 16) & 0xFFFF) as i16 as i32;
             let mut rect: RECT = std::mem::zeroed();
             GetWindowRect(hwnd, &mut rect);
+
+            // 若視覺視窗透明度 <= 40%，自動啟用穿透模式：標題列保留互動，下方內容穿透
+            // 若選單開啟中，豁免穿透，允許使用者自由調整選單滑桿
+            if crate::snapping::is_click_through_active(crate::snapping::WindowKind::Visualizer)
+                && !crate::snapping::is_opacity_menu_open(crate::snapping::WindowKind::Visualizer)
+                && y > rect.top + 42
+            {
+                return -1; // HTTRANSPARENT
+            }
+
             let b = 8; // 8-pixel border for mouse resizing
 
             let on_left = x >= rect.left && x < rect.left + b;
@@ -1346,8 +1459,8 @@ unsafe extern "system" fn visualizer_wnd_proc(
                         let was_hovered = VIS_HOVERED.load(Ordering::Relaxed);
                         if inside != was_hovered {
                             VIS_HOVERED.store(inside, Ordering::SeqCst);
-                            apply_visualizer_opacity(hwnd);
                         }
+                        apply_visualizer_opacity(hwnd);
                     }
                 }
 
@@ -1383,7 +1496,6 @@ unsafe extern "system" fn visualizer_wnd_proc(
         }
         WM_CLOSE => {
             VISUALIZER_CLOSING.store(true, Ordering::SeqCst);
-            VIS_SUPPRESS_PEEK.store(false, Ordering::SeqCst);
             VISUALIZER_HWND.store(0, Ordering::SeqCst);
             if VISUALIZER_FULLSCREEN.swap(false, Ordering::SeqCst) {
                 VISUALIZER_HUD_MAIN_SHOWN.store(false, Ordering::SeqCst);

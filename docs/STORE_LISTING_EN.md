@@ -1,21 +1,29 @@
 # Microsoft Store Listing - English (en-US)
-# Win2Pod Bridge - Version 0.1.22
+# Win2Pod Bridge - Version 0.1.24
 
 ## 0. What's New in This Version (Release Notes - Paste into Partner Center)
 ```text
-[Win2Pod Bridge 0.1.22 Major Performance & Stability Update - GSMTC Event Storm Elimination & Zero-Flicker Minimize FSM]
-• ⚡ Windows GSMTC Media Integration Optimization & CPU Storm Elimination:
-  - Completely resolved high CPU usage across Win2Pod (22%) and Windows "System Media Transport Controls Session Manager Service" (16%) caused by continuous timeline updates from media players like KKBOX.
-  - Introduced typed TrackEvent specialization, cleanly decoupling track metadata, playback status, and timeline updates.
-  - Smart Timeline Filtering: normal playback time ticks are silently ignored with local extrapolation (0% CPU), updating position anchors only when genuine manual seeks occur.
-  - Thumbnail Cache Invariant: eliminates redundant cross-process IPC image transfers when playing the same track.
-• 🪟 Refined Cluster Minimize State Machine & Zero-Flicker Genie Effect:
-  - Fully eliminated child window flickering at their original positions before tucking into the root window during Genie minimize.
-  - Pruned over-engineered side effects in favor of an elegant, deterministic 4-state FSM (Normal, Minimizing, Minimized, Restoring) with automatic timeout recovery.
-  - Implemented Normal Rect reading and cluster animation barriers to preserve multi-window dock topologies without accidental severance during transitions.
-  - Removed per-frame polling shims to ensure all window visibility strictly follows user interactions and animation lifecycles.
-• 🛡️ Clean Code Architecture & Zero Compiler Warnings:
-  - Achieved 0 compiler warnings, 0 errors, and 100% pass across all 56 unit tests.
+[Win2Pod Bridge 0.1.24 Major Experience Update - Solution C 3-State Model, Pure Pinning & Header Tap to Wake]
+• 📌 Solution C: Minimal 3-State Architecture & Pure Pinning:
+  - Decoupled Pinning from Opacity: the Pin button 📌 returns to pure Win32 HWND_TOPMOST toggling without forcing unwanted opacity side-effects.
+  - Defensive Topmost Auto-Compensation: lowering window opacity (< 1.0) automatically ensures Topmost to prevent semi-transparent windows from getting lost under other windows; users can unpin freely at any time.
+• 👻 Click-Through Threshold Raised to 40% with 40% Notch:
+  - Upgraded click-through threshold to ≤40% for optimal contrast and background ambient beauty without sacrificing desktop click-through utility.
+  - Micro-interactive slider now features an exact 40% Notch (at 25% track position) with a native color 👻 icon and purple ambient glow.
+• ⚡ Titlebar Tap to Wake (100% ↔ 30% 👻) & Glimmer Underline Guidance:
+  - Double-click header whitespace (or the header ghost capsule) to instantly toggle between 100% Solid and 30% Ghost Click-Through mode.
+  - Shift + Double-Click strictly constrains action to the single window (Solo); standard double-click synchronizes the entire snapped cluster.
+  - Golden Glimmer Underline in click-through mode provides clear visual affordance that the header remains interactable for dragging and context menu access.
+• 🖱️ Universal Header Right-Click Menu & Smooth Wheel Tuning (±5%):
+  - Right-click anywhere along the titlebar to open the Opacity popup without needing to aim for the 22px pin button.
+  - Wheel-scroll directly on titlebars for smooth ±5% opacity adjustments accompanied by real-time floating HUD feedback. Shift modifier limits scope to current window.
+• 🎨 Harmonized Visuals & Design Standards across All Windows:
+  - Unified opacity slider theme to Sky Blue (Cyan #38bdf8), matching the 3D Visualizer design language across both native egui and HTML menus.
+  - Standardized all preset buttons to: [ 30% 👻 ], [ 60% ], [ 80% ], and [ 100% ].
+  - Pruned hint typography to: "🖱️ 滾輪調整透明度，Shift組合僅限此視窗".
+• 🏄 Instant Mascot Cross-Window Summon & Supporter Modal Enhancements:
+  - Right-clicking music spectrum instantly teleports the mascot to the Mini Player spectrum for 360° air surfing combo tricks.
+  - Supporter celebration modal re-architected on egui Tooltip layer with 4 zero-trap escape hatches (action button, close ✕, backdrop click, Escape key).
 ```
 
 ## 1. Product Name

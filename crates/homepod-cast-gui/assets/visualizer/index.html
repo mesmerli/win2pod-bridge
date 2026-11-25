@@ -107,6 +107,26 @@ kbd { font: 11px var(--font); border: 1px solid var(--line-strong); border-radiu
   user-select: none; -webkit-user-select: none;
   cursor: grab;
 }
+#v-titlebar::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 215, 0, 0.45) 15%, rgba(255, 235, 120, 0.85) 50%, rgba(255, 215, 0, 0.45) 85%, transparent 100%);
+  box-shadow: 0 1px 8px rgba(255, 215, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+}
+body.click-through-mode #v-titlebar::after {
+  opacity: 0.38;
+}
+body.click-through-mode #v-titlebar:hover::after {
+  opacity: 0.95;
+  box-shadow: 0 1px 12px rgba(255, 215, 0, 0.75);
+}
 #v-titlebar:active { cursor: grabbing; }
 .v-left { display: flex; align-items: center; gap: 8px; cursor: grab; }
 .v-left:active { cursor: grabbing; }
@@ -114,6 +134,7 @@ kbd { font: 11px var(--font); border: 1px solid var(--line-strong); border-radiu
 .v-title:active { cursor: grabbing; }
 .v-badge { font-size: 14px; line-height: 1; cursor: grab; }
 .v-badge:active { cursor: grabbing; }
+.v-badge.is-clip { display: inline-block; transform: rotate(45deg); transform-origin: center; }
 .v-mid { flex: 1; height: 100%; cursor: grab; }
 .v-mid:active { cursor: grabbing; }
 .v-right { display: flex; align-items: center; gap: 5px; cursor: default; }
@@ -125,6 +146,7 @@ kbd { font: 11px var(--font); border: 1px solid var(--line-strong); border-radiu
 }
 .v-action-btn:hover { background: var(--soft-hover); color: #fff; border-color: var(--line-strong); }
 .v-action-btn.active { background: var(--accent); color: #fff; border-color: rgba(255, 255, 255, 0.3); }
+
 #bMainWin {
   position: relative;
   color: rgb(160, 160, 160);
@@ -183,27 +205,26 @@ kbd { font: 11px var(--font); border: 1px solid var(--line-strong); border-radiu
   border-color: rgb(215, 165, 40);
   box-shadow: 0 0 8px rgba(255, 200, 50, 0.35);
 }
-.pin-badge {
-  position: absolute;
-  bottom: 0px;
-  right: 1px;
-  font-size: 8px;
+#bPin .pin-svg {
+  transition: transform 0.15s ease;
+}
+.v-ghost-capsule {
+  font-size: 14px;
   line-height: 1;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  font-family: var(--font);
-  color: #e2e8f0;
   background: transparent;
+  border: none;
   padding: 0;
-  pointer-events: none;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.9);
-  letter-spacing: -0.02em;
+  margin-left: 6px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
 }
-#bPin.active .pin-badge {
-  color: rgb(255, 225, 120);
-  background: transparent;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.9);
-}
+.v-ghost-capsule:hover { transform: scale(1.15); }
+.v-ghost-capsule:active { cursor: grabbing; transform: scale(0.95); }
 .pin-svg {
   width: 13px;
   height: 13px;
@@ -246,15 +267,54 @@ kbd { font: 11px var(--font); border: 1px solid var(--line-strong); border-radiu
   margin-bottom: 8px;
 }
 #opVal {
-  color: #ffd700;
+  color: var(--accent-cyan);
   font-family: monospace;
   font-size: 13px;
 }
+.op-slider-wrap {
+  position: relative;
+  width: 100%;
+  margin-bottom: 8px;
+}
 .op-slider {
   width: 100%;
-  accent-color: #ffd700;
+  accent-color: var(--accent-cyan);
   cursor: pointer;
-  margin-bottom: 8px;
+  display: block;
+}
+.op-slider-notch {
+  position: absolute;
+  /* (40 - 20) / (100 - 20) = 20 / 80 = 25% */
+  left: 25%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 2;
+  transition: all 0.2s ease;
+}
+.op-slider-notch .notch-line {
+  width: 2px;
+  height: 10px;
+  background: rgba(255, 215, 0, 0.8);
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.6);
+  border-radius: 1px;
+}
+.op-slider-notch .notch-icon {
+  font-size: 13px;
+  line-height: 1;
+  position: absolute;
+  top: -14px;
+  opacity: 0.9;
+}
+.op-slider-notch.active .notch-line {
+  background: #ffe655;
+  box-shadow: 0 0 8px rgba(255, 230, 80, 0.95);
+}
+.op-slider-notch.active .notch-icon {
+  opacity: 1;
 }
 .op-presets {
   display: flex;
@@ -273,15 +333,15 @@ kbd { font: 11px var(--font); border: 1px solid var(--line-strong); border-radiu
   transition: all 0.15s;
 }
 .op-preset-btn:hover {
-  background: rgba(255, 215, 0, 0.25);
-  border-color: rgba(255, 215, 0, 0.5);
+  background: rgba(56, 189, 248, 0.25);
+  border-color: rgba(56, 189, 248, 0.5);
   color: #fff;
 }
 .op-preset-btn.active {
-  background: #ffd700;
+  background: var(--accent-cyan);
   color: #111;
   font-weight: 600;
-  border-color: #ffe655;
+  border-color: #7dd3fc;
 }
 .op-divider {
   height: 1px;
@@ -298,7 +358,7 @@ kbd { font: 11px var(--font); border: 1px solid var(--line-strong); border-radiu
   margin-bottom: 6px;
 }
 .op-peek-label input {
-  accent-color: #ffd700;
+  accent-color: var(--accent-cyan);
   cursor: pointer;
 }
 .op-hint {
@@ -391,6 +451,7 @@ body.fullscreen #fsActions { display: flex !important; }
       </svg>
     </button>
     <span class="v-title">Win2Pod Motion - Paint Pulse</span>
+    <span id="vGhostCapsule" class="v-ghost-capsule" style="display:none;" title="👻 穿透模式（雙擊還原成不透明置頂）">👻</span>
     <span id="vBadge" class="v-badge" style="display:none;"></span>
   </div>
   <div class="v-mid"></div>
@@ -404,7 +465,6 @@ body.fullscreen #fsActions { display: flex !important; }
       <svg class="pin-svg" viewBox="0 0 24 24" fill="currentColor">
         <path d="M16 9V4l1-2H7l1 2v5c0 1.66-1.34 3-3 3v2h6v7l1 2 1-2v-7h6v-2c-1.66 0-3-1.34-3-3z"/>
       </svg>
-      <span id="pinBadge" class="pin-badge" style="display:none;"></span>
     </button>
     <span class="v-div"></span>
     <button type="button" id="vBtnMin" class="v-caption-btn" title="最小化 (_)">_</button>
@@ -416,19 +476,22 @@ body.fullscreen #fsActions { display: flex !important; }
     <span>🎯 視窗透明度</span>
     <span id="opVal">75%</span>
   </div>
-  <input type="range" id="opSlider" min="20" max="100" value="75" step="1" class="op-slider">
+  <div class="op-slider-wrap">
+    <input type="range" id="opSlider" min="20" max="100" value="75" step="1" class="op-slider">
+    <div class="op-slider-notch" title="👻 40% 點擊穿透臨界點（≤40% 視窗穿透，標題列仍可操作）">
+      <span class="notch-line"></span>
+      <span class="notch-icon">👻</span>
+    </div>
+  </div>
   <div class="op-presets">
-    <button type="button" class="op-preset-btn" data-val="25">25%</button>
-    <button type="button" class="op-preset-btn" data-val="50">50%</button>
-    <button type="button" class="op-preset-btn" data-val="75">75%</button>
+    <button type="button" class="op-preset-btn" data-val="30">30% 👻</button>
+    <button type="button" class="op-preset-btn" data-val="60">60%</button>
+    <button type="button" class="op-preset-btn" data-val="80">80%</button>
     <button type="button" class="op-preset-btn" data-val="100">100%</button>
   </div>
   <div class="op-divider"></div>
-  <label class="op-peek-label">
-    <input type="checkbox" id="opPeekCheck" checked>
-    <span>懸停時恢復實體 (Hover Peek)</span>
-  </label>
-  <div class="op-hint">提示：游標懸停 📌 圖釘轉動滾輪可極速直調</div>
+  <div class="op-hint" style="color:#ffd700;margin-bottom:4px;">👻 ≤40% 啟用穿透（標題列仍可操作）</div>
+  <div class="op-hint">🖱️ 滾輪調整透明度，Shift組合僅限此視窗</div>
 </div>
 <div id="opacityHud" class="opacity-hud" style="display:none;">🔍 75%</div>
 <div id="fsActions" class="fs-actions" style="display:none;">
@@ -521,11 +584,15 @@ body.fullscreen #fsActions { display: flex !important; }
 <script>
 window.__pendingLang = null;
 window.__pendingDock = null;
+window.__pendingOpacity = null;
 window.setLanguage = function(lang) {
   window.__pendingLang = lang;
 };
 window.handleVisDockChanged = function(docked, showPulse) {
   window.__pendingDock = { docked: !!docked, showPulse: showPulse };
+};
+window.syncOpacityFromHost = function(val, showHud) {
+  window.__pendingOpacity = { val: val, showHud: !!showHud };
 };
 window.addEventListener('error', function(e) {
   var s = document.getElementById('status');
@@ -562,6 +629,7 @@ const $ = id => document.getElementById(id);
 let isFullscreen = false;
 let isVisPinned = QS.get('pinned') === '1' || QS.get('pinned') === 'true';
 let isVisDocked = QS.get('docked') === '1' || QS.get('docked') === 'true';
+let isClusterDocked = QS.get('badge') ? true : false;
 let currentOpacity = parseInt(QS.get('opacity') || '100', 10);
 let isHoverPeek = QS.get('peek') !== '0';
 
@@ -575,8 +643,10 @@ const I18N = {
     top_windowed: '視窗化 (F)',
     top_pin: '釘選在最上層',
     top_unpin: '取消釘選最上層',
-    pin_hint_rc: '右鍵點擊：調整透明度',
-    pin_hint_wheel: 'Alt + 滾輪：無級調節',
+    pin_hint_dbl: '雙擊：快速切換 100% ↔ 30% 幽靈穿透',
+    pin_hint_rc: '右鍵：視窗透明度選單',
+    pin_hint_wheel: '滾輪：視窗透明度調整',
+    pin_hint_shift: 'Shift + 滾輪/雙擊：單獨視窗調整',
     btn_show_panel: '顯示面板 (H)',
     btn_hide_panel: '隱藏控制面板 (H)',
     hint_keys: '按 <kbd>?</kbd> 快捷鍵說明',
@@ -631,8 +701,10 @@ const I18N = {
     top_windowed: '窗口化 (F)',
     top_pin: '固定在最上层',
     top_unpin: '取消最上层固定',
-    pin_hint_rc: '右键点击：调整透明度',
-    pin_hint_wheel: 'Alt + 滚轮：无级调节',
+    pin_hint_dbl: '双击：快速切换 100% ↔ 30% 幽灵穿透',
+    pin_hint_rc: '右键：窗口透明度菜单',
+    pin_hint_wheel: '滚轮：窗口透明度调整',
+    pin_hint_shift: 'Shift + 滚轮：单独窗口透明度调整',
     btn_show_panel: '显示面板 (H)',
     btn_hide_panel: '隐藏控制面板 (H)',
     hint_keys: '按 <kbd>?</kbd> 快捷键说明',
@@ -687,8 +759,10 @@ const I18N = {
     top_windowed: 'Exit Fullscreen (F)',
     top_pin: 'Always on Top',
     top_unpin: 'Unpin from Top',
-    pin_hint_rc: 'Right-click: Adjust opacity',
-    pin_hint_wheel: 'Alt + Scroll: Adjust opacity smoothly',
+    pin_hint_dbl: 'Double-click: Quick toggle 100% ↔ 30% Ghost Mode',
+    pin_hint_rc: 'Right-click: Opacity menu',
+    pin_hint_wheel: 'Scroll: Adjust window opacity',
+    pin_hint_shift: 'Shift + Scroll: Adjust solo window opacity',
     btn_show_panel: 'Show Panel (H)',
     btn_hide_panel: 'Hide Control Panel (H)',
     hint_keys: 'Press <kbd>?</kbd> for Shortcuts',
@@ -743,8 +817,9 @@ const I18N = {
     top_windowed: 'ウィンドウ表示 (F)',
     top_pin: '常に最前面に固定',
     top_unpin: '最前面の固定を解除',
-    pin_hint_rc: '右クリック：透明度を調整',
-    pin_hint_wheel: 'Alt + ホイール：無段階調節',
+    pin_hint_rc: '右クリック：透明度メニュー',
+    pin_hint_wheel: 'ホイール：透明度を調整',
+    pin_hint_shift: 'Shift + ホイール：このウィンドウのみ透明度調整',
     btn_show_panel: 'パネルを表示 (H)',
     btn_hide_panel: 'コントロールパネルを非表示 (H)',
     hint_keys: '<kbd>?</kbd> キーで操作説明',
@@ -799,8 +874,9 @@ const I18N = {
     top_windowed: '창 모드 (F)',
     top_pin: '항상 위에 고정',
     top_unpin: '항상 위 고정 해제',
-    pin_hint_rc: '우클릭: 투명도 조절',
-    pin_hint_wheel: 'Alt + 스크롤: 무단 조절',
+    pin_hint_rc: '우클릭: 투명도 메뉴',
+    pin_hint_wheel: '스크롤: 창 투명도 조절',
+    pin_hint_shift: 'Shift + 스크롤: 이 창 단독 투명도 조절',
     btn_show_panel: '패널 표시 (H)',
     btn_hide_panel: '제어 패널 숨기기 (H)',
     hint_keys: '<kbd>?</kbd> 키로 단축키 안내',
@@ -855,8 +931,9 @@ const I18N = {
     top_windowed: 'Quitter le plein écran (F)',
     top_pin: 'Garder au premier plan',
     top_unpin: 'Détacher du premier plan',
-    pin_hint_rc: 'Clic droit : Ajuster l\'opacité',
-    pin_hint_wheel: 'Alt + Molette : Ajuster en continu',
+    pin_hint_rc: 'Clic droit : Menu d\'opacité',
+    pin_hint_wheel: 'Molette : Ajuster l\'opacité',
+    pin_hint_shift: 'Shift + Molette : Ajuster l\'opacité de cette fenêtre seule',
     btn_show_panel: 'Afficher le panneau (H)',
     btn_hide_panel: 'Masquer le panneau (H)',
     hint_keys: 'Appuyez sur <kbd>?</kbd> Raccourcis',
@@ -911,8 +988,9 @@ const I18N = {
     top_windowed: 'Vollbild beenden (F)',
     top_pin: 'Immer im Vordergrund',
     top_unpin: 'Vordergrund lösen',
-    pin_hint_rc: 'Rechtsklick: Deckkraft anpassen',
-    pin_hint_wheel: 'Alt + Scrollen: Stufenlos anpassen',
+    pin_hint_rc: 'Rechtsklick: Deckkraft-Menü',
+    pin_hint_wheel: 'Scrollen: Fenstertransparenz anpassen',
+    pin_hint_shift: 'Shift + Scrollen: Nur dieses Fenster anpassen',
     btn_show_panel: 'Bedienfeld anzeigen (H)',
     btn_hide_panel: 'Bedienfeld ausblenden (H)',
     hint_keys: 'Drücken Sie <kbd>?</kbd> Tastenkürzel',
@@ -967,8 +1045,9 @@ const I18N = {
     top_windowed: 'Modo ventana (F)',
     top_pin: 'Fijar en primer plano',
     top_unpin: 'Desanclar de primer plano',
-    pin_hint_rc: 'Clic derecho: Ajustar opacidad',
-    pin_hint_wheel: 'Alt + Rueda: Ajuste continuo',
+    pin_hint_rc: 'Clic derecho: Menú de opacidad',
+    pin_hint_wheel: 'Rueda: Ajustar opacidad de la ventana',
+    pin_hint_shift: 'Shift + Rueda: Ajustar solo esta ventana',
     btn_show_panel: 'Mostrar panel (H)',
     btn_hide_panel: 'Ocultar panel (H)',
     hint_keys: 'Pulsa <kbd>?</kbd> para Atajos',
@@ -1023,8 +1102,9 @@ const I18N = {
     top_windowed: 'Finestra (F)',
     top_pin: 'Sempre in primo piano',
     top_unpin: 'Rimuovi primo piano',
-    pin_hint_rc: 'Clic destro: Regola opacità',
-    pin_hint_wheel: 'Alt + Rotellina: Regolazione continua',
+    pin_hint_rc: 'Clic destro: Menu opacità',
+    pin_hint_wheel: 'Rotellina: Regola opacità finestra',
+    pin_hint_shift: 'Shift + Rotellina: Regola opacità solo questa finestra',
     btn_show_panel: 'Mostra pannello (H)',
     btn_hide_panel: 'Nascondi pannello (H)',
     hint_keys: 'Premi <kbd>?</kbd> per Scorciatoie',
@@ -1079,8 +1159,9 @@ const I18N = {
     top_windowed: 'Modo janela (F)',
     top_pin: 'Fixar no topo',
     top_unpin: 'Desafixar do topo',
-    pin_hint_rc: 'Clique direito: Ajustar opacidade',
-    pin_hint_wheel: 'Alt + Roda: Ajuste contínuo',
+    pin_hint_rc: 'Clique direito: Menu de opacidade',
+    pin_hint_wheel: 'Roda: Ajustar opacidade da janela',
+    pin_hint_shift: 'Shift + Roda: Ajustar apenas esta janela',
     btn_show_panel: 'Mostrar painel (H)',
     btn_hide_panel: 'Ocultar painel (H)',
     hint_keys: 'Pressione <kbd>?</kbd> Atalhos',
@@ -1135,8 +1216,9 @@ const I18N = {
     top_windowed: 'Оконный режим (F)',
     top_pin: 'Закрепить поверх всех окон',
     top_unpin: 'Открепить от верха',
-    pin_hint_rc: 'ПКМ: Настроить прозрачность',
-    pin_hint_wheel: 'Alt + Колесико: Плавная настройка',
+    pin_hint_rc: 'ПКМ: Меню прозрачности',
+    pin_hint_wheel: 'Колесико: Регулировка прозрачности',
+    pin_hint_shift: 'Shift + Колесико: Регулировка только этого окна',
     btn_show_panel: 'Показать панель (H)',
     btn_hide_panel: 'Скрыть панель (H)',
     hint_keys: 'Нажмите <kbd>?</kbd> для подсказки',
@@ -1194,21 +1276,9 @@ function updatePinButtonUI() {
   try {
     const btn = $('bPin');
     if (!btn) return;
-    const pinAction = isVisPinned ? t('top_unpin') : t('top_pin');
-    const rcHint = t('pin_hint_rc') || '右鍵點擊：調整透明度';
-    const wheelHint = t('pin_hint_wheel') || 'Alt + 滾輪：無級調節';
-    const opInfo = (typeof currentOpacity === 'number' && currentOpacity < 100) ? ` (${currentOpacity}%)` : '';
-    btn.title = `${pinAction}${opInfo}\n• ${rcHint}\n• ${wheelHint}`;
-
-    const badge = $('pinBadge');
-    if (badge) {
-      if (typeof currentOpacity === 'number' && currentOpacity < 100) {
-        badge.textContent = currentOpacity + '%';
-        badge.style.display = 'block';
-      } else {
-        badge.style.display = 'none';
-      }
-    }
+    const pinAction = isVisPinned ? (t('top_unpin') || '取消置頂在最上層') : (t('top_pin') || '📌 置頂在最上層 (點擊切換)');
+    btn.title = pinAction;
+    btn.classList.toggle('active', isVisPinned);
   } catch (e) {
     console.error('updatePinButtonUI error:', e);
   }
@@ -1588,7 +1658,6 @@ const bPinEl = $('bPin');
 const opacityPopupEl = $('opacityPopup');
 const opSliderEl = $('opSlider');
 const opValEl = $('opVal');
-const opPeekCheckEl = $('opPeekCheck');
 const opacityHudEl = $('opacityHud');
 let hudFadeTimeout = null;
 
@@ -1607,12 +1676,14 @@ function openOpacityPopup() {
   });
   // 實時預覽：開啟選單期間暫停 Hover Peek，呈現所見即所得之真實透明度
   sendIpc('suppress_peek:1');
+  sendIpc('opacity_menu_open:1');
 }
 
 function closeOpacityPopup() {
   cancelPopupAutoClose();
   if (!opacityPopupEl) return;
   opacityPopupEl.classList.remove('visible');
+  sendIpc('opacity_menu_open:0');
   setTimeout(() => {
     if (!opacityPopupEl.classList.contains('visible')) {
       opacityPopupEl.style.display = 'none';
@@ -1647,16 +1718,48 @@ function updateOpacityUI(val) {
   if (opSliderEl) opSliderEl.value = currentOpacity;
   if (opValEl) opValEl.textContent = currentOpacity + '%';
   document.querySelectorAll('.op-preset-btn').forEach(btn => {
-    btn.classList.toggle('active', parseInt(btn.dataset.val, 10) === currentOpacity);
+    btn.classList.toggle('active', Math.abs(parseInt(btn.dataset.val, 10) - currentOpacity) <= 3);
   });
   updatePinButtonUI();
+  document.body.classList.toggle('click-through-mode', currentOpacity <= 40);
+  const notchEl = document.querySelector('.op-slider-notch');
+  if (notchEl) {
+    notchEl.classList.toggle('active', currentOpacity <= 40);
+  }
+  const capsuleEl = $('vGhostCapsule');
+  if (capsuleEl) {
+    if (currentOpacity <= 40) {
+      capsuleEl.textContent = '👻';
+      capsuleEl.style.display = 'inline-flex';
+    } else {
+      capsuleEl.style.display = 'none';
+    }
+  }
+  const vTitlebarEl = $('v-titlebar');
+  if (vTitlebarEl) {
+    const isGhost = currentOpacity <= 40;
+    const titleTooltip = isGhost
+      ? (isClusterDocked
+          ? '👻 視窗標題列 (穿透手掌區)\n• 拖曳：移動群組\n• 雙擊：還原成不透明置頂\n• 滾輪：調整透明度\n• 右鍵：視窗透明度選單\n• Shift + 雙擊/滾輪：僅作用於此視窗'
+          : '👻 視窗標題列 (穿透手掌區)\n• 拖曳：移動視窗\n• 雙擊：還原成不透明置頂\n• 滾輪：調整透明度\n• 右鍵：視窗透明度選單')
+      : (isClusterDocked
+          ? '視窗標題列\n• 拖曳：移動群組\n• 雙擊：切換成穿透模式\n• 滾輪：調整透明度\n• 右鍵：視窗透明度選單\n• Shift + 雙擊/滾輪：僅作用於此視窗'
+          : '視窗標題列\n• 拖曳：移動視窗\n• 雙擊：切換成穿透模式\n• 滾輪：調整透明度\n• 右鍵：視窗透明度選單');
+    vTitlebarEl.title = titleTooltip;
+  }
 }
 
-function showOpacityHud(val) {
+function showOpacityHud(val, skipIpc = false) {
   if (!opacityHudEl) return;
   // 滾輪微調期間實時預覽透明穿透效果
-  sendIpc('suppress_peek:1');
-  opacityHudEl.textContent = '🎯 ' + val + '%';
+  if (!skipIpc) {
+    sendIpc('suppress_peek:1');
+  }
+  if (val <= 40) {
+    opacityHudEl.textContent = '👻 ' + val + '% (穿透模式)';
+  } else {
+    opacityHudEl.textContent = '🎯 ' + val + '%';
+  }
   opacityHudEl.style.display = 'block';
   requestAnimationFrame(() => {
     opacityHudEl.classList.add('visible');
@@ -1667,7 +1770,7 @@ function showOpacityHud(val) {
     setTimeout(() => {
       if (!opacityHudEl.classList.contains('visible')) {
         opacityHudEl.style.display = 'none';
-        if (!isOpacityPopupOpen()) {
+        if (!skipIpc && !isOpacityPopupOpen()) {
           sendIpc('suppress_peek:0');
         }
       }
@@ -1675,31 +1778,49 @@ function showOpacityHud(val) {
   }, 850);
 }
 
+window.updateOpacityUI = updateOpacityUI;
+window.showOpacityHud = showOpacityHud;
+window.syncOpacityFromHost = function(val, showHud = false) {
+  updateOpacityUI(val);
+  if (showHud) {
+    showOpacityHud(val, true);
+  }
+};
+if (window.__pendingOpacity !== null) {
+  const p = window.__pendingOpacity;
+  if (typeof p === 'object' && p !== null) {
+    window.syncOpacityFromHost(p.val, p.showHud);
+  } else {
+    window.syncOpacityFromHost(p, false);
+  }
+  window.__pendingOpacity = null;
+}
+
 if (opSliderEl) {
   updateOpacityUI(currentOpacity);
   opSliderEl.oninput = e => {
     const val = parseInt(e.target.value, 10);
     updateOpacityUI(val);
-    sendIpc('set_opacity:' + val);
+    if (e.shiftKey) {
+      sendIpc('set_opacity_solo:' + val);
+    } else {
+      sendIpc('set_opacity:' + val);
+    }
     cancelPopupAutoClose();
   };
 }
 
-if (opPeekCheckEl) {
-  opPeekCheckEl.checked = isHoverPeek;
-  opPeekCheckEl.onchange = e => {
-    isHoverPeek = e.target.checked;
-    sendIpc('set_hover_peek:' + (isHoverPeek ? '1' : '0'));
-    cancelPopupAutoClose();
-  };
-}
 
 document.querySelectorAll('.op-preset-btn').forEach(btn => {
   btn.onclick = e => {
     e.stopPropagation();
     const val = parseInt(btn.dataset.val, 10);
     updateOpacityUI(val);
-    sendIpc('set_opacity:' + val);
+    if (e.shiftKey) {
+      sendIpc('set_opacity_solo:' + val);
+    } else {
+      sendIpc('set_opacity:' + val);
+    }
     cancelPopupAutoClose();
   };
 });
@@ -1719,23 +1840,6 @@ if (bPinEl) {
     e.stopPropagation();
     sendIpc('toggle_pin');
   };
-  bPinEl.oncontextmenu = e => {
-    e.preventDefault();
-    e.stopPropagation();
-    toggleOpacityPopup();
-  };
-  // 圖釘滾輪極速直調：游標停在圖釘上直接滾動滾輪，以 5% 階梯增減
-  bPinEl.addEventListener('wheel', e => {
-    e.preventDefault();
-    e.stopPropagation();
-    const delta = e.deltaY < 0 ? 5 : -5;
-    const next = Math.max(20, Math.min(100, currentOpacity + delta));
-    if (next !== currentOpacity) {
-      updateOpacityUI(next);
-      sendIpc('set_opacity:' + next);
-      showOpacityHud(next);
-    }
-  }, { passive: false });
 }
 
 window.addEventListener('click', e => {
@@ -1818,8 +1922,6 @@ window.addEventListener('mousemove', () => {
     }, 3000);
   }
 });
-
-let isClusterDocked = false;
 
 function resetCaptionButtons() {
   if (vBtnMinEl) {
@@ -1922,11 +2024,83 @@ window.addEventListener('blur', () => {
 
 const vTitlebarEl = $('v-titlebar');
 if (vTitlebarEl) {
+  let isDragging = false;
+  let downX = 0, downY = 0;
+  let isDown = false;
+
   vTitlebarEl.addEventListener('mousedown', e => {
     if (e.button === 0 && !e.target.closest('button')) {
-      if (window.chrome && window.chrome.webview) {
-        window.chrome.webview.postMessage('start_drag');
+      isDown = true;
+      isDragging = false;
+      downX = e.clientX;
+      downY = e.clientY;
+    }
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (isDown && !isDragging) {
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) >= 4) {
+        isDragging = true;
+        if (window.chrome && window.chrome.webview) {
+          window.chrome.webview.postMessage('start_drag');
+        }
       }
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    isDown = false;
+    isDragging = false;
+  });
+
+  // 雙擊標題列手掌區：快速切換 100% ↔ 30% 幽靈穿透態
+  vTitlebarEl.addEventListener('dblclick', e => {
+    if (!e.target.closest('button')) {
+      if (window.chrome && window.chrome.webview) {
+        if (e.shiftKey) {
+          window.chrome.webview.postMessage('toggle_opacity_solo');
+        } else {
+          window.chrome.webview.postMessage('toggle_opacity');
+        }
+      }
+    }
+  });
+
+  // 提案 A：標題列全域右鍵呼出透明度控制面板
+  vTitlebarEl.addEventListener('contextmenu', e => {
+    if (!e.target.closest('button')) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleOpacityPopup();
+    }
+  });
+
+  // 提案 A：標題列全域滾輪直調透明度 (±5%)
+  vTitlebarEl.addEventListener('wheel', e => {
+    if (!e.target.closest('button')) {
+      e.preventDefault();
+      e.stopPropagation();
+      const delta = e.deltaY < 0 ? 5 : -5;
+      const next = Math.max(20, Math.min(100, currentOpacity + delta));
+      if (next !== currentOpacity) {
+        updateOpacityUI(next);
+        if (e.shiftKey) {
+          sendIpc('set_opacity_solo:' + next);
+        } else {
+          sendIpc('set_opacity:' + next);
+        }
+        showOpacityHud(next);
+      }
+    }
+  }, { passive: false });
+}
+
+const vGhostCapsuleEl = $('vGhostCapsule');
+if (vGhostCapsuleEl) {
+  vGhostCapsuleEl.addEventListener('dblclick', e => {
+    e.stopPropagation();
+    if (window.chrome && window.chrome.webview) {
+      window.chrome.webview.postMessage(e.shiftKey ? 'wake_ghost_solo' : 'wake_ghost');
     }
   });
 }
@@ -1938,9 +2112,11 @@ window.updateTitleBadge = function(badgeSymbol) {
     if (badgeSymbol) {
       badgeEl.textContent = badgeSymbol;
       badgeEl.style.display = 'inline-block';
+      badgeEl.classList.toggle('is-clip', badgeSymbol === '📎' || badgeSymbol.includes('📎'));
     } else {
       badgeEl.textContent = '';
       badgeEl.style.display = 'none';
+      badgeEl.classList.remove('is-clip');
     }
   }
   resetCaptionButtons();

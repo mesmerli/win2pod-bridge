@@ -242,6 +242,21 @@ pub struct FlyoutApp {
     pub prev_album_art_texture: Option<egui::TextureHandle>,
     pub next_track_intent: Option<TrackTransitionDirection>,
     pub workstation_onboarding_dismissed: bool,
+    pub mascot_pos: egui::Pos2,
+    pub mascot_activity: u8,
+    pub mascot_platform_idx: usize,
+    pub mascot_dir_x: f32,
+    pub mascot_dir_y: f32,
+    pub mascot_vel_y: f32,
+    pub mascot_action_timer: f32,
+    pub mascot_squash: f32,
+    pub mascot_bounce: f32,
+    pub mascot_last_update: std::time::Instant,
+    pub mascot_window: crate::snapping::WindowKind,
+    pub mascot_spectrum_rect: Option<egui::Rect>,
+    pub mascot_spectrum_privilege: bool,
+    pub show_supporter_mascot_modal: bool,
+    pub reset_about_scroll: bool,
 }
 
 static EGUI_CTX: std::sync::OnceLock<egui::Context> = std::sync::OnceLock::new();
@@ -388,6 +403,21 @@ impl FlyoutApp {
             prev_album_art_texture: None,
             next_track_intent: None,
             workstation_onboarding_dismissed: crate::controller::is_workstation_discovered(),
+            mascot_pos: egui::pos2(80.0, 38.0),
+            mascot_activity: 0,
+            mascot_platform_idx: 1,
+            mascot_dir_x: 1.0,
+            mascot_dir_y: 1.0,
+            mascot_vel_y: 0.0,
+            mascot_action_timer: 0.0,
+            mascot_squash: 1.0,
+            mascot_bounce: 0.0,
+            mascot_last_update: std::time::Instant::now(),
+            mascot_window: crate::snapping::WindowKind::Main,
+            mascot_spectrum_rect: None,
+            mascot_spectrum_privilege: false,
+            show_supporter_mascot_modal: false,
+            reset_about_scroll: true,
         }
     }
 
@@ -479,6 +509,10 @@ fn open_windows_bluetooth_settings() {
 }
 
 impl eframe::App for FlyoutApp {
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        egui::Rgba::TRANSPARENT.to_array()
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if REQUEST_NAVIGATE_TO_MAIN.swap(false, std::sync::atomic::Ordering::SeqCst) {
             self.reset_to(Page::Main);
@@ -507,6 +541,15 @@ impl eframe::App for FlyoutApp {
                 _ => crate::snapping::WindowKind::Main,
             };
             self.close_window_cluster_immediate(kind);
+        }
+
+        // ⭐ 正式版支持者感謝盛典自動觸發：
+        // 當偵測到是正式版已購買使用者（或獨立開發測試模式），且尚未揭密展示過，自動彈出大號精靈感謝盛典！
+        if self.state.license_tier.is_supporter_or_unpackaged()
+            && !self.state.mascot_supporter_secret_revealed
+            && !self.show_supporter_mascot_modal
+        {
+            self.show_supporter_mascot_modal = true;
         }
 
         if self.pending_modular_workstation_frames > 0 {
@@ -860,17 +903,53 @@ impl eframe::App for FlyoutApp {
 
         let mut total_content_height = 0.0f32;
 
+        let main_op = crate::snapping::get_window_opacity(crate::snapping::WindowKind::Main);
+        let main_hwnd = crate::tray::get_main_hwnd();
+        let is_main_click_through = crate::snapping::is_click_through_active(crate::snapping::WindowKind::Main);
+        let is_main_hovered = if !main_hwnd.is_null() && unsafe { windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(main_hwnd) != 0 } {
+            unsafe {
+                crate::snapping::update_window_click_through(crate::snapping::WindowKind::Main, main_hwnd);
+                // 穿透模式下：停用 Hover Peek 實體化，維持穩定半透明，不閃爍
+                !is_main_click_through && crate::snapping::is_cursor_over_window(main_hwnd)
+            }
+        } else {
+            false
+        };
+        let is_main_suppressed = crate::snapping::is_peek_suppressed(crate::snapping::WindowKind::Main);
+        let target_main_op = if is_main_hovered && crate::snapping::is_hover_peek_enabled() && !is_main_suppressed {
+            1.0
+        } else {
+            main_op
+        };
+        let (effective_main_op, is_main_animating) = crate::snapping::step_animated_window_opacity(
+            crate::snapping::WindowKind::Main,
+            target_main_op,
+        );
+        let main_alpha = (effective_main_op.clamp(0.2, 1.0) * 255.0).round() as u8;
+
+        if !main_hwnd.is_null() && unsafe { windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(main_hwnd) != 0 } {
+            unsafe {
+                crate::snapping::apply_native_window_opacity(main_hwnd, effective_main_op);
+            }
+        }
+
+        // 當平滑淡入淡出中或懸停實體化生效時，以 60 FPS 刷新畫面
+        if is_main_animating || (is_main_hovered && crate::snapping::is_hover_peek_enabled() && main_op < 0.99) {
+            ctx.request_repaint_after(std::time::Duration::from_millis(16));
+        }
+
         let main_role = crate::snapping::get_window_role(crate::snapping::WindowKind::Main);
+        let stroke_alpha = main_alpha.max(100);
         let stroke_color = match main_role {
-            crate::snapping::WindowRole::ClusterMaster => egui::Color32::from_rgb(70, 140, 215), // Blue master glow border
-            crate::snapping::WindowRole::ClusterSlave => egui::Color32::from_rgb(45, 50, 60),
-            crate::snapping::WindowRole::Standalone => egui::Color32::from_rgb(52, 58, 70),
+            crate::snapping::WindowRole::ClusterMaster => egui::Color32::from_rgba_unmultiplied(70, 140, 215, stroke_alpha), // Blue master glow border
+            crate::snapping::WindowRole::ClusterSlave => egui::Color32::from_rgba_unmultiplied(45, 50, 60, stroke_alpha),
+            crate::snapping::WindowRole::Standalone => egui::Color32::from_rgba_unmultiplied(52, 58, 70, stroke_alpha),
         };
 
         egui::CentralPanel::default()
             .frame(
                 egui::Frame::none()
-                    .fill(egui::Color32::from_rgb(24, 25, 29))
+                    .fill(egui::Color32::from_rgba_unmultiplied(24, 25, 29, 215))
                     .stroke(egui::Stroke::new(1.0_f32, stroke_color))
                     .rounding(egui::Rounding::same(8.0))
                     .inner_margin(14.0)
@@ -997,6 +1076,10 @@ impl eframe::App for FlyoutApp {
                 } else {
                     total_content_height = self.render_page_content(ui, self.current_page);
                 }
+                Self::render_opacity_hud_badge(ui, crate::snapping::WindowKind::Main);
+                Self::render_header_shimmer_boundary(ui, crate::snapping::WindowKind::Main);
+                self.render_mascot_overlay(ui, crate::snapping::WindowKind::Main);
+                self.render_supporter_mascot_modal(ui);
             });
 
         // Standardize Main Window dimensions to Player benchmark (460.0 x 680.0) across all pages.
@@ -1188,6 +1271,7 @@ impl FlyoutApp {
 
         // 主視窗內容區域捲動
         egui::ScrollArea::vertical()
+            .id_salt("main_scroll_area")
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 // Notice Banner (e.g. preemption notice, restored notification)
@@ -2508,6 +2592,7 @@ impl FlyoutApp {
         };
 
         let btn = egui::Button::new(egui::RichText::new(icon).size(13.0).color(text_color))
+            .min_size(egui::vec2(24.0, 22.0))
             .fill(fill_color)
             .stroke(egui::Stroke::new(1.0_f32, stroke_color))
             .rounding(egui::Rounding::same(4.0))
@@ -2665,6 +2750,1481 @@ impl FlyoutApp {
         self.handle_popout_toggle(crate::snapping::WindowKind::Equalizer, spawner);
     }
 
+    /// 浮動透明度 HUD 標籤組件：於滾輪微調或預覽期間在視窗中央顯現
+    pub fn render_opacity_hud_badge(ui: &egui::Ui, kind: crate::snapping::WindowKind) {
+        if crate::snapping::is_opacity_hud_active(kind) {
+            let op = crate::snapping::get_window_opacity(kind);
+            let pct = (op * 100.0).round() as u32;
+            let is_click_through = pct <= 40;
+            let painter = ui.painter();
+            let center = ui.clip_rect().center();
+            let hud_size = if is_click_through {
+                egui::vec2(150.0, 32.0)
+            } else {
+                egui::vec2(96.0, 32.0)
+            };
+            let hud_rect = egui::Rect::from_center_size(center, hud_size);
+            painter.rect_filled(hud_rect, 6.0, egui::Color32::from_rgba_unmultiplied(18, 20, 26, 235));
+            painter.rect_stroke(hud_rect, 6.0, egui::Stroke::new(1.0_f32, egui::Color32::from_rgba_unmultiplied(255, 215, 0, 180)));
+            let text = if is_click_through {
+                format!("👻 {}% (穿透模式)", pct)
+            } else {
+                format!("🎯 {}%", pct)
+            };
+            painter.text(
+                center,
+                egui::Align2::CENTER_CENTER,
+                text,
+                egui::FontId::monospace(13.0),
+                egui::Color32::from_rgb(255, 215, 0),
+            );
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
+        }
+    }
+
+    /// 穿透分界線微光提示（提案 C：頂部 42px 標題列保護區 vs 下方穿透區之雙向漸淡流光線）
+    pub fn render_header_shimmer_boundary(ui: &egui::Ui, kind: crate::snapping::WindowKind) {
+        if !crate::snapping::is_click_through_active(kind) {
+            return;
+        }
+
+        let screen_rect = ui.ctx().screen_rect();
+        let boundary_y = screen_rect.min.y + 42.0;
+        let min_x = screen_rect.min.x;
+        let max_x = screen_rect.max.x;
+        let width = max_x - min_x;
+        if width <= 10.0 {
+            return;
+        }
+
+        // 偵測滑鼠游標是否接近標題列（y <= boundary_y + 12px）
+        let pointer_pos = ui.input(|i| i.pointer.hover_pos().or(i.pointer.latest_pos()));
+        let is_near_header = pointer_pos.map_or(false, |pos| {
+            pos.x >= min_x && pos.x <= max_x && pos.y >= screen_rect.min.y && pos.y <= boundary_y + 12.0
+        });
+
+        // 呼吸平滑過渡（常態微弱微光 alpha ~45，懸停接近時提亮至 ~190）
+        let hover_anim = ui.ctx().animate_bool(egui::Id::new("header_shimmer_hover").with(kind), is_near_header);
+        let base_alpha = (45.0 + hover_anim * 145.0) as u8;
+
+        let painter = ui.painter();
+
+        // 繪製雙向向外漸淡的水平微光線
+        let x_p1 = min_x + width * 0.15;
+        let x_p2 = min_x + width * 0.85;
+
+        // 1. 底層 3px 柔和微光光暈 (Ambient Glow)
+        let aura_alpha = (base_alpha as f32 * 0.35).round() as u8;
+        let aura_pts = [
+            (min_x, 0),
+            (x_p1, aura_alpha),
+            (x_p2, aura_alpha),
+            (max_x, 0),
+        ];
+        for i in 0..aura_pts.len() - 1 {
+            let (x0, a0) = aura_pts[i];
+            let (x1, a1) = aura_pts[i + 1];
+            let mut mesh = egui::Mesh::default();
+            let c0 = egui::Color32::from_rgba_unmultiplied(255, 215, 0, a0);
+            let c1 = egui::Color32::from_rgba_unmultiplied(255, 215, 0, a1);
+            let y_top = boundary_y - 1.5;
+            let y_bot = boundary_y + 1.5;
+            let idx = mesh.vertices.len() as u32;
+            mesh.vertices.push(egui::epaint::Vertex { pos: egui::pos2(x0, y_top), uv: egui::epaint::WHITE_UV, color: c0 });
+            mesh.vertices.push(egui::epaint::Vertex { pos: egui::pos2(x1, y_top), uv: egui::epaint::WHITE_UV, color: c1 });
+            mesh.vertices.push(egui::epaint::Vertex { pos: egui::pos2(x1, y_bot), uv: egui::epaint::WHITE_UV, color: c1 });
+            mesh.vertices.push(egui::epaint::Vertex { pos: egui::pos2(x0, y_bot), uv: egui::epaint::WHITE_UV, color: c0 });
+            mesh.indices.extend_from_slice(&[idx, idx + 1, idx + 2, idx, idx + 2, idx + 3]);
+            painter.add(mesh);
+        }
+
+        // 2. 核心 1px 晶透亮線 (Sharp Shimmer Core)
+        let core_pts = [
+            (min_x, 0),
+            (x_p1, base_alpha),
+            (x_p2, base_alpha),
+            (max_x, 0),
+        ];
+        for i in 0..core_pts.len() - 1 {
+            let (x0, a0) = core_pts[i];
+            let (x1, a1) = core_pts[i + 1];
+            let mut mesh = egui::Mesh::default();
+            let c0 = egui::Color32::from_rgba_unmultiplied(255, 235, 120, a0);
+            let c1 = egui::Color32::from_rgba_unmultiplied(255, 235, 120, a1);
+            let y_top = boundary_y - 0.5;
+            let y_bot = boundary_y + 0.5;
+            let idx = mesh.vertices.len() as u32;
+            mesh.vertices.push(egui::epaint::Vertex { pos: egui::pos2(x0, y_top), uv: egui::epaint::WHITE_UV, color: c0 });
+            mesh.vertices.push(egui::epaint::Vertex { pos: egui::pos2(x1, y_top), uv: egui::epaint::WHITE_UV, color: c1 });
+            mesh.vertices.push(egui::epaint::Vertex { pos: egui::pos2(x1, y_bot), uv: egui::epaint::WHITE_UV, color: c1 });
+            mesh.vertices.push(egui::epaint::Vertex { pos: egui::pos2(x0, y_bot), uv: egui::epaint::WHITE_UV, color: c0 });
+            mesh.indices.extend_from_slice(&[idx, idx + 1, idx + 2, idx, idx + 2, idx + 3]);
+            painter.add(mesh);
+        }
+
+        if hover_anim > 0.05 && hover_anim < 0.95 {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(16));
+        }
+    }
+
+    pub fn render_mascot_overlay(&mut self, ui: &mut egui::Ui, window_kind: crate::snapping::WindowKind) {
+        if !self.state.mascot_enabled {
+            return;
+        }
+
+        // 收集目前所有開啟且可見的視窗清單（主視窗、迷你播放器、等化器）
+        let mut open_windows = Vec::new();
+        if !crate::tray::is_window_hidden_to_tray() && !crate::tray::is_app_fleet_hidden() {
+            open_windows.push(crate::snapping::WindowKind::Main);
+        }
+        if self.mini_player_window_open && !crate::tray::is_app_fleet_hidden() {
+            open_windows.push(crate::snapping::WindowKind::MiniPlayer);
+        }
+        if self.equalizer_window_open && !crate::tray::is_app_fleet_hidden() {
+            open_windows.push(crate::snapping::WindowKind::Equalizer);
+        }
+
+        if open_windows.is_empty() {
+            return;
+        }
+
+        // 若幸運物原先所在的視窗被關閉或最小化，自動遷移至第一個可用的開啟視窗
+        if !open_windows.contains(&self.mascot_window) {
+            self.mascot_window = open_windows[0];
+            self.mascot_pos = egui::pos2(80.0, 38.0);
+            self.mascot_platform_idx = 1;
+            self.mascot_activity = 0;
+            self.mascot_bounce = -10.0;
+        }
+
+        // 幸運物同一時間只在單一視窗中漫遊；非所屬視窗不重複計算與渲染
+        if self.mascot_window != window_kind {
+            return;
+        }
+
+        let other_windows: Vec<crate::snapping::WindowKind> = open_windows
+            .into_iter()
+            .filter(|&k| k != window_kind)
+            .collect();
+
+        let now = std::time::Instant::now();
+        let dt = (now - self.mascot_last_update).as_secs_f32().clamp(0.005, 0.1);
+        self.mascot_last_update = now;
+
+        let screen_rect = ui.ctx().screen_rect();
+        let w = screen_rect.width();
+        let h = screen_rect.height();
+        let min_x = screen_rect.min.x;
+        let min_y = screen_rect.min.y;
+
+        // 1. 真實 UI 元件地貌平台定義（包含動態 16 頻段音訊頻譜波浪平台！）
+        // 格式：(Y高度, X起點, X終點, 走過左端是否墜落, 走過右端是否墜落)
+        let (spec_y, spec_x_min, spec_x_max) = if let Some(sr) = self.mascot_spectrum_rect {
+            (sr.max.y - 14.0, sr.min.x + 8.0, sr.max.x - 8.0)
+        } else {
+            (min_y + h * 0.52, min_x + 20.0, min_x + w - 20.0)
+        };
+
+        let platforms: [(f32, f32, f32, bool, bool); 10] = [
+            // 0: 標題列頂端安全軌道 (Y=16，頭部距視窗頂部保留 5px 完整無截)
+            (min_y + 16.0, min_x + 16.0, min_x + w - 16.0, false, false),
+            // 1: 標題列左側標題字串 ("Win2Pod Bridge"，走過右側字串終點即懸崖墜落！)
+            (min_y + 34.0, min_x + 16.0, min_x + 165.0, false, true),
+            // 2: 標題列右側按鈕群 ("⚙ 🗗 📌 ✕"，往左踏出按鈕即墜落！)
+            (min_y + 34.0, min_x + 290.0, min_x + w - 16.0, true, false),
+            // 3: 標題列金光分割線 (右側有 80px 懸崖洞口)
+            (min_y + 48.0, min_x + 16.0, min_x + w - 80.0, false, true),
+            // 4: 播放狀態膠囊標籤 ("🟢 串流中 / ⚪ 待機中"，兩端皆為懸崖！)
+            (min_y + 88.0, min_x + 120.0, min_x + 320.0, true, true),
+            // 5: 裝置名稱文字字串 ("客廳 HomePod"，兩端皆為懸崖！)
+            (min_y + 142.0, min_x + 70.0, min_x + 370.0, true, true),
+            // 6: 音量滑桿與控制條平台 (兩端皆為懸崖！)
+            (min_y + 220.0, min_x + 45.0, min_x + w - 45.0, true, true),
+            // 7: 🎵 WinAMP 16 頻段動態即時音訊頻譜海浪（高高低低波浪衝浪，兩端皆可跳樓！）
+            (spec_y, spec_x_min, spec_x_max, true, true),
+            // 8: 下層控制與進階設定卡片頂緣 (兩端皆為懸崖！)
+            (min_y + h * 0.72, min_x + 40.0, min_x + w - 40.0, true, true),
+            // 9: 視窗最底層堅實地板 (腳部距視窗底緣保留 4px 完整波浪摺裙)
+            (min_y + h - 15.0, min_x + 16.0, min_x + w - 16.0, false, false),
+        ];
+
+        let left_wall_x = min_x + 15.0;
+        let right_wall_x = min_x + w - 15.0;
+        let wall_min_y = min_y + 16.0;
+        let wall_max_y = min_y + h - 15.0;
+
+        // 初始化
+        if self.mascot_pos.x == 0.0 && self.mascot_pos.y == 0.0 {
+            self.mascot_pos = egui::pos2(min_x + 80.0, platforms[1].0);
+            self.mascot_platform_idx = 1;
+            self.mascot_activity = 0;
+            self.mascot_dir_x = 1.0;
+            self.mascot_squash = 1.0;
+            self.mascot_action_timer = 1.5;
+        }
+
+        // 以「真實音訊頻譜能量」判斷是否真有音樂在播放
+        let spectrum_energy: f32 = self.spectrum_vis.current.iter().sum::<f32>() / 16.0;
+        let has_real_music = (spectrum_energy > 0.012 || self.meter_level > 0.025) && !self.state.is_muted;
+        let is_rhythm_mode = has_real_music && self.state.mascot_rhythm_dance;
+        let time_sec = ui.input(|i| i.time);
+
+        // 滑鼠靠近驅趕（Scamper Dodge）：滑鼠靠近時驚嚇快跑！
+        let pointer_pos = ui.input(|i| i.pointer.hover_pos().or(i.pointer.latest_pos()));
+        if let Some(m_pos) = pointer_pos {
+            let dist_to_mouse = (m_pos - self.mascot_pos).length();
+            // 在空中極速向上衝刺時給予短暫慣性保護，其餘情況滑鼠一靠近即觸發驚嚇驅趕！
+            if dist_to_mouse < 52.0 && self.mascot_activity != 2 && !(self.mascot_activity == 5 && self.mascot_vel_y < -60.0) {
+                let flee_dir = if m_pos.x > self.mascot_pos.x { -1.0 } else { 1.0 };
+                self.mascot_dir_x = flee_dir;
+                self.mascot_action_timer = 1.2;
+                if self.mascot_bounce == 0.0 {
+                    self.mascot_bounce = -6.0;
+                }
+
+                // ⭐ 唯一結束頻譜特權的條件：滑鼠靠近驅趕！
+                self.mascot_spectrum_privilege = false;
+
+                if self.mascot_platform_idx == 7 {
+                    // 當使用者將滑鼠靠近驅趕時，幽靈受到驚嚇，立即解除頻譜特權並逃離頻譜！
+                    self.mascot_platform_idx = 9; // 解除特權，目標設為最底層地板
+                    if self.mascot_activity == 5 {
+                        // 若正在空中彈跳，驚嚇向下俯衝自由落體至底板
+                        self.mascot_activity = 2;
+                        self.mascot_vel_y = 140.0;
+                        self.mascot_squash = 0.70;
+                    } else {
+                        // 在頻譜地面時驚慌快跑逃向最底層地板
+                        self.mascot_activity = 4;
+                        self.mascot_pos.y = platforms[9].0;
+                    }
+                } else {
+                    self.mascot_activity = 4; // Scamper 快跑逃跑！
+                }
+            }
+        }
+
+        // 彈跳與落地擠壓（Squash & Stretch）物理衰減
+        if (self.mascot_squash - 1.0).abs() > 0.01 {
+            self.mascot_squash += (1.0 - self.mascot_squash) * (dt * 12.0);
+        } else {
+            self.mascot_squash = 1.0;
+        }
+        if self.mascot_bounce.abs() > 0.05 {
+            self.mascot_bounce += (-self.mascot_bounce * 14.0) * dt;
+        } else {
+            self.mascot_bounce = 0.0;
+        }
+
+        let pseudo_rand = ((time_sec * 1000.0) as u64)
+            ^ (self.mascot_pos.x as u64).wrapping_mul(37)
+            ^ (self.mascot_pos.y as u64).wrapping_mul(149);
+
+        // 計算幽靈踏在 16 頻段即時音訊頻譜頂端的高度與音浪能量
+        let get_spectrum_bar_surface = Self::get_spectrum_bar_surface;
+
+        // 2. 地形地貌有限狀態機 (FSM)
+        let mut visual_angle = 0.0_f32;
+        let mut foot_step_y = 0.0_f32;
+        let mut foot_tilt = 0.0_f32;
+
+        match self.mascot_activity {
+            // 狀態 0：在字串/按鈕/屋頂/頻譜上海浪衝浪行走 (WalkingFloor)
+            0 => {
+                let p = platforms[self.mascot_platform_idx];
+                let walk_speed = 54.0_f32; // 步伐輕快活潑
+                self.mascot_pos.x += self.mascot_dir_x * walk_speed * dt;
+
+                // 腳步輕微步伐搖晃 (步態動畫)
+                foot_step_y = -((time_sec * 11.0).sin().abs() as f32) * 2.2;
+                foot_tilt = ((time_sec * 11.0).sin() as f32) * 0.08 * self.mascot_dir_x;
+
+                // 🎵 核心震撼亮點：雙腳站立在頻譜頂端峰值衝浪，並隨動態音浪猛烈彈飛！
+                if self.mascot_platform_idx == 7 {
+                    if let Some(sr) = self.mascot_spectrum_rect {
+                        let (bar_top_y, effective_lvl) = get_spectrum_bar_surface(sr, self.mascot_pos.x, &self.spectrum_vis.current, &self.spectrum_vis.peaks);
+                        // 雙腳直接踩在柱狀圖峰值頂端，緊貼動態波浪！
+                        self.mascot_pos.y = bar_top_y;
+                        foot_step_y -= effective_lvl * 5.0;
+                        foot_tilt += effective_lvl * 0.35 * self.mascot_dir_x;
+
+                        // 🚀 頻譜猛烈彈飛衝浪機制！
+                        // 當踏上的柱子音浪強烈升起（如重低音鼓點擊中），立即如彈簧床般猛烈將小幽靈「彈飛至半空中翻滾衝浪」！
+                        if effective_lvl > 0.40 && (pseudo_rand % 100 < 55) {
+                            self.mascot_activity = 5; // Launch into air!
+                            self.mascot_vel_y = -260.0 - effective_lvl * 200.0; // 狂暴高空彈飛！
+                            self.mascot_bounce = -16.0;
+                            self.mascot_squash = 0.52; // 彈飛瞬間強烈形變
+                        }
+                    } else {
+                        self.mascot_pos.y = p.0;
+                    }
+                } else {
+                    self.mascot_pos.y = p.0;
+                }
+
+                // 定時觸發自主決策（告別呆板路徑！每 1.2~2.4 秒必有生動動作：跳樓、大跳躍、衝浪調頭）
+                self.mascot_action_timer -= dt;
+                if self.mascot_action_timer <= 0.0 {
+                    self.mascot_action_timer = 1.2 + (pseudo_rand % 12) as f32 * 0.1;
+                    let roll = pseudo_rand % 100;
+
+                    if self.mascot_platform_idx == 9 {
+                        // 在底層地面：65% 機率「火箭大跳躍」直衝頻譜或中層元件！
+                        if roll < 65 {
+                            self.mascot_activity = 5; // Jumping
+                            self.mascot_vel_y = -360.0;
+                            self.mascot_bounce = -12.0;
+                            self.mascot_squash = 0.60;
+                        } else {
+                            // 轉身折返
+                            self.mascot_dir_x = -self.mascot_dir_x;
+                            self.mascot_bounce = -6.0;
+                        }
+                    } else if self.mascot_platform_idx == 7 {
+                        // 在頻譜頂端衝浪自主決策：
+                        if self.mascot_spectrum_privilege {
+                            // 🌟 右鍵彩蛋特權期間：連續高空大彈跳起飛與踩浪衝浪！
+                            if roll < 65 {
+                                self.mascot_activity = 5;
+                                self.mascot_vel_y = -280.0;
+                                self.mascot_bounce = -14.0;
+                                self.mascot_squash = 0.55;
+                            } else {
+                                self.mascot_dir_x = -self.mascot_dir_x;
+                            }
+                        } else {
+                            // 常態漫遊：可往上起跳探訪上方障礙物 (Platform 6, 5...) 或走往邊界下落
+                            if roll < 45 {
+                                self.mascot_activity = 5;
+                                self.mascot_vel_y = -260.0;
+                                self.mascot_bounce = -10.0;
+                                self.mascot_squash = 0.65;
+                            } else if roll < 75 {
+                                self.mascot_dir_x = -self.mascot_dir_x;
+                            } else {
+                                self.mascot_activity = 2;
+                                self.mascot_vel_y = 60.0;
+                                self.mascot_bounce = -8.0;
+                            }
+                        }
+                    } else if self.mascot_platform_idx <= 3 {
+                        // 在最頂部 (標題列與頂端按鈕)：絕不往天花板跳！高達 80% 機率直接往下跳樓墜落！
+                        if roll < 80 {
+                            // 縱身一躍往下跳樓！
+                            self.mascot_activity = 2; // Falling!
+                            self.mascot_vel_y = 75.0;
+                            self.mascot_bounce = -8.0;
+                            self.mascot_squash = 0.72;
+                            // 若有音樂播放，引導往頻譜中心墜落
+                            if has_real_music {
+                                let spec_center = (spec_x_min + spec_x_max) * 0.5;
+                                self.mascot_dir_x = if self.mascot_pos.x < spec_center { 1.0 } else { -1.0 };
+                            }
+                        } else {
+                            // 折返走向邊界懸崖
+                            self.mascot_dir_x = -self.mascot_dir_x;
+                        }
+                    } else {
+                        // 在中層元件上 (4, 5, 6, 8)：
+                        if roll < 65 {
+                            // 🎲 隨機跳樓！縱身一躍自由落體（常落在頻譜上！）
+                            self.mascot_activity = 2; // Falling!
+                            self.mascot_vel_y = 60.0;
+                            self.mascot_bounce = -8.0;
+                            self.mascot_squash = 0.75;
+                        } else if roll < 85 {
+                            // 向上起跳探險！
+                            self.mascot_activity = 5;
+                            self.mascot_vel_y = -240.0;
+                            self.mascot_bounce = -10.0;
+                            self.mascot_squash = 0.65;
+                        } else {
+                            // 轉身折返
+                            self.mascot_dir_x = -self.mascot_dir_x;
+                        }
+                    }
+                }
+                // 檢查是否遇到左側邊緣或懸崖
+                else if self.mascot_dir_x < 0.0 && self.mascot_pos.x <= p.1 {
+                    self.mascot_pos.x = p.1;
+                    if p.3 {
+                        // 走過字串左邊界：前方無地板，100% 墜落或俯衝跳樓！
+                        self.mascot_activity = 2; // Falling!
+                        self.mascot_vel_y = 60.0;
+                        self.mascot_bounce = -6.0;
+                    } else {
+                        // 遇到視窗左側邊緣：邊緣立刻靈活轉彎或蹬牆飛躍（不再呆板直走）！
+                        let roll = pseudo_rand % 100;
+                        if roll < 60 {
+                            // 即刻 180° 調頭轉彎奔跑！
+                            self.mascot_dir_x = 1.0;
+                            self.mascot_bounce = -8.0;
+                            self.mascot_squash = 0.75;
+                        } else if roll < 85 {
+                            // 蹬牆大跳躍反彈回室內！
+                            self.mascot_activity = 5;
+                            self.mascot_dir_x = 1.0;
+                            self.mascot_vel_y = -210.0;
+                        } else {
+                            self.mascot_activity = 1; // 爬上左牆
+                            self.mascot_dir_y = if self.mascot_platform_idx == 0 { 1.0 } else { -1.0 };
+                        }
+                    }
+                }
+                // 檢查是否遇到右側邊緣或懸崖
+                else if self.mascot_dir_x > 0.0 && self.mascot_pos.x >= p.2 {
+                    self.mascot_pos.x = p.2;
+                    if p.4 {
+                        // 走過字串右邊界：前方無地板，100% 墜落或俯衝跳樓！
+                        self.mascot_activity = 2; // Falling!
+                        self.mascot_vel_y = 60.0;
+                        self.mascot_bounce = -6.0;
+                    } else {
+                        // 遇到視窗右側邊緣：邊緣立刻靈活轉彎或蹬牆飛躍！
+                        let roll = pseudo_rand % 100;
+                        if roll < 60 {
+                            // 即刻 180° 調頭轉彎奔跑！
+                            self.mascot_dir_x = -1.0;
+                            self.mascot_bounce = -8.0;
+                            self.mascot_squash = 0.75;
+                        } else if roll < 85 {
+                            // 蹬牆大跳躍反彈回室內！
+                            self.mascot_activity = 5;
+                            self.mascot_dir_x = -1.0;
+                            self.mascot_vel_y = -210.0;
+                        } else {
+                            self.mascot_activity = 1; // 爬上右牆
+                            self.mascot_dir_y = if self.mascot_platform_idx == 0 { 1.0 } else { -1.0 };
+                        }
+                    }
+                }
+            }
+
+            // 狀態 1：垂直攀爬邊緣外牆 (ClimbingWall)
+            1 => {
+                let climb_speed = 36.0_f32;
+                self.mascot_pos.y += self.mascot_dir_y * climb_speed * dt;
+
+                let is_left = (self.mascot_pos.x - left_wall_x).abs() < (self.mascot_pos.x - right_wall_x).abs();
+                self.mascot_pos.x = if is_left { left_wall_x } else { right_wall_x };
+
+                // 幸運物貼牆時雙腳緊抓牆壁、頭朝向視窗內部
+                visual_angle = if is_left {
+                    std::f32::consts::FRAC_PI_2 * 0.9
+                } else {
+                    -std::f32::consts::FRAC_PI_2 * 0.9
+                };
+                foot_tilt = ((time_sec * 12.0).sin() as f32) * 0.08;
+
+                // 爬牆時不再像呆板電梯一樣一直爬！定時蹬牆跳入室內或折返
+                self.mascot_action_timer -= dt;
+                if self.mascot_action_timer <= 0.0 {
+                    self.mascot_action_timer = 0.8 + (pseudo_rand % 8) as f32 * 0.1;
+                    let roll = (pseudo_rand >> 3) % 100;
+                    if roll < 65 {
+                        // 蹬牆跳入室內！常直接落入頻譜或中間元件
+                        self.mascot_activity = 5;
+                        self.mascot_dir_x = if is_left { 1.0 } else { -1.0 };
+                        self.mascot_vel_y = -160.0;
+                        self.mascot_bounce = -8.0;
+                    } else if roll < 90 {
+                        // 爬到一半折返回頭！
+                        self.mascot_dir_y = -self.mascot_dir_y;
+                    }
+                }
+
+                // 檢查是否攀爬經過某個字串/按鈕平台的水平高度，決定要不要踏上字串
+                for (idx, p) in platforms.iter().enumerate() {
+                    if (self.mascot_pos.y - p.0).abs() < 5.0 && self.mascot_platform_idx != idx {
+                        let is_near_edge = (is_left && (p.1 - left_wall_x).abs() < 16.0)
+                            || (!is_left && (p.2 - right_wall_x).abs() < 16.0);
+                        if is_near_edge {
+                            let roll = (pseudo_rand >> 8) % 100;
+                            if roll < 65 {
+                                self.mascot_platform_idx = idx;
+                                self.mascot_activity = 0;
+                                self.mascot_dir_x = if is_left { 1.0 } else { -1.0 };
+                                self.mascot_pos.y = p.0;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // 碰到最頂屋頂或最底面時轉折
+                if self.mascot_pos.y <= wall_min_y {
+                    self.mascot_pos.y = wall_min_y;
+                    self.mascot_activity = 0;
+                    self.mascot_platform_idx = 0;
+                    self.mascot_dir_x = if is_left { 1.0 } else { -1.0 };
+                    self.mascot_bounce = -8.0;
+                    self.mascot_squash = 0.75;
+                } else if self.mascot_pos.y >= wall_max_y {
+                    self.mascot_pos.y = wall_max_y;
+                    self.mascot_activity = 0;
+                    self.mascot_platform_idx = 9;
+                    self.mascot_dir_x = if is_left { 1.0 } else { -1.0 };
+                }
+            }
+
+            // 狀態 2：懸崖墜落 (Falling with Gravity)
+            2 => {
+                let gravity = 540.0_f32;
+                self.mascot_vel_y += gravity * dt;
+                self.mascot_pos.y += self.mascot_vel_y * dt;
+                self.mascot_pos.x += self.mascot_dir_x * 18.0 * dt; // 墜落時帶有些微慣性飄移
+
+                // 墜落時身體直立、小幅驚恐晃動
+                visual_angle = ((time_sec * 18.0).sin() as f32) * 0.15;
+
+                // 找尋下方最近且包含目前 X 座標的著陸字串/平台
+                // 排除起跳平台自身（高度至少需比起跳點低 12px），徹底防止「跳樓瞬間 1 幀立即著陸原地蹲跳」的 Bug！
+                let origin_platform_y = platforms[self.mascot_platform_idx].0;
+                let mut landed = false;
+
+                // 1. 若無右鍵特權（常態漫遊）：優先依序精準碰撞上方所有障礙物（標籤、裝置名稱、滑桿等）！
+                if !self.mascot_spectrum_privilege {
+                    for (idx, p) in platforms.iter().enumerate() {
+                        if idx != 7
+                            && p.0 > origin_platform_y + 12.0
+                            && self.mascot_pos.y >= p.0
+                            && (self.mascot_pos.y - p.0) < 32.0
+                            && self.mascot_pos.x >= p.1 - 10.0
+                            && self.mascot_pos.x <= p.2 + 10.0
+                        {
+                            self.mascot_pos.y = p.0;
+                            self.mascot_platform_idx = idx;
+                            self.mascot_activity = 0;
+                            self.mascot_squash = 0.60;
+                            self.mascot_bounce = -8.0;
+                            self.mascot_vel_y = 0.0;
+                            landed = true;
+                            break;
+                        }
+                    }
+                }
+
+                // 2. 若上方障礙物未攔截，或擁有右鍵彩蛋特權時：檢測是否落在頻譜柱狀圖頂端！
+                if !landed && self.mascot_platform_idx != 9 {
+                    if let Some(sr) = self.mascot_spectrum_rect {
+                        if self.mascot_pos.x >= sr.min.x - 12.0 && self.mascot_pos.x <= sr.max.x + 12.0 {
+                            let (bar_top_y, effective_lvl) = get_spectrum_bar_surface(sr, self.mascot_pos.x, &self.spectrum_vis.current, &self.spectrum_vis.peaks);
+                            // 只要幽靈下墜進入頻譜並抵達柱狀圖頂端：精準著陸！
+                            if self.mascot_pos.y >= bar_top_y && (self.mascot_pos.y - bar_top_y) < 36.0 {
+                                self.mascot_pos.y = bar_top_y;
+                                self.mascot_platform_idx = 7;
+                                // 若擁有彩蛋特權且帶有音浪：高空彈飛衝浪！若無特權則一般踏浪行走
+                                if self.mascot_spectrum_privilege && (effective_lvl > 0.20 || pseudo_rand % 100 < 85) {
+                                    self.mascot_activity = 5;
+                                    self.mascot_vel_y = -260.0 - effective_lvl * 150.0;
+                                    self.mascot_bounce = -14.0;
+                                    self.mascot_squash = 0.52;
+                                } else {
+                                    self.mascot_activity = 0;
+                                    self.mascot_squash = 0.60;
+                                    self.mascot_bounce = -8.0;
+                                    self.mascot_vel_y = 0.0;
+                                }
+                                landed = true;
+                            }
+                        }
+                    }
+                }
+
+                // 若一路摔到底部
+                if !landed && self.mascot_pos.y >= platforms[9].0 {
+                    self.mascot_pos.y = platforms[9].0;
+                    self.mascot_platform_idx = 9;
+                    self.mascot_activity = 0;
+                    self.mascot_squash = 0.55;
+                    self.mascot_bounce = -10.0;
+                    self.mascot_vel_y = 0.0;
+                }
+            }
+
+            // 狀態 3：地上停步小憩 (IdleOnFloor)
+            3 => {
+                self.mascot_action_timer -= dt;
+                foot_step_y = ((time_sec * 3.5).sin() as f32) * 0.6;
+                if self.mascot_action_timer <= 0.0 {
+                    // 小憩結束時如果在高處平台：35% 機率「自己跳樓」縱身一躍自由落體！
+                    if !is_rhythm_mode && self.mascot_platform_idx < 9 && ((pseudo_rand >> 5) % 100 < 35) {
+                        self.mascot_activity = 2; // Falling!
+                        self.mascot_vel_y = 50.0;
+                        self.mascot_bounce = -6.0;
+                        self.mascot_squash = 0.8;
+                        return;
+                    }
+                    // 小憩結束時，有機會主動跳出視窗或竄訪其他視窗
+                    if !other_windows.is_empty() && ((pseudo_rand >> 6) % 100 < 35) {
+                        let target = other_windows[(pseudo_rand as usize >> 4) % other_windows.len()];
+                        self.mascot_window = target;
+                        let target_w = target.default_size()[0];
+                        self.mascot_pos.x = target_w * 0.5;
+                        self.mascot_pos.y = 32.0;
+                        self.mascot_platform_idx = 1;
+                        self.mascot_activity = 0;
+                        self.mascot_bounce = -12.0;
+                        self.mascot_squash = 0.7;
+                        return;
+                    }
+                    self.mascot_activity = 0;
+                }
+            }
+
+            // 狀態 4：受到驚嚇快跑閃躲 (Scamper)
+            4 => {
+                let p = platforms[self.mascot_platform_idx];
+                let run_speed = 76.0_f32;
+                self.mascot_pos.x += self.mascot_dir_x * run_speed * dt;
+                self.mascot_pos.y = p.0;
+                foot_step_y = -((time_sec * 18.0).sin().abs() as f32) * 3.0;
+                foot_tilt = ((time_sec * 18.0).sin() as f32) * 0.14 * self.mascot_dir_x;
+
+                self.mascot_action_timer -= dt;
+
+                if self.mascot_dir_x < 0.0 && self.mascot_pos.x <= p.1 {
+                    self.mascot_pos.x = p.1;
+                    if p.3 {
+                        // 逃跑時衝出字串懸崖！自由落體跳樓墜落！
+                        self.mascot_activity = 2;
+                        self.mascot_vel_y = 60.0;
+                        self.mascot_bounce = -6.0;
+                    } else {
+                        // 遇到視窗外緣，主動跳出視窗！
+                        if !other_windows.is_empty() && ((pseudo_rand >> 4) % 100 < 75) {
+                            let target = other_windows[(pseudo_rand as usize >> 5) % other_windows.len()];
+                            self.mascot_window = target;
+                            let target_w = target.default_size()[0];
+                            let target_h = target.default_size()[1];
+                            self.mascot_pos.x = target_w - 12.0;
+                            self.mascot_pos.y = self.mascot_pos.y.clamp(12.0, target_h - 16.0);
+                            self.mascot_dir_x = -1.0;
+                            self.mascot_bounce = -14.0;
+                            self.mascot_squash = 0.65;
+                            self.mascot_activity = 0;
+                            return;
+                        }
+                        // 單一視窗時，躍上牆壁逃竄！
+                        self.mascot_activity = 1;
+                        self.mascot_dir_y = -1.0;
+                    }
+                } else if self.mascot_dir_x > 0.0 && self.mascot_pos.x >= p.2 {
+                    self.mascot_pos.x = p.2;
+                    if p.4 {
+                        // 逃跑時衝出字串懸崖！自由落體跳樓墜落！
+                        self.mascot_activity = 2;
+                        self.mascot_vel_y = 60.0;
+                        self.mascot_bounce = -6.0;
+                    } else {
+                        if !other_windows.is_empty() && ((pseudo_rand >> 4) % 100 < 75) {
+                            let target = other_windows[(pseudo_rand as usize >> 5) % other_windows.len()];
+                            self.mascot_window = target;
+                            let target_h = target.default_size()[1];
+                            self.mascot_pos.x = 12.0;
+                            self.mascot_pos.y = self.mascot_pos.y.clamp(12.0, target_h - 16.0);
+                            self.mascot_dir_x = 1.0;
+                            self.mascot_bounce = -14.0;
+                            self.mascot_squash = 0.65;
+                            self.mascot_activity = 0;
+                            return;
+                        }
+                        self.mascot_activity = 1;
+                        self.mascot_dir_y = -1.0;
+                    }
+                } else if self.mascot_action_timer <= 0.0 {
+                    self.mascot_activity = 0;
+                }
+            }
+
+            // 狀態 5：主動跳躍、音浪彈飛與空中衝浪翻滾 (Active Jumping / Air Surfing)
+            5 => {
+                let gravity = 540.0_f32;
+                self.mascot_vel_y += gravity * dt;
+                self.mascot_pos.y += self.mascot_vel_y * dt;
+                self.mascot_pos.x += self.mascot_dir_x * 58.0 * dt;
+
+                // 往上起跳時若撞到視窗頂部邊緣：頭部觸頂反彈（像瑪利歐頂磚塊，頭部完全不超出視窗）
+                if self.mascot_pos.y < min_y + 16.0 {
+                    self.mascot_pos.y = min_y + 16.0;
+                    self.mascot_vel_y = 60.0; // 頂到天花板反彈下落
+                    self.mascot_squash = 0.72;
+                    self.mascot_activity = 2; // Falling
+                }
+
+                // 🏄 空中特技翻滾（Air Surf 360° Flip）：
+                // 當從小頻譜彈飛或在空中飛行時，若擁有右鍵特權，展現超炫空中 360° 連續翻滾衝浪旋轉！
+                if self.mascot_spectrum_privilege {
+                    visual_angle = (time_sec * 13.0) as f32 * self.mascot_dir_x;
+                } else {
+                    visual_angle = (self.mascot_vel_y * 0.0015).clamp(-0.35, 0.35) * self.mascot_dir_x;
+                }
+
+                // 下墜時檢查是否著陸：
+                if self.mascot_vel_y > 0.0 {
+                    let mut landed = false;
+
+                    // 1. 若無右鍵特權（常態漫遊）：優先檢測上方所有障礙物（音量滑桿、標籤、按鈕等），障礙物 100% 正常生效！
+                    if !self.mascot_spectrum_privilege {
+                        let origin_platform_y = platforms[self.mascot_platform_idx].0;
+                        for (idx, p) in platforms.iter().enumerate() {
+                            if idx != 7
+                                && (idx != self.mascot_platform_idx || (self.mascot_pos.y - origin_platform_y).abs() > 20.0)
+                                && self.mascot_pos.y >= p.0
+                                && (self.mascot_pos.y - p.0) < 28.0
+                                && self.mascot_pos.x >= p.1 - 10.0
+                                && self.mascot_pos.x <= p.2 + 10.0
+                            {
+                                self.mascot_pos.y = p.0;
+                                self.mascot_platform_idx = idx;
+                                self.mascot_activity = 0;
+                                self.mascot_squash = 0.62;
+                                self.mascot_bounce = -7.0;
+                                self.mascot_vel_y = 0.0;
+                                landed = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    // 2. 若上方障礙物未攔截，或擁有右鍵彩蛋特權（排除障礙物）時：檢測是否落在頻譜柱狀圖頂端！
+                    if !landed {
+                        if let Some(sr) = self.mascot_spectrum_rect {
+                            if self.mascot_pos.x >= sr.min.x - 6.0 && self.mascot_pos.x <= sr.max.x + 6.0 {
+                                let (bar_top_y, effective_lvl) = get_spectrum_bar_surface(sr, self.mascot_pos.x, &self.spectrum_vis.current, &self.spectrum_vis.peaks);
+                                if self.mascot_pos.y >= bar_top_y && (self.mascot_pos.y - bar_top_y) < 32.0 {
+                                    self.mascot_pos.y = bar_top_y;
+                                    self.mascot_platform_idx = 7;
+                                    // 🎵 只有右鍵特權期間才維持連續高空彈簧床彈跳；常態下著陸踩浪行走
+                                    if self.mascot_spectrum_privilege && (effective_lvl > 0.20 || pseudo_rand % 100 < 80) {
+                                        self.mascot_activity = 5;
+                                        self.mascot_vel_y = -240.0 - effective_lvl * 150.0;
+                                        self.mascot_bounce = -14.0;
+                                        self.mascot_squash = 0.55;
+                                    } else {
+                                        self.mascot_activity = 0;
+                                        self.mascot_squash = 0.62;
+                                        self.mascot_bounce = -8.0;
+                                        self.mascot_vel_y = 0.0;
+                                    }
+                                    landed = true;
+                                }
+                            }
+                        }
+                    }
+
+                    // 3. 落到最底層堅實地板
+                    if !landed && self.mascot_pos.y >= platforms[9].0 {
+                        self.mascot_pos.y = platforms[9].0;
+                        self.mascot_platform_idx = 9;
+                        self.mascot_activity = 0;
+                        self.mascot_squash = 0.55;
+                        self.mascot_bounce = -10.0;
+                        self.mascot_vel_y = 0.0;
+                    }
+                }
+
+                // 飛越過深時轉為墜落（若不是在頻譜衝浪）
+                if self.mascot_platform_idx != 7 && self.mascot_vel_y > 220.0 {
+                    self.mascot_activity = 2; // Falling
+                }
+            }
+
+            _ => { self.mascot_activity = 0; }
+        }
+
+        // 3. 狀態 B：音樂節奏點頭律動（站在地上打拍子跳舞）
+        let mut rhythm_bounce_y = 0.0_f32;
+        let mut rhythm_tilt = 0.0_f32;
+        if is_rhythm_mode && self.mascot_activity != 2 {
+            let meter = self.meter_level.clamp(0.0, 1.0);
+            let beat_speed = 9.5; // ~120 bpm
+            let wave = (time_sec * beat_speed).sin().abs() as f32;
+            let amp = 4.0 + meter * 5.5;
+            rhythm_bounce_y = -wave * amp;
+            rhythm_tilt = ((time_sec * 4.8).sin() as f32) * (0.16 + meter * 0.1);
+        }
+
+        // 4. 計算最終著色幾何變換 (直立朝上、著陸擠壓、步伐起伏、音樂彈跳)
+        let total_y_offset = self.mascot_bounce + rhythm_bounce_y + foot_step_y;
+        let mut final_pos = egui::pos2(self.mascot_pos.x, self.mascot_pos.y + total_y_offset);
+        let final_angle = visual_angle + foot_tilt + rhythm_tilt;
+
+        let base_size = 22.0_f32;
+        let size_x = base_size * (2.0 - self.mascot_squash);
+        let size_y = base_size * self.mascot_squash;
+        let mascot_size = egui::vec2(size_x, size_y);
+
+        // 徹底杜絕截頭與截腳：根據當前幽靈變形後的半徑施加動態安全邊距約束，
+        // 確保幽靈從眨眼、身體到裙擺的所有像素 100% 完整呈現在視窗邊界內！
+        let safe_margin_x = (mascot_size.x * 0.5 + 2.0).ceil();
+        let safe_margin_y = (mascot_size.y * 0.5 + 2.0).ceil();
+        final_pos.x = final_pos.x.clamp(min_x + safe_margin_x, min_x + w - safe_margin_x);
+        final_pos.y = final_pos.y.clamp(min_y + safe_margin_y, min_y + h - safe_margin_y);
+
+        let mascot_rect = egui::Rect::from_center_size(final_pos, mascot_size.max(egui::vec2(28.0, 28.0)));
+        let hover_hint = if self.state.license_tier.is_supporter_or_unpackaged() {
+            self.state.language.mascot_easter_egg_hint()
+        } else {
+            self.state.language.mascot_rhythm_hint()
+        };
+        let resp = ui.allocate_rect(mascot_rect, egui::Sense::click())
+            .on_hover_text(hover_hint);
+
+        // 驅趕與互動 (Click & Secondary Click)
+        // ⭐ 頻譜區域內滑鼠右鍵召喚：在頻譜區域內按右鍵（或右鍵幽靈），立刻將小幽靈召喚至該頻段頂端並展開大彈飛空翻！
+        let is_pointer_in_spectrum = if let Some(sr) = self.mascot_spectrum_rect {
+            pointer_pos.map(|p| sr.expand(4.0).contains(p)).unwrap_or(false)
+        } else {
+            false
+        };
+        let right_clicked_spectrum = is_pointer_in_spectrum && ui.input(|i| i.pointer.secondary_clicked());
+
+        if right_clicked_spectrum || resp.secondary_clicked() {
+            if let Some(sr) = self.mascot_spectrum_rect {
+                self.trigger_mascot_air_surf_summon(window_kind, sr, pointer_pos);
+            }
+        } else if resp.clicked() {
+            self.mascot_bounce = -14.0;
+            self.mascot_squash = 0.65;
+            if self.mascot_platform_idx <= 3 {
+                // 在頂層按鈕/標題列點擊驅趕：直接縱身俯衝跳樓！直奔頻譜！
+                self.mascot_activity = 2;
+                self.mascot_vel_y = 120.0;
+                self.mascot_dir_x = if self.mascot_pos.x < (spec_x_min + spec_x_max) * 0.5 { 1.0 } else { -1.0 };
+            } else if self.mascot_platform_idx == 7 {
+                // 在頻譜上點擊：施展狂暴高空彈飛衝浪！
+                self.mascot_activity = 5;
+                self.mascot_vel_y = -340.0;
+                self.mascot_bounce = -16.0;
+                self.mascot_squash = 0.50;
+            } else if self.mascot_platform_idx < 9 {
+                // 在其他高處點擊：立刻縱身跳樓！
+                self.mascot_activity = 2;
+                self.mascot_vel_y = 90.0;
+            } else {
+                // 在底層點擊：火箭大躍起！
+                self.mascot_activity = 5;
+                self.mascot_vel_y = -350.0;
+            }
+        }
+
+        let win_name = match window_kind {
+            crate::snapping::WindowKind::Main => "主視窗",
+            crate::snapping::WindowKind::MiniPlayer => "迷你播放器",
+            crate::snapping::WindowKind::Equalizer => "等化器",
+            _ => "視窗",
+        };
+        let wander_hint = if !other_windows.is_empty() {
+            "（抵達邊界可穿梭至其他視窗）"
+        } else {
+            ""
+        };
+        resp.on_hover_text(if is_rhythm_mode {
+            format!("👻 幸運物小幽靈：🎵 正在{}踏在頻譜頂端衝浪！被音浪狂暴彈飛～{}\n💡 提示：在頻譜區域內點擊右鍵立刻召喚牠踩浪彈飛！滑鼠靠近可驅趕", win_name, wander_hint)
+        } else {
+            format!("👻 幸運物小幽靈：正在{}巡邏～{}\n💡 提示：在頻譜區域內點擊右鍵立刻召喚牠踩浪彈飛！滑鼠靠近可驅趕", win_name, wander_hint)
+        });
+
+        // 透過全域 LayerPainter 渲染，避免受內部 CentralPanel inner_margin 裁切，
+        // 使幸運物可完整沿著最外側頂部與外邊框暢行無阻
+        let painter = ui.ctx().layer_painter(egui::LayerId::new(
+            egui::Order::Tooltip,
+            egui::Id::new("mascot_overlay_layer"),
+        ));
+
+        // 狀態 B 專屬微光光暈
+        if is_rhythm_mode {
+            let aura_r = 15.0 + (time_sec * 9.5).sin().abs() as f32 * 3.5;
+            painter.circle_filled(
+                final_pos,
+                aura_r,
+                egui::Color32::from_rgba_unmultiplied(255, 215, 0, 32),
+            );
+        }
+
+        // 5. 旋轉貼圖頂點繪製 (全彩原色)
+        if let Some(ghost_tex) = Self::get_ghost_texture(ui.ctx()) {
+            let half = mascot_size * 0.5;
+            let (cos_a, sin_a) = (final_angle.cos(), final_angle.sin());
+            let rot = |off: egui::Vec2| -> egui::Pos2 {
+                egui::pos2(
+                    final_pos.x + off.x * cos_a - off.y * sin_a,
+                    final_pos.y + off.x * sin_a + off.y * cos_a,
+                )
+            };
+            let p0 = rot(egui::vec2(-half.x, -half.y));
+            let p1 = rot(egui::vec2(half.x, -half.y));
+            let p2 = rot(egui::vec2(half.x, half.y));
+            let p3 = rot(egui::vec2(-half.x, half.y));
+
+            let mut mesh = egui::Mesh::with_texture(ghost_tex.id());
+            let tint = egui::Color32::WHITE;
+            let idx = mesh.vertices.len() as u32;
+            mesh.vertices.push(egui::epaint::Vertex { pos: p0, uv: egui::pos2(0.0, 0.0), color: tint });
+            mesh.vertices.push(egui::epaint::Vertex { pos: p1, uv: egui::pos2(1.0, 0.0), color: tint });
+            mesh.vertices.push(egui::epaint::Vertex { pos: p2, uv: egui::pos2(1.0, 1.0), color: tint });
+            mesh.vertices.push(egui::epaint::Vertex { pos: p3, uv: egui::pos2(0.0, 1.0), color: tint });
+            mesh.indices.extend_from_slice(&[idx, idx + 1, idx + 2, idx, idx + 2, idx + 3]);
+            painter.add(mesh);
+        }
+
+        // 保持 60fps 平滑流暢動畫
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(16));
+    }
+
+    /// 計算幽靈踏在 16 頻段即時音訊頻譜頂端的高度與音浪能量
+    pub fn get_spectrum_bar_surface(
+        sr: egui::Rect,
+        pos_x: f32,
+        current: &[f32; 16],
+        peaks: &[f32; 16],
+    ) -> (f32, f32) {
+        let inner = sr.shrink(3.0);
+        let rel_x = ((pos_x - inner.min.x) / inner.width()).clamp(0.0, 1.0);
+        let bar_idx = ((rel_x * 16.0) as usize).clamp(0, 15);
+        let lvl = current[bar_idx].clamp(0.0, 1.0);
+        let peak = peaks[bar_idx].clamp(0.0, 1.0);
+        let effective = lvl.max(peak * 0.94);
+        let bar_h = effective * (inner.height() - 4.0);
+        let bar_top_y = inner.max.y - bar_h - 12.0;
+        (bar_top_y, effective)
+    }
+
+    /// ⭐ 跨視窗即時召喚精靈至指定視窗的頻譜頂部，並觸發空中 360° 特技空翻衝浪
+    pub fn trigger_mascot_air_surf_summon(
+        &mut self,
+        target_window: crate::snapping::WindowKind,
+        spec_rect: egui::Rect,
+        pointer_pos: Option<egui::Pos2>,
+    ) {
+        if !self.state.mascot_enabled {
+            return;
+        }
+        // ⭐ 跨視窗瞬間召喚：無論小精靈身處何處（如主視窗），立刻傳送至該視窗！
+        self.mascot_window = target_window;
+        self.mascot_spectrum_rect = Some(spec_rect);
+
+        if self.state.license_tier.is_supporter_or_unpackaged() {
+            self.mascot_spectrum_privilege = true; // 啟動右鍵彩蛋特權！
+            let target_x = pointer_pos
+                .map(|p| p.x)
+                .unwrap_or(spec_rect.center().x)
+                .clamp(spec_rect.min.x + 8.0, spec_rect.max.x - 8.0);
+            let (bar_top, effective) = Self::get_spectrum_bar_surface(
+                spec_rect,
+                target_x,
+                &self.spectrum_vis.current,
+                &self.spectrum_vis.peaks,
+            );
+            self.mascot_pos.x = target_x;
+            self.mascot_pos.y = bar_top;
+            self.mascot_platform_idx = 7;
+            // 手動召喚：立刻以音浪彈簧床彈射起飛！展開空中 360° 特技空翻！
+            self.mascot_activity = 5;
+            self.mascot_vel_y = -340.0 - effective * 140.0;
+            self.mascot_bounce = -18.0;
+            self.mascot_squash = 0.50;
+        } else {
+            // 非正式版：原地小跳一下，不開啟彩蛋特權
+            self.mascot_bounce = -8.0;
+            self.mascot_squash = 0.75;
+        }
+    }
+
+    pub fn get_ghost_texture(ctx: &egui::Context) -> Option<egui::TextureHandle> {
+        let id = egui::Id::new("app_ghost_emoji_texture");
+        if let Some(handle) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(id)) {
+            return Some(handle);
+        }
+        const GHOST_BYTES: &[u8] = include_bytes!("../assets/ghost_emoji.png");
+        if let Ok(img) = image::load_from_memory(GHOST_BYTES) {
+            let rgba = img.to_rgba8();
+            let size = [rgba.width() as usize, rgba.height() as usize];
+            let color_image = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+            let handle = ctx.load_texture("ghost_emoji", color_image, egui::TextureOptions::LINEAR);
+            ctx.data_mut(|d| d.insert_temp(id, handle.clone()));
+            Some(handle)
+        } else {
+            None
+        }
+    }
+
+    pub fn render_supporter_mascot_modal(&mut self, ui: &mut egui::Ui) {
+        if !self.show_supporter_mascot_modal {
+            return;
+        }
+
+        let ctx = ui.ctx().clone();
+        let screen_rect = ctx.screen_rect();
+        let mut should_close = false;
+        let mut action_clicked = false;
+
+        // 1. 全螢幕半透明遮罩 (Order::Foreground，阻擋並接收點擊)
+        egui::Area::new(egui::Id::new("supporter_mascot_modal_backdrop"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(screen_rect.min)
+            .interactable(true)
+            .show(&ctx, |ui| {
+                ui.set_width(screen_rect.width());
+                ui.set_height(screen_rect.height());
+                ui.painter().rect_filled(screen_rect, 0.0, egui::Color32::from_black_alpha(190));
+                let resp = ui.allocate_rect(screen_rect, egui::Sense::click());
+                if resp.clicked() {
+                    should_close = true;
+                }
+            });
+
+        // 2. 感謝卡片彈窗本體 (Order::Tooltip，保證渲染在遮罩之上且事件優先處理)
+        let modal_w = 400.0f32.min(screen_rect.width() - 32.0);
+        let modal_rect_min = egui::pos2(
+            screen_rect.center().x - modal_w * 0.5,
+            (screen_rect.center().y - 200.0).max(screen_rect.top() + 16.0),
+        );
+
+        let lang = self.state.language;
+        let is_existing_user = self.state.last_connected_name.is_some() || crate::controller::load_last_connected_device().is_some();
+        let title = if is_existing_user {
+            lang.mascot_supporter_modal_title_existing()
+        } else {
+            lang.mascot_supporter_modal_title_new()
+        };
+        let body = if is_existing_user {
+            lang.mascot_supporter_modal_body_existing()
+        } else {
+            lang.mascot_supporter_modal_body_new()
+        };
+        let btn_label = if is_existing_user {
+            lang.mascot_supporter_modal_btn_existing()
+        } else {
+            lang.mascot_supporter_modal_btn_new()
+        };
+
+        egui::Area::new(egui::Id::new("supporter_mascot_modal_card"))
+            .order(egui::Order::Tooltip)
+            .fixed_pos(modal_rect_min)
+            .interactable(true)
+            .show(&ctx, |ui| {
+                ui.set_width(modal_w);
+
+                // ESC 鍵逃生關閉
+                if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    should_close = true;
+                }
+
+                egui::Frame::none()
+                    .fill(egui::Color32::from_rgb(22, 25, 32))
+                    .stroke(egui::Stroke::new(1.5_f32, egui::Color32::from_rgb(255, 205, 80)))
+                    .rounding(egui::Rounding::same(14.0))
+                    .shadow(egui::epaint::Shadow {
+                        offset: egui::vec2(0.0, 8.0),
+                        blur: 24.0_f32,
+                        spread: 2.0_f32,
+                        color: egui::Color32::from_rgba_unmultiplied(0, 0, 0, 180),
+                    })
+                    .inner_margin(egui::Margin { left: 20.0, right: 20.0, top: 12.0, bottom: 20.0 })
+                    .show(ui, |ui| {
+                        // 右上角關閉按鈕 ✕
+                        ui.horizontal(|ui| {
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                let close_btn = egui::Button::new(
+                                    egui::RichText::new("✕")
+                                        .size(15.0)
+                                        .strong()
+                                        .color(egui::Color32::from_rgb(180, 195, 215)),
+                                )
+                                .frame(false);
+                                if ui.add(close_btn).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                                    should_close = true;
+                                }
+                            });
+                        });
+
+                        // 繪製大號精靈與金星動畫
+                        let (mascot_area, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 90.0), egui::Sense::hover());
+                        let mascot_center = mascot_area.center();
+                        let time_sec = ui.input(|i| i.time);
+                        let bounce_y = ((time_sec * 4.5).sin().abs() as f32) * -10.0;
+                        let squash = 1.0 + ((time_sec * 4.5).sin() as f32) * 0.08;
+                        let giant_size = egui::vec2(72.0 * (2.0 - squash), 72.0 * squash);
+                        let giant_pos = egui::pos2(mascot_center.x, mascot_center.y + bounce_y);
+
+                        let painter = ui.painter();
+                        // 金色光暈
+                        painter.circle_filled(
+                            giant_pos,
+                            44.0 + ((time_sec * 3.0).sin().abs() as f32) * 6.0,
+                            egui::Color32::from_rgba_unmultiplied(255, 215, 0, 45),
+                        );
+
+                        // 漂浮小星星 ✨
+                        for i in 0..5 {
+                            let angle = time_sec * 1.8 + (i as f64) * 1.256;
+                            let star_r = 52.0 + ((time_sec * 2.5 + i as f64).sin() as f32) * 8.0;
+                            let sx = giant_pos.x + (angle.cos() as f32) * star_r;
+                            let sy = giant_pos.y + (angle.sin() as f32) * (star_r * 0.6);
+                            let star_alpha = ((time_sec * 4.0 + i as f64).sin().abs() * 200.0 + 55.0) as u8;
+                            painter.circle_filled(
+                                egui::pos2(sx, sy),
+                                3.2,
+                                egui::Color32::from_rgba_unmultiplied(255, 230, 110, star_alpha),
+                            );
+                        }
+
+                        // 大號幽靈貼圖
+                        if let Some(ghost_tex) = Self::get_ghost_texture(ui.ctx()) {
+                            let half = giant_size * 0.5;
+                            let p0 = egui::pos2(giant_pos.x - half.x, giant_pos.y - half.y);
+                            let p1 = egui::pos2(giant_pos.x + half.x, giant_pos.y - half.y);
+                            let p2 = egui::pos2(giant_pos.x + half.x, giant_pos.y + half.y);
+                            let p3 = egui::pos2(giant_pos.x - half.x, giant_pos.y + half.y);
+
+                            let mut mesh = egui::Mesh::with_texture(ghost_tex.id());
+                            let tint = egui::Color32::WHITE;
+                            let idx = mesh.vertices.len() as u32;
+                            mesh.vertices.push(egui::epaint::Vertex { pos: p0, uv: egui::pos2(0.0, 0.0), color: tint });
+                            mesh.vertices.push(egui::epaint::Vertex { pos: p1, uv: egui::pos2(1.0, 0.0), color: tint });
+                            mesh.vertices.push(egui::epaint::Vertex { pos: p2, uv: egui::pos2(1.0, 1.0), color: tint });
+                            mesh.vertices.push(egui::epaint::Vertex { pos: p3, uv: egui::pos2(0.0, 1.0), color: tint });
+                            mesh.indices.extend_from_slice(&[idx, idx + 1, idx + 2, idx, idx + 2, idx + 3]);
+                            painter.add(mesh);
+                        }
+
+                        ui.add_space(8.0);
+
+                        // 標題、內文與操作按鈕
+                        ui.vertical_centered(|ui| {
+                            ui.label(
+                                egui::RichText::new(title)
+                                    .strong()
+                                    .size(15.5)
+                                    .color(egui::Color32::from_rgb(255, 220, 120)),
+                            );
+                            ui.add_space(8.0);
+
+                            ui.label(
+                                egui::RichText::new(body)
+                                    .size(12.0)
+                                    .color(egui::Color32::from_rgb(225, 230, 240)),
+                            );
+                            ui.add_space(16.0);
+
+                            let btn = egui::Button::new(
+                                egui::RichText::new(btn_label)
+                                    .strong()
+                                    .size(13.0)
+                                    .color(egui::Color32::from_rgb(20, 24, 30)),
+                            )
+                            .fill(egui::Color32::from_rgb(255, 210, 80))
+                            .rounding(egui::Rounding::same(8.0))
+                            .min_size(egui::vec2(220.0, 36.0));
+
+                            if ui.add(btn).clicked() {
+                                action_clicked = true;
+                            }
+                        });
+                    });
+            });
+
+        if action_clicked {
+            self.show_supporter_mascot_modal = false;
+            let _ = self.cmd_tx.send_blocking(crate::controller::GuiCmd::SetMascotSupporterSecretRevealed(true));
+            self.mascot_bounce = -16.0;
+            self.mascot_squash = 0.55;
+            // ⭐ 支持者盛典揭密禮遇：若迷你播放器已開啟，主動將小精靈召喚至迷你播放器頻譜頂部，讓使用者一目了然！
+            if self.mini_player_window_open {
+                self.mascot_window = crate::snapping::WindowKind::MiniPlayer;
+                if let Some(sr) = self.mascot_spectrum_rect {
+                    self.mascot_pos.x = sr.center().x;
+                    self.mascot_pos.y = sr.min.y;
+                    self.mascot_platform_idx = 7;
+                }
+            }
+        } else if should_close {
+            self.show_supporter_mascot_modal = false;
+            let _ = self.cmd_tx.send_blocking(crate::controller::GuiCmd::SetMascotSupporterSecretRevealed(true));
+        }
+
+        // 持續以 60 FPS 刷新動畫
+        ctx.request_repaint_after(std::time::Duration::from_millis(16));
+    }
+
+    pub fn render_opacity_popup_content(
+        ui: &mut egui::Ui,
+        kind: crate::snapping::WindowKind,
+        trigger_rect: Option<egui::Rect>,
+    ) {
+        let cur_op = crate::snapping::get_window_opacity(kind);
+        let cur_pct = (cur_op * 100.0).round() as u32;
+
+        ui.set_width(220.0);
+        ui.set_max_width(220.0);
+        ui.spacing_mut().item_spacing = egui::vec2(5.0, 6.0);
+        ui.spacing_mut().button_padding = egui::vec2(0.0, 2.0);
+
+        // 套用視覺視窗同款淺天藍色主視覺主題 (Sky Blue / Cyan Accent Theme #38bdf8)
+        let sky_blue = egui::Color32::from_rgb(56, 189, 248);
+        let sky_blue_hover = egui::Color32::from_rgb(125, 211, 252);
+        let sky_blue_active = egui::Color32::from_rgb(14, 165, 233);
+
+        ui.visuals_mut().selection.bg_fill = sky_blue;
+        ui.visuals_mut().selection.stroke = egui::Stroke::new(1.0_f32, sky_blue_hover);
+        ui.visuals_mut().widgets.inactive.bg_fill = egui::Color32::from_rgba_unmultiplied(255, 255, 255, 30);
+        ui.visuals_mut().widgets.hovered.bg_fill = sky_blue_hover;
+        ui.visuals_mut().widgets.hovered.fg_stroke.color = sky_blue;
+        ui.visuals_mut().widgets.active.bg_fill = sky_blue_active;
+        ui.visuals_mut().widgets.active.fg_stroke.color = sky_blue;
+
+        // 頂部標題與目前百分比高亮
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new("🎯 視窗透明度")
+                    .strong()
+                    .size(12.0)
+                    .color(egui::Color32::WHITE),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(
+                    egui::RichText::new(format!("{cur_pct}%"))
+                        .strong()
+                        .size(13.0)
+                        .color(sky_blue),
+                );
+            });
+        });
+
+        // 專屬淺天藍色滿版微互動滑桿 (20% ~ 100%，高亮淺天藍色左側進度軌道 + 實心淺天藍色旋鈕)
+        let total_slider_w = ui.available_width();
+        let slider_area_h = 24.0_f32;
+        let (slider_rect, slider_resp) = ui.allocate_exact_size(
+            egui::vec2(total_slider_w, slider_area_h),
+            egui::Sense::click_and_drag(),
+        );
+
+        // 處理點擊與拖曳互動
+        if slider_resp.dragged() || slider_resp.clicked() {
+            if let Some(pos) = slider_resp.interact_pointer_pos() {
+                let norm = ((pos.x - slider_rect.min.x) / slider_rect.width()).clamp(0.0, 1.0);
+                let new_pct = (20.0 + norm * 80.0).round() as u32;
+                let next_op = new_pct as f32 / 100.0;
+                let is_shift = ui.input(|i| i.modifiers.shift);
+                if is_shift {
+                    crate::snapping::set_single_window_opacity_tuning(kind, next_op);
+                } else {
+                    crate::snapping::set_cluster_opacity(kind, next_op);
+                }
+            }
+        }
+
+        // 處理懸停在滑桿上的滾輪微調
+        if slider_resp.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            let scroll = ui.input(|i| {
+                if i.raw_scroll_delta.y.abs() > 0.5 {
+                    i.raw_scroll_delta.y
+                } else if i.raw_scroll_delta.x.abs() > 0.5 {
+                    i.raw_scroll_delta.x
+                } else {
+                    0.0
+                }
+            });
+            if scroll.abs() > 0.5 {
+                let delta = if scroll > 0.0 { 0.05 } else { -0.05 };
+                let next_op = (cur_op + delta).clamp(0.2, 1.0);
+                let is_shift = ui.input(|i| i.modifiers.shift);
+                if is_shift {
+                    crate::snapping::set_single_window_opacity_tuning(kind, next_op);
+                } else {
+                    crate::snapping::set_cluster_opacity(kind, next_op);
+                }
+            }
+        }
+
+        // 繪製滑桿視覺效果
+        let painter = ui.painter();
+        let track_h = 4.5_f32;
+        let track_y = slider_rect.center().y - track_h * 0.5 + 4.0_f32;
+        let track_rect = egui::Rect::from_min_size(
+            egui::pos2(slider_rect.min.x, track_y),
+            egui::vec2(slider_rect.width(), track_h),
+        );
+        let rounding = egui::Rounding::same(track_h * 0.5);
+
+        // 1. 底層未滑過軌道 (微透暗白灰)
+        painter.rect_filled(
+            track_rect,
+            rounding,
+            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 30),
+        );
+
+        // 1b. 40% 穿透分界點 (Notch) 計算：(40 - 20) / (100 - 20) = 20 / 80 = 0.25 (25%)
+        let notch_progress = (40.0_f32 - 20.0) / 80.0;
+        let notch_x = track_rect.min.x + track_rect.width() * notch_progress;
+
+        // 1c. 穿透區間（20% ~ 40%）底槽以幽靈紫金微光襯底
+        let ghost_track_rect = egui::Rect::from_min_max(
+            track_rect.min,
+            egui::pos2(notch_x, track_rect.max.y),
+        );
+        painter.rect_filled(
+            ghost_track_rect,
+            rounding,
+            egui::Color32::from_rgba_unmultiplied(180, 140, 255, 55),
+        );
+
+        // 2. 左側高亮進度軌道 (20% ~ 100%)
+        let progress = ((cur_pct as f32 - 20.0) / 80.0).clamp(0.0, 1.0);
+        let filled_w = (track_rect.width() * progress).max(track_h);
+        let filled_rect = egui::Rect::from_min_size(track_rect.min, egui::vec2(filled_w, track_h));
+        painter.rect_filled(filled_rect, rounding, sky_blue);
+
+        // 2b. 40% 臨界刻度 Notch 微光垂直刻度標記 (高度延伸 10px，帶柔光)
+        let is_near_notch = (cur_pct as i32 - 40).abs() <= 2;
+        let notch_color = if is_near_notch {
+            egui::Color32::from_rgb(255, 245, 140)
+        } else {
+            egui::Color32::from_rgba_unmultiplied(255, 215, 0, 210)
+        };
+        let notch_top = track_rect.min.y - 3.5;
+        let notch_bot = track_rect.max.y + 3.5;
+        painter.line_segment(
+            [egui::pos2(notch_x, notch_top), egui::pos2(notch_x, notch_bot)],
+            egui::Stroke::new(1.5_f32, notch_color),
+        );
+        // 邊界點放上 👻 微軟原生全彩字符 (與視覺視窗及終端機一致：白身、眨眼、紅嘴)
+        if let Some(ghost_tex) = Self::get_ghost_texture(ui.ctx()) {
+            let ghost_size = egui::vec2(13.0, 13.0);
+            let ghost_rect = egui::Rect::from_center_size(
+                egui::pos2(notch_x, notch_top - ghost_size.y * 0.5 - 1.0),
+                ghost_size,
+            );
+            painter.image(
+                ghost_tex.id(),
+                ghost_rect,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
+        } else {
+            painter.text(
+                egui::pos2(notch_x, notch_top - 1.5),
+                egui::Align2::CENTER_BOTTOM,
+                "👻",
+                egui::FontId::proportional(11.0),
+                egui::Color32::WHITE,
+            );
+        }
+
+        // 3. 實心淺天藍色旋鈕 (圓心精準落在滑桿軌道中心線上)
+        let knob_x = (track_rect.min.x + track_rect.width() * progress).clamp(
+            slider_rect.min.x + 5.5,
+            slider_rect.max.x - 5.5,
+        );
+        let knob_center = egui::pos2(knob_x, track_rect.center().y);
+        let is_knob_active = slider_resp.hovered() || slider_resp.dragged();
+        let knob_radius = if is_knob_active { 6.5_f32 } else { 5.5_f32 };
+        painter.circle_filled(knob_center, knob_radius, sky_blue);
+        painter.circle_stroke(
+            knob_center,
+            knob_radius,
+            egui::Stroke::new(1.0_f32, sky_blue_hover),
+        );
+
+        // 4. 滑桿懸停在 40% Notch 附近時顯示 Tooltip 引導
+        if slider_resp.hovered() {
+            if let Some(pos) = slider_resp.hover_pos() {
+                if (pos.x - notch_x).abs() <= 9.0 {
+                    slider_resp.clone().on_hover_text("👻 40% 點擊穿透臨界點（≤40% 視窗穿透，標題列仍可操作）");
+                }
+            }
+        }
+
+        // 橫向 4 顆預設按鈕 (30%, 60%, 80%, 100%)，高度 22px
+        ui.horizontal(|ui| {
+            let presets = [30, 60, 80, 100];
+            let total_spacing = ui.spacing().item_spacing.x * (presets.len() as f32 - 1.0);
+            let btn_w = ((ui.available_width() - total_spacing) / presets.len() as f32).max(42.0);
+            for p in presets {
+                let is_act = (cur_pct as i32 - p as i32).abs() <= 3;
+                let label_str = if p == 30 {
+                    "30% 👻".to_string()
+                } else {
+                    format!("{p}%")
+                };
+                let text = egui::RichText::new(label_str)
+                    .size(10.0)
+                    .color(if is_act {
+                        egui::Color32::from_rgb(17, 17, 17)
+                    } else {
+                        egui::Color32::from_rgb(204, 204, 204)
+                    });
+                let fill = if is_act {
+                    sky_blue
+                } else {
+                    egui::Color32::from_rgba_unmultiplied(255, 255, 255, 20)
+                };
+                let btn = egui::Button::new(text)
+                    .fill(fill)
+                    .min_size(egui::vec2(btn_w, 22.0));
+                if ui.add(btn).clicked() {
+                    let next_op = p as f32 / 100.0;
+                    let is_shift = ui.input(|i| i.modifiers.shift);
+                    if is_shift {
+                        crate::snapping::set_single_window_opacity_tuning(kind, next_op);
+                    } else {
+                        crate::snapping::set_cluster_opacity(kind, next_op);
+                    }
+                }
+            }
+        });
+
+        ui.separator();
+
+        // 底部操作提示（提案 A：洗練版）
+        ui.label(
+            egui::RichText::new("👻 ≤40% 啟用穿透（標題列仍可操作）")
+                .size(10.0)
+                .color(egui::Color32::from_rgb(255, 215, 0)),
+        );
+        ui.label(
+            egui::RichText::new("🖱️ 滾輪調整透明度，Shift組合僅限此視窗")
+                .size(9.5)
+                .color(egui::Color32::from_rgb(140, 146, 158)),
+        );
+
+        // 滑鼠移出面板 0.6 秒後自動優雅關閉（比照視覺視窗）
+        let pointer_pos = ui.input(|i| i.pointer.hover_pos().or(i.pointer.latest_pos()));
+        let is_menu_hovered = ui.ui_contains_pointer()
+            || pointer_pos.map_or(false, |pos| ui.max_rect().expand(4.0).contains(pos));
+        let is_trigger_hovered = trigger_rect.map_or(false, |r| {
+            pointer_pos.map_or(false, |pos| r.expand(8.0).contains(pos))
+        });
+
+        let leave_id = egui::Id::new("opacity_menu_leave_timer").with(kind);
+        let entered_id = egui::Id::new("opacity_menu_entered").with(kind);
+        let now = ui.input(|i| i.time);
+
+        if is_menu_hovered {
+            ui.data_mut(|d| {
+                d.insert_temp(entered_id, true);
+                d.remove_temp::<f64>(leave_id);
+            });
+        } else if is_trigger_hovered {
+            ui.data_mut(|d| d.remove_temp::<f64>(leave_id));
+        } else {
+            let leave_time = ui.data_mut(|d| *d.get_temp_mut_or_insert_with(leave_id, || now));
+            if now - leave_time >= 0.6 {
+                ui.data_mut(|d| {
+                    d.remove_temp::<f64>(leave_id);
+                    d.remove_temp::<bool>(entered_id);
+                });
+                ui.close_menu();
+            } else {
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
+            }
+        }
+    }
+
     /// 通用置頂按鈕渲染組件：
     /// 依據點擊時的視窗來源（kind）及其身分（Standalone vs Clustered）切換置頂狀態。
     pub fn render_universal_pin_button(&mut self, ui: &mut egui::Ui, kind: crate::snapping::WindowKind) {
@@ -2675,16 +4235,16 @@ impl FlyoutApp {
         let tooltip = match role {
             crate::snapping::WindowRole::ClusterMaster | crate::snapping::WindowRole::ClusterSlave => {
                 if pinned {
-                    lang.tooltip_unpin_cluster()
+                    format!("{} (點擊切換)", lang.tooltip_unpin_cluster())
                 } else {
-                    lang.tooltip_pin_cluster()
+                    format!("{} (點擊切換)", lang.tooltip_pin_cluster())
                 }
             }
             crate::snapping::WindowRole::Standalone => {
                 if pinned {
-                    lang.tooltip_unpin_window()
+                    format!("{} (點擊切換)", lang.tooltip_unpin_window())
                 } else {
-                    lang.tooltip_pin_window()
+                    format!("{} (點擊切換)", lang.tooltip_pin_window())
                 }
             }
         };
@@ -2693,10 +4253,11 @@ impl FlyoutApp {
             ui,
             "📌",
             pinned,
-            tooltip,
+            &tooltip,
             ButtonTheme::Gold,
         );
 
+        // 圖釘按鈕回歸純粹的「釘選開關（Pin / Unpin）」，只響應單擊
         if resp.clicked() {
             unsafe {
                 crate::snapping::toggle_window_pin(kind);
@@ -2988,26 +4549,76 @@ impl FlyoutApp {
             }
 
             // Title: 可拖曳感應區塊 (懸停顯示 Grab ✋，按住顯示 Grabbing ✊)
-            let title_heading = ui.heading(
-                egui::RichText::new(title)
-                    .strong()
-                    .size(15.0)
-                    .color(egui::Color32::from_rgb(180, 220, 245)),
+            let cur_op = crate::snapping::get_window_opacity(kind);
+            let cur_pct = (cur_op * 100.0).round() as u32;
+            let is_ghost = cur_pct <= 40;
+            let is_in_cluster = matches!(
+                role,
+                crate::snapping::WindowRole::ClusterMaster | crate::snapping::WindowRole::ClusterSlave
             );
-            let title_resp = title_heading.interact(egui::Sense::drag());
-            if title_resp.drag_started() {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+
+            let title_tooltip = if is_ghost {
+                if is_in_cluster {
+                    "👻 視窗標題列 (穿透手掌區)\n• 拖曳：移動群組\n• 雙擊：還原成不透明置頂\n• 滾輪：調整透明度\n• 右鍵：視窗透明度選單\n• Shift + 雙擊/滾輪：僅作用於此視窗"
+                } else {
+                    "👻 視窗標題列 (穿透手掌區)\n• 拖曳：移動視窗\n• 雙擊：還原成不透明置頂\n• 滾輪：調整透明度\n• 右鍵：視窗透明度選單"
+                }
+            } else {
+                if is_in_cluster {
+                    "視窗標題列\n• 拖曳：移動群組\n• 雙擊：切換成穿透模式\n• 滾輪：調整透明度\n• 右鍵：視窗透明度選單\n• Shift + 雙擊/滾輪：僅作用於此視窗"
+                } else {
+                    "視窗標題列\n• 拖曳：移動視窗\n• 雙擊：切換成穿透模式\n• 滾輪：調整透明度\n• 右鍵：視窗透明度選單"
+                }
+            };
+
+            let title_resp = ui.add(
+                egui::Label::new(
+                    egui::RichText::new(title)
+                        .strong()
+                        .size(15.0)
+                        .color(egui::Color32::from_rgb(180, 220, 245)),
+                ).sense(egui::Sense::click_and_drag())
+            ).on_hover_text(title_tooltip);
+
+            // Ghost Icon (穿透態 👻：微軟 Segoe UI Emoji 全彩原色，無膠囊底色，支援雙擊還原與拖曳移動)
+            let mut ghost_capsule_resp: Option<egui::Response> = None;
+            let mut left_content_right = title_resp.rect.right();
+            if is_ghost {
+                let ghost_size = egui::vec2(16.0, 16.0);
+                let (rect, resp) = ui.allocate_exact_size(ghost_size, egui::Sense::click_and_drag());
+                if let Some(ghost_tex) = Self::get_ghost_texture(ui.ctx()) {
+                    ui.painter().image(
+                        ghost_tex.id(),
+                        rect,
+                        egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                        egui::Color32::WHITE,
+                    );
+                } else {
+                    ui.painter().text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "👻",
+                        egui::FontId::proportional(14.0),
+                        egui::Color32::WHITE,
+                    );
+                }
+                let ghost_btn = resp.on_hover_text(if is_in_cluster {
+                    "👻 穿透模式\n• 雙擊此處或標題列：還原成不透明置頂\n• 滾輪：調整透明度\n• 右鍵：視窗透明度選單\n• Shift + 雙擊：僅作用於此視窗"
+                } else {
+                    "👻 穿透模式\n• 雙擊此處或標題列：還原成不透明置頂\n• 滾輪：調整透明度\n• 右鍵：視窗透明度選單"
+                });
+                left_content_right = ghost_btn.rect.right();
+                ghost_capsule_resp = Some(ghost_btn);
             }
 
             // Role Badge (主控 / 附屬節點身分指示徽章：🧲 / 📎，亦支援按住拖曳視窗)
-            let mut left_content_right = title_heading.rect.right();
-            let badge_resp = match role {
+            let mut badge_resp = match role {
                 crate::snapping::WindowRole::ClusterMaster => {
                     let badge = ui.add(
                         egui::Label::new(
                             egui::RichText::new(lang.badge_cluster_master())
                                 .size(14.0),
-                        ).sense(egui::Sense::drag())
+                        ).sense(egui::Sense::click_and_drag())
                     ).on_hover_text(lang.tooltip_cluster_master());
                     left_content_right = badge.rect.right();
                     Some(badge)
@@ -3017,18 +4628,13 @@ impl FlyoutApp {
                         egui::Label::new(
                             egui::RichText::new(lang.badge_cluster_slave())
                                 .size(14.0),
-                        ).sense(egui::Sense::drag())
+                        ).sense(egui::Sense::click_and_drag())
                     ).on_hover_text(lang.tooltip_cluster_slave());
                     left_content_right = badge.rect.right();
                     Some(badge)
                 }
                 crate::snapping::WindowRole::Standalone => None,
             };
-            if let Some(ref b) = badge_resp {
-                if b.drag_started() {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
-                }
-            }
 
             // Right Group (Right-to-Left layout):
             // 獨立於標題拖曳區，保證所有按鈕 100% 正常感應點擊
@@ -3183,27 +4789,125 @@ impl FlyoutApp {
             let mid_right = right_group.response.rect.left();
             let mut mid_resp: Option<egui::Response> = None;
             if mid_right > mid_left + 4.0 {
-                let header_top = right_group.response.rect.top().min(title_heading.rect.top() - 6.0);
-                let header_bottom = right_group.response.rect.bottom().max(title_heading.rect.bottom() + 6.0);
+                let header_top = right_group.response.rect.top().min(title_resp.rect.top() - 6.0);
+                let header_bottom = right_group.response.rect.bottom().max(title_resp.rect.bottom() + 6.0);
                 let mid_rect = egui::Rect::from_min_max(
                     egui::pos2(mid_left, header_top),
                     egui::pos2(mid_right - 4.0, header_bottom),
                 );
                 let mid_id = ui.id().with(("header_mid_drag", kind));
-                let resp = ui.interact(mid_rect, mid_id, egui::Sense::drag());
-                if resp.drag_started() {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                let resp = ui.interact(mid_rect, mid_id, egui::Sense::click_and_drag());
+                mid_resp = Some(resp.on_hover_text(title_tooltip));
+            }
+
+            // 解法 C：標題列手掌區（Titlebar Grab Area）三態生命週期控制：
+            // 1. 拖曳搬移（Drag Started）：啟動視窗拖動，維持當前穿透狀態不變（移開游標自然淡回）
+            let any_drag_started = title_resp.drag_started()
+                || ghost_capsule_resp.as_ref().map(|b| b.drag_started()).unwrap_or(false)
+                || badge_resp.as_ref().map(|b| b.drag_started()).unwrap_or(false)
+                || mid_resp.as_ref().map(|r| r.drag_started()).unwrap_or(false);
+            if any_drag_started {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+            }
+
+            // 2. 雙擊手掌區（Double Click）：對稱切換透明度（100% ↔ 30% 幽靈穿透態）
+            // 在 30% 幽靈穿透態下，雙擊手掌區或膠囊徽章立即還原至 100% 實體置頂
+            let any_double_clicked = title_resp.double_clicked()
+                || ghost_capsule_resp.as_ref().map(|b| b.double_clicked()).unwrap_or(false)
+                || badge_resp.as_ref().map(|b| b.double_clicked()).unwrap_or(false)
+                || mid_resp.as_ref().map(|r| r.double_clicked()).unwrap_or(false);
+
+            if any_double_clicked {
+                let is_shift = ui.input(|i| i.modifiers.shift);
+                let _next_pct = if is_shift {
+                    crate::snapping::toggle_single_window_opacity_quick(kind)
+                } else {
+                    crate::snapping::toggle_cluster_opacity_quick(kind)
+                };
+                let new_pinned = crate::snapping::is_window_pinned(kind);
+                let level = if new_pinned {
+                    egui::WindowLevel::AlwaysOnTop
+                } else {
+                    egui::WindowLevel::Normal
+                };
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::WindowLevel(level));
+                if kind == crate::snapping::WindowKind::Main {
+                    self.is_always_on_top = new_pinned;
                 }
-                mid_resp = Some(resp);
+            }
+
+            // 提案 A：標題手掌區全域右鍵彈出透明度控制面板
+            title_resp.context_menu(|ui| {
+                Self::render_opacity_popup_content(ui, kind, Some(title_resp.rect));
+            });
+            if let Some(ref mut c) = ghost_capsule_resp {
+                c.context_menu(|ui| {
+                    Self::render_opacity_popup_content(ui, kind, Some(c.rect));
+                });
+            }
+            if let Some(ref mut b) = badge_resp {
+                b.context_menu(|ui| {
+                    Self::render_opacity_popup_content(ui, kind, Some(b.rect));
+                });
+            }
+            if let Some(ref mut r) = mid_resp {
+                r.context_menu(|ui| {
+                    Self::render_opacity_popup_content(ui, kind, Some(r.rect));
+                });
+            }
+
+            // 提案 A：標題手掌區全域滾輪直調透明度 (±5%)
+            let is_header_hovered = title_resp.hovered()
+                || ghost_capsule_resp.as_ref().map(|b| b.hovered()).unwrap_or(false)
+                || badge_resp.as_ref().map(|b| b.hovered()).unwrap_or(false)
+                || mid_resp.as_ref().map(|r| r.hovered()).unwrap_or(false);
+
+            if is_header_hovered {
+                let scroll = ui.input(|i| {
+                    if i.raw_scroll_delta.y.abs() > 0.5 {
+                        i.raw_scroll_delta.y
+                    } else if i.raw_scroll_delta.x.abs() > 0.5 {
+                        i.raw_scroll_delta.x
+                    } else {
+                        0.0
+                    }
+                });
+                if scroll.abs() > 0.5 {
+                    let delta = if scroll > 0.0 { 0.05 } else { -0.05 };
+                    let cur_op = crate::snapping::get_window_opacity(kind);
+                    let next_op = (cur_op + delta).clamp(0.2, 1.0);
+                    let is_shift = ui.input(|i| i.modifiers.shift);
+                    if is_shift {
+                        crate::snapping::set_single_window_opacity_tuning(kind, next_op);
+                    } else {
+                        crate::snapping::set_cluster_opacity(kind, next_op);
+                    }
+                }
+            }
+
+            let is_header_menu_open = title_resp.context_menu_opened()
+                || ghost_capsule_resp.as_ref().map(|b| b.context_menu_opened()).unwrap_or(false)
+                || badge_resp.as_ref().map(|b| b.context_menu_opened()).unwrap_or(false)
+                || mid_resp.as_ref().map(|r| r.context_menu_opened()).unwrap_or(false);
+            if is_header_menu_open {
+                crate::snapping::set_opacity_menu_open(kind, true);
+                let target_hwnd = match kind {
+                    crate::snapping::WindowKind::Main => crate::tray::get_main_hwnd(),
+                    _ => crate::snapping::get_window_hwnd(kind),
+                };
+                if !target_hwnd.is_null() {
+                    unsafe {
+                        crate::snapping::update_window_click_through(kind, target_hwnd);
+                    }
+                }
             }
 
             // Sync custom Win32 cursor state for this window header (✋ Grab on hover, ✊ Grabbing when held)
             let is_down = title_resp.is_pointer_button_down_on()
+                || ghost_capsule_resp.as_ref().map(|b| b.is_pointer_button_down_on()).unwrap_or(false)
                 || badge_resp.as_ref().map(|b| b.is_pointer_button_down_on()).unwrap_or(false)
                 || mid_resp.as_ref().map(|r| r.is_pointer_button_down_on()).unwrap_or(false);
-            let is_hover = title_resp.hovered()
-                || badge_resp.as_ref().map(|b| b.hovered()).unwrap_or(false)
-                || mid_resp.as_ref().map(|r| r.hovered()).unwrap_or(false);
+            let is_hover = is_header_hovered;
 
             if is_down {
                 crate::custom_cursor::set_header_cursor_state(kind, crate::custom_cursor::CustomCursorState::Grabbing);
@@ -3268,6 +4972,7 @@ impl FlyoutApp {
             .with_min_inner_size(kind.min_size())
             .with_resizable(true)
             .with_decorations(false) // 無 Windows 原生外框 (Frameless)，自訂沉浸式標題列
+            .with_transparent(true)  // 啟用透明 Viewport 背景支援
             .with_window_level(init_level);
 
         if *needs_initial_dock {
@@ -3329,18 +5034,68 @@ impl FlyoutApp {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
             }
 
-            // 3. 通用視窗容器面板（沉浸式無邊框樣式，附細緻立體邊界描邊與圓角）
+            // 3. 滾輪快捷微調透明度 (Alt + Scroll，自動連動群組)
+            if ctx.input(|i| i.modifiers.alt) {
+                let scroll = ctx.input(|i| {
+                    if i.raw_scroll_delta.y.abs() > 0.5 {
+                        i.raw_scroll_delta.y
+                    } else if i.raw_scroll_delta.x.abs() > 0.5 {
+                        i.raw_scroll_delta.x
+                    } else {
+                        0.0
+                    }
+                });
+                if scroll.abs() > 0.5 {
+                    let cur_op = crate::snapping::get_window_opacity(kind);
+                    let delta = if scroll > 0.0 { 0.05 } else { -0.05 };
+                    crate::snapping::set_cluster_opacity(kind, (cur_op + delta).clamp(0.2, 1.0));
+                }
+            }
+
+            // 4. 通用視窗容器面板（沉浸式無邊框樣式，附自訂 Alpha 通道之半透明背景與邊框）
+            let user_op = crate::snapping::get_window_opacity(kind);
+            let is_click_through = crate::snapping::is_click_through_active(kind);
+            let is_hovered = if !target_hwnd.is_null() && unsafe { windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(target_hwnd) != 0 } {
+                unsafe {
+                    crate::snapping::update_window_click_through(kind, target_hwnd);
+                    // 穿透模式下：停用 Hover Peek 實體化，維持穩定半透明，不閃爍
+                    !is_click_through && crate::snapping::is_cursor_over_window(target_hwnd)
+                }
+            } else {
+                false
+            };
+            let is_suppressed = crate::snapping::is_peek_suppressed(kind);
+            let target_op = if is_hovered && crate::snapping::is_hover_peek_enabled() && !is_suppressed {
+                1.0
+            } else {
+                user_op
+            };
+            let (effective_op, is_animating) = crate::snapping::step_animated_window_opacity(kind, target_op);
+            let alpha = (effective_op.clamp(0.2, 1.0) * 255.0).round() as u8;
+
+            if !target_hwnd.is_null() && unsafe { windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(target_hwnd) != 0 } {
+                unsafe {
+                    crate::snapping::apply_native_window_opacity(target_hwnd, effective_op);
+                }
+            }
+
+            // 當平滑淡入淡出中或懸停實體化生效時，以 60 FPS 刷新畫面
+            if is_animating || (is_hovered && crate::snapping::is_hover_peek_enabled() && user_op < 0.99) {
+                ctx.request_repaint_after(std::time::Duration::from_millis(16));
+            }
+
             let bg_color = match kind {
-                crate::snapping::WindowKind::Equalizer => egui::Color32::from_rgb(24, 25, 29),
-                crate::snapping::WindowKind::MiniPlayer => egui::Color32::from_rgb(22, 24, 29),
-                _ => egui::Color32::from_rgb(20, 22, 26),
+                crate::snapping::WindowKind::Equalizer => egui::Color32::from_rgba_unmultiplied(24, 25, 29, 215),
+                crate::snapping::WindowKind::MiniPlayer => egui::Color32::from_rgba_unmultiplied(22, 24, 29, 215),
+                _ => egui::Color32::from_rgba_unmultiplied(20, 22, 26, 215),
             };
 
             let role = crate::snapping::get_window_role(kind);
+            let stroke_alpha = alpha.max(100);
             let stroke_color = match role {
-                crate::snapping::WindowRole::ClusterMaster => egui::Color32::from_rgb(70, 140, 215), // 藍色主控微光邊框
-                crate::snapping::WindowRole::ClusterSlave => egui::Color32::from_rgb(45, 50, 60),    // 無縫附屬邊框
-                crate::snapping::WindowRole::Standalone => egui::Color32::from_rgb(52, 58, 70),     // 標準獨立外框
+                crate::snapping::WindowRole::ClusterMaster => egui::Color32::from_rgba_unmultiplied(70, 140, 215, stroke_alpha), // 藍色主控微光邊框
+                crate::snapping::WindowRole::ClusterSlave => egui::Color32::from_rgba_unmultiplied(45, 50, 60, stroke_alpha),    // 無縫附屬邊框
+                crate::snapping::WindowRole::Standalone => egui::Color32::from_rgba_unmultiplied(52, 58, 70, stroke_alpha),     // 標準獨立外框
             };
 
             egui::CentralPanel::default()
@@ -3353,6 +5108,9 @@ impl FlyoutApp {
                 )
                 .show(ctx, |ui| {
                     content(self, ui);
+                    Self::render_opacity_hud_badge(ui, kind);
+                    Self::render_header_shimmer_boundary(ui, kind);
+                    self.render_mascot_overlay(ui, kind);
                 });
         });
     }
@@ -4024,6 +5782,9 @@ impl FlyoutApp {
         if self.current_page == page {
             return;
         }
+        if page == Page::About {
+            self.reset_about_scroll = true;
+        }
         let from = self.current_page;
         self.page_history.push(from);
         self.current_page = page;
@@ -4148,6 +5909,7 @@ impl FlyoutApp {
         ui.add_space(8.0);
 
         egui::ScrollArea::vertical()
+            .id_salt("main_scroll_area")
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 match self.settings_tab {
@@ -5055,6 +6817,90 @@ impl FlyoutApp {
             });
 
                 ui.add_space(10.0);
+
+                // --- Group 4: Window & Mascot (視窗幸運物) ---
+                ui.label(egui::RichText::new(lang.mascot_section_title()).strong().size(13.0));
+                ui.add_space(4.0);
+
+                egui::Frame::group(ui.style())
+                    .fill(egui::Color32::from_rgb(32, 34, 40))
+                    .rounding(egui::Rounding::same(8.0))
+                    .inner_margin(10.0)
+                    .show(ui, |ui| {
+                        let mut mascot_enabled = self.state.mascot_enabled;
+                        let cb = ui.checkbox(
+                            &mut mascot_enabled,
+                            egui::RichText::new(lang.mascot_enable_checkbox()).size(12.0),
+                        );
+                        if cb.changed() {
+                            let _ = self.cmd_tx.send_blocking(GuiCmd::SetMascotEnabled(mascot_enabled));
+                        }
+                        cb.on_hover_text(lang.mascot_enable_hint());
+
+                        ui.add_space(2.0);
+                        ui.horizontal(|ui| {
+                            ui.add_space(20.0);
+                            ui.label(
+                                egui::RichText::new(lang.mascot_enable_hint())
+                                    .size(11.0)
+                                    .weak(),
+                            );
+                        });
+
+                        if mascot_enabled {
+                            ui.add_space(6.0);
+                            let mut rhythm = self.state.mascot_rhythm_dance;
+                            let cb_rhythm = ui.checkbox(
+                                &mut rhythm,
+                                egui::RichText::new(lang.mascot_rhythm_checkbox()).size(12.0),
+                            );
+                            if cb_rhythm.changed() {
+                                let _ = self.cmd_tx.send_blocking(GuiCmd::SetMascotRhythmDance(rhythm));
+                            }
+                            cb_rhythm.on_hover_text(lang.mascot_rhythm_hint());
+
+                            ui.add_space(2.0);
+                            ui.horizontal(|ui| {
+                                ui.add_space(20.0);
+                                ui.label(
+                                    egui::RichText::new(lang.mascot_rhythm_hint())
+                                        .size(11.0)
+                                        .weak(),
+                                );
+                            });
+
+                            ui.add_space(4.0);
+                            ui.horizontal(|ui| {
+                                ui.add_space(20.0);
+                                if self.state.license_tier.is_supporter_or_unpackaged() {
+                                    ui.label(
+                                        egui::RichText::new(lang.mascot_easter_egg_hint())
+                                            .size(11.0)
+                                            .italics()
+                                            .color(egui::Color32::from_rgb(180, 205, 235)),
+                                    );
+                                } else {
+                                    ui.label(
+                                        egui::RichText::new(lang.mascot_pro_locked_hint())
+                                            .size(11.0)
+                                            .weak(),
+                                    );
+                                }
+                            });
+
+                            if self.state.license_tier.is_supporter_or_unpackaged() {
+                                ui.add_space(3.0);
+                                ui.horizontal(|ui| {
+                                    ui.add_space(20.0);
+                                    if ui.button(egui::RichText::new(lang.mascot_supporter_replay_btn()).size(11.0)).clicked() {
+                                        self.show_supporter_mascot_modal = true;
+                                    }
+                                });
+                            }
+                        }
+                    });
+
+                ui.add_space(10.0);
                 ui.horizontal(|ui| {
                     if ui.button(egui::RichText::new(format!("ℹ  {}", lang.btn_about())).size(12.5)).on_hover_text(lang.tooltip_about()).clicked() {
                         self.navigate_to(Page::About);
@@ -5091,9 +6937,14 @@ impl FlyoutApp {
             egui::Color32::from_rgb(245, 247, 250)
         };
 
-        let scroll_output = egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
+        let mut scroll = egui::ScrollArea::vertical()
+            .id_salt("about_scroll_area")
+            .auto_shrink([false, false]);
+        if self.reset_about_scroll {
+            self.reset_about_scroll = false;
+            scroll = scroll.vertical_scroll_offset(0.0);
+        }
+        let scroll_output = scroll.show(ui, |ui| {
                 let wrap_w = (ui.available_width() - 20.0).max(100.0);
 
                 // 1. Basic Software Information, Author, License & Copyright Notice
@@ -5556,10 +7407,18 @@ impl FlyoutApp {
 
                 // 4. WinAMP Multi-color Segmented Spectrum Visualizer (exact match to total_inner_w)
                 let spec_h = 50.0f32;
-                let (spec_rect, _spec_resp) = ui.allocate_exact_size(
+                let (spec_rect, spec_resp) = ui.allocate_exact_size(
                     egui::vec2(total_inner_w, spec_h),
-                    egui::Sense::hover(),
+                    egui::Sense::click(),
                 );
+                self.mascot_spectrum_rect = Some(spec_rect);
+
+                // ⭐ 跨視窗即刻召喚：若使用者在主視窗播放器頻譜右鍵點擊，無論精靈原先在何處立即召喚至此展開特技衝浪！
+                let hover_pos = ui.input(|i| i.pointer.hover_pos().or(i.pointer.latest_pos()));
+                let is_ptr_in_spec = hover_pos.map(|p| spec_rect.expand(4.0).contains(p)).unwrap_or(false);
+                if spec_resp.secondary_clicked() || (is_ptr_in_spec && ui.input(|i| i.pointer.secondary_clicked())) {
+                    self.trigger_mascot_air_surf_summon(crate::snapping::WindowKind::Main, spec_rect, hover_pos);
+                }
                 let painter = ui.painter();
                 painter.rect_filled(spec_rect, egui::Rounding::same(4.0), egui::Color32::from_rgb(10, 12, 15));
                 painter.rect_stroke(
@@ -6647,10 +8506,18 @@ impl FlyoutApp {
 
                 // 2. WinAMP Multi-color Segmented Spectrum Visualizer
                 let spec_h = 50.0f32;
-                let (spec_rect, _spec_resp) = ui.allocate_exact_size(
+                let (spec_rect, spec_resp) = ui.allocate_exact_size(
                     egui::vec2(total_inner_w, spec_h),
-                    egui::Sense::hover(),
+                    egui::Sense::click(),
                 );
+                self.mascot_spectrum_rect = Some(spec_rect);
+
+                // ⭐ 跨視窗即刻召喚：若使用者在迷你播放器頻譜右鍵點擊，無論精靈原先在何處立即召喚至此展開特技衝浪！
+                let hover_pos = ui.input(|i| i.pointer.hover_pos().or(i.pointer.latest_pos()));
+                let is_ptr_in_spec = hover_pos.map(|p| spec_rect.expand(4.0).contains(p)).unwrap_or(false);
+                if spec_resp.secondary_clicked() || (is_ptr_in_spec && ui.input(|i| i.pointer.secondary_clicked())) {
+                    self.trigger_mascot_air_surf_summon(crate::snapping::WindowKind::MiniPlayer, spec_rect, hover_pos);
+                }
                 let painter = ui.painter();
                 painter.rect_filled(spec_rect, egui::Rounding::same(4.0), egui::Color32::from_rgb(10, 12, 15));
                 painter.rect_stroke(
@@ -7034,6 +8901,21 @@ impl FlyoutApp {
             prev_album_art_texture: None,
             next_track_intent: None,
             workstation_onboarding_dismissed: crate::controller::is_workstation_discovered(),
+            mascot_pos: egui::pos2(80.0, 38.0),
+            mascot_activity: 0,
+            mascot_platform_idx: 1,
+            mascot_dir_x: 1.0,
+            mascot_dir_y: 1.0,
+            mascot_vel_y: 0.0,
+            mascot_action_timer: 0.0,
+            mascot_squash: 1.0,
+            mascot_bounce: 0.0,
+            mascot_last_update: std::time::Instant::now(),
+            mascot_window: crate::snapping::WindowKind::Main,
+            mascot_spectrum_rect: None,
+            mascot_spectrum_privilege: false,
+            show_supporter_mascot_modal: false,
+            reset_about_scroll: true,
         }
     }
 }

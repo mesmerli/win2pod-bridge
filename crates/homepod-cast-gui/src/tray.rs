@@ -675,13 +675,13 @@ pub fn center_and_open_main_window(ctx: &egui::Context) {
             use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTOPRIMARY};
             use windows_sys::Win32::UI::WindowsAndMessaging::{GetCursorPos, IsIconic, SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOSIZE, SW_RESTORE};
 
-            if is_window_hidden_to_tray() {
-                show_window_from_tray(hwnd, ctx);
-            }
-            if IsIconic(hwnd) != 0 {
-                ShowWindow(hwnd, SW_RESTORE);
-            }
+            // 立即終止任何進行中或快照的神燈縮放動畫，避免結束回呼將視窗拉回舊座標
+            crate::genie_effect::abort_genie_effect();
 
+            // 保底救回：強制重設主視窗透明度為 100% 完全不透明，解除穿透模式
+            crate::snapping::set_window_opacity(crate::snapping::WindowKind::Main, 1.0);
+
+            // 先精準計算當前螢幕工作區正中央座標，並立即更新全域記錄
             let mut pt = std::mem::zeroed();
             GetCursorPos(&mut pt);
             let monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
@@ -698,10 +698,23 @@ pub fn center_and_open_main_window(ctx: &egui::Context) {
             LAST_POS_X.store(cx, Ordering::SeqCst);
             LAST_POS_Y.store(cy, Ordering::SeqCst);
 
-            SetWindowPos(hwnd, HWND_TOPMOST, cx, cy, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
-            ensure_window_on_screen(hwnd);
-            force_foreground(hwnd);
-            crate::snapping::bring_fleet_to_top();
+            if is_window_hidden_to_tray() {
+                // 從系統匣復原時直接於 (cx, cy) 完成顯示，防止非同步動畫覆寫座標
+                cancel_pending_trim();
+                record_shown_time();
+                IS_APP_FLEET_HIDDEN.store(false, Ordering::SeqCst);
+                IS_TRAY_HIDDEN.store(false, Ordering::SeqCst);
+                crate::spectrum::update_spectrum_needed_state();
+                show_window_actual_finish(hwnd, cx, cy, ctx);
+            } else {
+                if IsIconic(hwnd) != 0 {
+                    ShowWindow(hwnd, SW_RESTORE);
+                }
+                SetWindowPos(hwnd, HWND_TOPMOST, cx, cy, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+                ensure_window_on_screen(hwnd);
+                force_foreground(hwnd);
+                crate::snapping::bring_fleet_to_top();
+            }
         }
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         ctx.request_repaint();
@@ -711,6 +724,9 @@ pub fn center_and_open_main_window(ctx: &egui::Context) {
 pub unsafe fn reset_all_windows_to_screen_center() {
     let hwnd = get_main_hwnd();
     if !hwnd.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(hwnd) != 0 {
+        // 保底救回：強制重設主視窗透明度為 100% 完全不透明，解除穿透模式
+        crate::snapping::set_window_opacity(crate::snapping::WindowKind::Main, 1.0);
+
         if is_window_hidden_to_tray() {
             if let Some(ctx) = crate::gui::get_egui_ctx() {
                 show_window_from_tray(hwnd, &ctx);

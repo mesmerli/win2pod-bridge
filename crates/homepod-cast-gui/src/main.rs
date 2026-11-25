@@ -47,7 +47,6 @@ fn main() -> anyhow::Result<()> {
 
     if let Ok(file) = std::fs::OpenOptions::new()
         .create(true)
-        .write(true)
         .append(true)
         .open(&log_file)
     {
@@ -158,6 +157,7 @@ fn main() -> anyhow::Result<()> {
         .with_min_inner_size([360.0, 320.0])
         .with_resizable(true)
         .with_decorations(false)
+        .with_transparent(true)
         .with_visible(!start_minimized)
         .with_window_level(initial_level);
 
@@ -168,6 +168,8 @@ fn main() -> anyhow::Result<()> {
     // Window options for modern Flyout
     let native_options = eframe::NativeOptions {
         viewport: viewport_builder,
+        multisampling: 0,
+        renderer: eframe::Renderer::Glow,
         ..Default::default()
     };
 

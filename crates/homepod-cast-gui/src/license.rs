@@ -21,7 +21,7 @@ pub fn is_packaged_app() -> bool {
     res != APPMODEL_ERROR_NO_PACKAGE
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum LicenseTier {
     /// Full perpetual purchased license
     Licensed,
@@ -30,13 +30,8 @@ pub enum LicenseTier {
     /// Trial has expired! Premium features locked.
     TrialExpired,
     /// Standalone / unpackaged development mode
+    #[default]
     Unpackaged,
-}
-
-impl Default for LicenseTier {
-    fn default() -> Self {
-        Self::Unpackaged
-    }
 }
 
 impl LicenseTier {
@@ -48,6 +43,11 @@ impl LicenseTier {
             LicenseTier::Unpackaged => true,
             LicenseTier::TrialExpired => false,
         }
+    }
+
+    /// Check whether the user is a licensed supporter (or running in standalone dev mode).
+    pub fn is_supporter_or_unpackaged(&self) -> bool {
+        matches!(self, LicenseTier::Licensed | LicenseTier::Unpackaged)
     }
 }
 

@@ -2610,6 +2610,152 @@ impl Language {
         }
     }
 
+    pub fn mascot_section_title(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "👻 視窗幸運物 (Window Mascot)",
+            Self::SimplifiedChinese => "👻 窗口吉祥物 (Window Mascot)",
+            Self::English => "👻 Window Mascot",
+            Self::French => "👻 Mascotte de fenêtre",
+            Self::German => "👻 Fenstermaskottchen",
+            Self::Italian => "👻 Mascotte della finestra",
+            Self::Spanish => "👻 Mascota de la ventana",
+            Self::Japanese => "👻 ウィンドウマスコット",
+            Self::Korean => "👻 윈도우 마스코트",
+            Self::Russian => "👻 Талисман окна",
+            _ => "👻 Window Mascot",
+        }
+    }
+
+    pub fn mascot_enable_checkbox(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "啟用視窗幸運物漫步 (Window Mascot)",
+            Self::SimplifiedChinese => "启用窗口吉祥物漫步 (Window Mascot)",
+            Self::English => "Enable Window Mascot Crawler",
+            Self::Japanese => "ウィンドウマスコットを有効化",
+            _ => "Enable Window Mascot Crawler",
+        }
+    }
+
+    pub fn mascot_enable_hint(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "在視窗邊界悠閒漫步與轉向巡邏，滑鼠靠近時會調皮捉迷藏",
+            Self::SimplifiedChinese => "在窗口边界悠闲漫步与转向巡逻，鼠标靠近时会调皮捉迷藏",
+            Self::English => "Patrols along window borders; playfully plays peek-a-boo when cursor approaches",
+            Self::Japanese => "ウィンドウの境界をパトロールし、カーソルが近づくと隠れます",
+            _ => "Patrols along window borders; playfully plays peek-a-boo when cursor approaches",
+        }
+    }
+
+    pub fn mascot_rhythm_checkbox(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🎵 播放音樂時隨節奏律動起舞 (Rhythm Dance)",
+            Self::SimplifiedChinese => "🎵 播放音乐时随节奏律动起舞 (Rhythm Dance)",
+            Self::English => "🎵 Rhythm Dance during music playback",
+            Self::Japanese => "🎵 音楽再生時にリズムに合わせてダンス",
+            _ => "🎵 Rhythm Dance during music playback",
+        }
+    }
+
+    pub fn mascot_rhythm_hint(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "AirPlay 串流播放時，幽靈隨音樂重拍點頭跳躍與左右搖擺",
+            Self::SimplifiedChinese => "AirPlay 串流播放时，幽灵随音乐重拍点头跳跃与左右摇摆",
+            Self::English => "Bobs and grooves along with music beats and audio bass energy during playback",
+            Self::Japanese => "AirPlay再生時、ビートに合わせて頷き左右に揺れます",
+            _ => "Bobs and grooves along with music beats and audio bass energy during playback",
+        }
+    }
+
+    pub fn mascot_easter_egg_hint(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "💡「最喜歡在音樂頻譜頂端衝浪了！聽說在頻譜那邊點右鍵叫我，我會使出大絕招喔～」",
+            Self::SimplifiedChinese => "💡「最喜欢在音乐频谱顶端冲浪了！听说在频谱那边点右键叫我，我会使出大绝招喔～」",
+            Self::English => "💡 \"Surfing on the spectrum peaks is my favorite! Right-click on the visualizer bars to summon my special moves!\"",
+            Self::Japanese => "💡「音楽スペクトラムの頂点で波乗りするのが大好き！スペクトラム上で右クリックすると大技を披露するよ～」",
+            _ => "💡 \"Surfing on the spectrum peaks is my favorite! Right-click on the visualizer bars to summon my special moves!\"",
+        }
+    }
+
+    pub fn mascot_supporter_modal_title_existing(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🌟 致最珍貴的早期支持者與老朋友",
+            Self::SimplifiedChinese => "🌟 致最珍贵的早期支持者与老朋友",
+            Self::English => "🌟 To Our Dearest Early Supporter & Friend",
+            Self::Japanese => "🌟 最愛の初期サポーターと古き友人へ",
+            _ => "🌟 To Our Dearest Early Supporter & Friend",
+        }
+    }
+
+    pub fn mascot_supporter_modal_title_new(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "💖 非常感謝您的購買與肯定！",
+            Self::SimplifiedChinese => "💖 非常感谢您的购买与肯定！",
+            Self::English => "💖 Thank You for Purchasing Win2Pod!",
+            Self::Japanese => "💖 ご購入いただき心より感謝申し上げます！",
+            _ => "💖 Thank You for Purchasing Win2Pod!",
+        }
+    }
+
+    pub fn mascot_supporter_modal_body_existing(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "謝謝您一路以來的信任與相伴！有了您的早期支持，Win2Pod 才能持續進化。\n\n為了感謝您的熱情相挺，我和作者特別為您準備了一份正式版專屬的秘密特技：\n\n🎵「在播歌時，對著音樂頻譜按滑鼠右鍵，我就會飛上浪尖為您使出 360° 特技空翻衝浪喔！」",
+            Self::SimplifiedChinese => "谢谢您一路以来的信任与相伴！有了您的早期支持，Win2Pod 才能持续进化。\n\n为了感谢您的热情相挺，我和作者特别为您准备了一份正式版专属的秘密特技：\n\n🎵「在播歌时，对着音乐频谱按鼠标右键，我就会飞上浪尖为您使出 360° 特技空翻冲浪喔！」",
+            Self::English => "Thank you for your trust and companionship along the way! Your early support keeps Win2Pod evolving.\n\nAs a heartfelt token of gratitude, the developer and I have prepared an exclusive Pro-version secret acrobatic move for you:\n\n🎵 \"During music playback, right-click inside the audio spectrum visualizer, and I will soar up high and perform a 360° air-surf flip for you!\"",
+            Self::Japanese => "これまでのご信頼と温かいご愛用に心から感謝いたします！皆様の初期のご支援があったからこそ、Win2Pod は進化を続けることができました。\n\n熱い応援への感謝を込めて、正式版オーナー様限定の秘密のアクロバット技をご用意しました：\n\n🎵「音楽再生中にスペクトラム上で右クリックすると、波の頂点へ飛び上がって360°特技エアサーフ宙返りを披露するよ！」",
+            _ => "Thank you for your trust and companionship along the way! Your early support keeps Win2Pod evolving.\n\nAs a heartfelt token of gratitude, the developer and I have prepared an exclusive Pro-version secret acrobatic move for you:\n\n🎵 \"During music playback, right-click inside the audio spectrum visualizer, and I will soar up high and perform a 360° air-surf flip for you!\"",
+        }
+    }
+
+    pub fn mascot_supporter_modal_body_new(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "歡迎成為正式版主人！我和作者都非常感激您的贊助與肯定，特地為您揭曉一份專屬秘密：\n\n🎵「在播歌時，只要對著音樂頻譜點擊滑鼠右鍵，我就會飛上浪尖使出 360° 特技空翻衝浪喔！」",
+            Self::SimplifiedChinese => "欢迎成为正式版主人！我和作者都非常感激您的赞助与肯定，特地为您揭晓一份专属秘密：\n\n🎵「在播歌时，只要对着音乐频谱点击鼠标右键，我就会飞上浪尖使出 360° 特技空翻冲浪喔！」",
+            Self::English => "Welcome to the Pro family! The developer and I deeply appreciate your support, and we have a special secret to share with you:\n\n🎵 \"During music playback, right-click inside the audio spectrum visualizer, and I will soar up high and perform a 360° air-surf flip for you!\"",
+            Self::Japanese => "正式版オーナーファミリーへようこそ！ご支援に心より感謝申し上げます。感謝を込めて特別な秘密をお教えします：\n\n🎵「音楽再生中にスペクトラム上で右クリックすると、波の頂点へ飛び上がって360°特技エアサーフ宙返りを披露するよ！」",
+            _ => "Welcome to the Pro family! The developer and I deeply appreciate your support, and we have a special secret to share with you:\n\n🎵 \"During music playback, right-click inside the audio spectrum visualizer, and I will soar up high and perform a 360° air-surf flip for you!\"",
+        }
+    }
+
+    pub fn mascot_supporter_modal_btn_existing(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "💖 收下這份專屬感謝與秘密",
+            Self::SimplifiedChinese => "💖 收下这份专属感谢与秘密",
+            Self::English => "💖 Accept with Gratitude & Secrets",
+            Self::Japanese => "💖 感謝と秘密を受け取る",
+            _ => "💖 Accept with Gratitude & Secrets",
+        }
+    }
+
+    pub fn mascot_supporter_modal_btn_new(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🎵 太棒了！收下這個秘密",
+            Self::SimplifiedChinese => "🎵 太棒了！收下这个秘密",
+            Self::English => "🎵 Awesome! Got the Secret",
+            Self::Japanese => "🎵 すばらしい！秘密を受け取る",
+            _ => "🎵 Awesome! Got the Secret",
+        }
+    }
+
+    pub fn mascot_supporter_replay_btn(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "💌 重溫支持者感謝信與秘密",
+            Self::SimplifiedChinese => "💌 重温支持者感谢信与秘密",
+            Self::English => "💌 Replay Supporter Gratitude & Secret",
+            Self::Japanese => "💌 サポーター感謝レターと秘密を再確認",
+            _ => "💌 Replay Supporter Gratitude & Secret",
+        }
+    }
+
+    pub fn mascot_pro_locked_hint(&self) -> &'static str {
+        match self {
+            Self::TraditionalChinese => "🔒 購買正式版即可解鎖小幽靈 360° 空中特技衝浪彩蛋",
+            Self::SimplifiedChinese => "🔒 购买正式版即可解锁小幽灵 360° 空中特技冲浪彩蛋",
+            Self::English => "🔒 Purchase full version to unlock mascot 360° air-surf acrobatic easter egg",
+            Self::Japanese => "🔒 正式版をご購入いただくとマスコットの360°エアサーフ宙返り技が解放されます",
+            _ => "🔒 Purchase full version to unlock mascot 360° air-surf acrobatic easter egg",
+        }
+    }
+
     pub fn auto_connect_checkbox(&self) -> &'static str {
         match self {
             Self::TraditionalChinese => "🚀 啟動時自動連線上次播放音響",
