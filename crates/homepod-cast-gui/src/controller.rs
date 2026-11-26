@@ -4954,6 +4954,7 @@ pub fn spawn_controller(
                                 }
                                 unregister_notification_client();
                                 unregister_local_endpoint_listener();
+                                sidecar_client.shutdown().await;
                                 restore_original_speaker_mute();
                                 restore_initial_default_device();
                                 runtime.stop().await;

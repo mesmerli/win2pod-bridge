@@ -17,13 +17,38 @@ use crate::engine::Engine;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::new(
-                std::env::var("RUST_LOG").unwrap_or_else(|_| "info,win2pod_engine=debug".into()),
-            ),
-        )
-        .init();
+    let log_dir = if let Ok(appdata) = std::env::var("APPDATA") {
+        std::path::PathBuf::from(appdata).join("win2pod")
+    } else {
+        std::path::PathBuf::from(".")
+    };
+    let _ = std::fs::create_dir_all(&log_dir);
+    let log_file = log_dir.join("engine.log");
+
+    if let Ok(file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_file)
+    {
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(std::sync::Mutex::new(file))
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::new(
+                    std::env::var("RUST_LOG").unwrap_or_else(|_| "debug,airplay_rtsp=trace,airplay_client=debug,airplay_core=debug,win2pod_engine=debug".into()),
+                ),
+            )
+            .with_ansi(false)
+            .finish();
+        let _ = tracing::subscriber::set_global_default(subscriber);
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::new(
+                    std::env::var("RUST_LOG").unwrap_or_else(|_| "info,win2pod_engine=debug".into()),
+                ),
+            )
+            .init();
+    }
 
     info!("Starting win2pod-engine Sidecar (GPL-3.0-or-later)...");
 
@@ -46,7 +71,7 @@ async fn main() -> Result<()> {
     let engine = Arc::new(Engine::new(event_tx));
 
     let mut is_first = true;
-    loop {
+    'server_loop: loop {
         let server = match create_pipe_server(Some(&pipe_name), is_first) {
             Ok(s) => {
                 is_first = false;
@@ -75,6 +100,7 @@ async fn main() -> Result<()> {
                 read_res = transport.read_message() => {
                     match read_res {
                         Ok(Some(IpcMessage::Request(req))) => {
+                            let is_shutdown = matches!(req, win2pod_ipc::protocol::IpcRequest::Shutdown);
                             let resp = match engine_clone.handle_request(req).await {
                                 Ok(r) => r,
                                 Err(e) => win2pod_ipc::protocol::IpcResponse::Error(e.to_string()),
@@ -83,17 +109,21 @@ async fn main() -> Result<()> {
                                 warn!("Failed to write IPC response: {e:#}");
                                 break;
                             }
+                            if is_shutdown {
+                                info!("Shutdown requested by GUI client, exiting sidecar engine");
+                                break 'server_loop;
+                            }
                         }
                         Ok(Some(msg)) => {
                             warn!("Unexpected IPC message from client: {:?}", msg);
                         }
                         Ok(None) => {
-                            info!("GUI client disconnected");
-                            break;
+                            info!("GUI client disconnected, shutting down sidecar engine");
+                            break 'server_loop;
                         }
                         Err(e) => {
                             warn!("Error reading IPC message: {e:#}");
-                            break;
+                            break 'server_loop;
                         }
                     }
                 }
@@ -109,4 +139,7 @@ async fn main() -> Result<()> {
         info!("Session ended, cleaning up active stream...");
         let _ = engine.handle_request(win2pod_ipc::protocol::IpcRequest::Disconnect).await;
     }
+
+    info!("win2pod-engine daemon shutting down cleanly.");
+    Ok(())
 }

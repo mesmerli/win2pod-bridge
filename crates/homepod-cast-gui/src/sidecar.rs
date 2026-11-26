@@ -189,12 +189,19 @@ impl SidecarClient {
 
 pub fn device_to_ipc(d: &airplay_core::Device) -> DeviceIpc {
     let is_stereo = d.tight_sync_id.is_some() && d.group_public_name.is_some();
+    let mut addrs: Vec<String> = d.addresses.iter()
+        .filter(|a| a.is_ipv4())
+        .map(|a| a.to_string())
+        .collect();
+    if addrs.is_empty() {
+        addrs = d.addresses.iter().map(|a| a.to_string()).collect();
+    }
     DeviceIpc {
         id: d.id.to_mac_string(),
         name: d.name.clone(),
         model: d.model.clone(),
-        addresses: d.addresses.iter().map(|a| a.to_string()).collect(),
-        port: d.port,
+        addresses: addrs,
+        port: if d.port == 0 { 7000 } else { d.port },
         is_stereo_pair: is_stereo,
         is_group: false,
         stereo_role: if is_stereo {
