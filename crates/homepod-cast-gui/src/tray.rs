@@ -506,8 +506,8 @@ pub unsafe fn ensure_window_on_screen(hwnd: HWND) -> bool {
         || rect.top > work.bottom - 60;
 
     if is_off {
-        let win_w = if w <= 0 { 460 } else { w };
-        let win_h = if h <= 0 { 680 } else { h };
+        let win_w = if w < 380 { 460 } else { w };
+        let win_h = if h < 320 { 680 } else { h };
         let mut new_x = LAST_POS_X.load(Ordering::SeqCst);
         let mut new_y = LAST_POS_Y.load(Ordering::SeqCst);
 
@@ -519,14 +519,20 @@ pub unsafe fn ensure_window_on_screen(hwnd: HWND) -> bool {
         LAST_POS_X.store(new_x, Ordering::SeqCst);
         LAST_POS_Y.store(new_y, Ordering::SeqCst);
 
+        let flags = if w < 380 || h < 320 {
+            SWP_NOZORDER | SWP_NOACTIVATE
+        } else {
+            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
+        };
+
         SetWindowPos(
             hwnd,
             std::ptr::null_mut(),
             new_x,
             new_y,
-            0,
-            0,
-            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+            win_w,
+            win_h,
+            flags,
         );
         return true;
     }
@@ -673,7 +679,7 @@ pub fn center_and_open_main_window(ctx: &egui::Context) {
     if !hwnd.is_null() && unsafe { windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(hwnd) != 0 } {
         unsafe {
             use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTOPRIMARY};
-            use windows_sys::Win32::UI::WindowsAndMessaging::{GetCursorPos, IsIconic, SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOSIZE, SW_RESTORE};
+            use windows_sys::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetWindowRect, IsIconic, SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOACTIVATE, SW_RESTORE};
 
             // 立即終止任何進行中或快照的神燈縮放動畫，避免結束回呼將視窗拉回舊座標
             crate::genie_effect::abort_genie_effect();
@@ -710,7 +716,11 @@ pub fn center_and_open_main_window(ctx: &egui::Context) {
                 if IsIconic(hwnd) != 0 {
                     ShowWindow(hwnd, SW_RESTORE);
                 }
-                SetWindowPos(hwnd, HWND_TOPMOST, cx, cy, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+                let mut rect: windows_sys::Win32::Foundation::RECT = std::mem::zeroed();
+                GetWindowRect(hwnd, &mut rect);
+                let w = (rect.right - rect.left).max(460);
+                let h = (rect.bottom - rect.top).max(680);
+                SetWindowPos(hwnd, HWND_TOPMOST, cx, cy, w, h, SWP_NOACTIVATE);
                 ensure_window_on_screen(hwnd);
                 force_foreground(hwnd);
                 crate::snapping::bring_fleet_to_top();

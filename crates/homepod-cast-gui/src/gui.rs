@@ -1091,8 +1091,12 @@ impl eframe::App for FlyoutApp {
             self.last_page = self.current_page;
         }
 
-        // On initial startup (first frame), ensure the window has the standardized base dimensions
-        if self.frame_count < 2 {
+        // On initial startup (first frame) or if the window dimensions ever collapse abnormally (< 360x320),
+        // enforce the standardized base dimensions to permanently prevent squashed window states.
+        let cur_screen = ctx.screen_rect();
+        let cur_w = cur_screen.width();
+        let cur_h = cur_screen.height();
+        if self.frame_count < 2 || cur_w < 360.0 || cur_h < 320.0 {
             self.last_applied_width = base_width;
             self.last_applied_height = base_height;
             ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(base_width, base_height)));

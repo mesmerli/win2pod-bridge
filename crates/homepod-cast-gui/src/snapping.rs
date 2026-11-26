@@ -1946,40 +1946,82 @@ pub unsafe fn restore_and_realign_all_children(parent_kind: WindowKind, parent_h
 
 /// 安全獲取指定視窗在常態（未最小化）時的螢幕坐標矩形
 pub unsafe fn get_window_normal_rect(kind: WindowKind) -> RECT {
+    let min_s = kind.min_size();
+    let def_s = kind.default_size();
+    let min_w = min_s[0] as i32;
+    let min_h = min_s[1] as i32;
+    let def_w = def_s[0] as i32;
+    let def_h = def_s[1] as i32;
+
     let hwnd = get_window_hwnd(kind);
     if hwnd.is_null() || IsWindow(hwnd) == 0 {
-        return RECT { left: 0, top: 0, right: 0, bottom: 0 };
+        if let Ok(guard) = LAST_KNOWN_RECTS.lock() {
+            if let Some(map) = guard.as_ref() {
+                if let Some(kr) = map.get(&kind) {
+                    let w = (kr.right - kr.left).max(min_w);
+                    let h = (kr.bottom - kr.top).max(min_h);
+                    return RECT {
+                        left: kr.left,
+                        top: kr.top,
+                        right: kr.left + w,
+                        bottom: kr.top + h,
+                    };
+                }
+            }
+        }
+        return RECT {
+            left: 100,
+            top: 100,
+            right: 100 + def_w,
+            bottom: 100 + def_h,
+        };
     }
     let is_iconic = IsIconic(hwnd) != 0;
     let mut r: RECT = std::mem::zeroed();
     GetWindowRect(hwnd, &mut r);
 
     // 若視窗處於最小化，或 GetWindowRect 回傳負坐標（如被神燈離屏移至 -32000），一律優先回退至 rcNormalPosition
-    if is_iconic || r.left < -1000 || r.top < -1000 || (r.right - r.left) <= 50 || (r.bottom - r.top) <= 50 {
+    if is_iconic || r.left < -1000 || r.top < -1000 || (r.right - r.left) < min_w || (r.bottom - r.top) < min_h {
         let mut wp: WINDOWPLACEMENT = std::mem::zeroed();
         wp.length = std::mem::size_of::<WINDOWPLACEMENT>() as u32;
         if GetWindowPlacement(hwnd, &mut wp) != 0 {
-            let pr = wp.rcNormalPosition;
-            if pr.left >= -1000 && pr.top >= -1000 && (pr.right - pr.left) > 50 && (pr.bottom - pr.top) > 50 {
+            let mut pr = wp.rcNormalPosition;
+            if pr.left >= -1000 && pr.top >= -1000 {
+                let pw = (pr.right - pr.left).max(min_w);
+                let ph = (pr.bottom - pr.top).max(min_h);
+                pr.right = pr.left + pw;
+                pr.bottom = pr.top + ph;
                 return pr;
             }
         }
         if let Ok(guard) = LAST_KNOWN_RECTS.lock() {
             if let Some(map) = guard.as_ref() {
                 if let Some(kr) = map.get(&kind) {
-                    if kr.left >= -1000 && kr.top >= -1000 && (kr.right - kr.left) > 50 && (kr.bottom - kr.top) > 50 {
-                        return *kr;
+                    if kr.left >= -1000 && kr.top >= -1000 {
+                        let kw = (kr.right - kr.left).max(min_w);
+                        let kh = (kr.bottom - kr.top).max(min_h);
+                        return RECT {
+                            left: kr.left,
+                            top: kr.top,
+                            right: kr.left + kw,
+                            bottom: kr.top + kh,
+                        };
                     }
                 }
             }
         }
     }
 
-    if r.left >= -1000 && r.top >= -1000 && (r.right - r.left) > 50 && (r.bottom - r.top) > 50 {
-        r
+    if r.left >= -1000 && r.top >= -1000 {
+        let w = (r.right - r.left).max(min_w);
+        let h = (r.bottom - r.top).max(min_h);
+        RECT {
+            left: r.left,
+            top: r.top,
+            right: r.left + w,
+            bottom: r.top + h,
+        }
     } else {
-        let s = kind.default_size();
-        let (def_w, def_h) = (s[0] as i32, s[1] as i32);
         RECT {
             left: 100,
             top: 100,
@@ -2198,6 +2240,7 @@ pub unsafe fn disable_dwm_iconic_preview(hwnd: HWND) {
 
 /// 以主控視窗為向心核心（方案 A），執行逆向彈簧吸攏過場動畫並連鎖最小化群組視窗
 pub unsafe fn collapse_cluster_animated(kind: WindowKind) {
+    crate::visualizer::reset_hud_main_shown();
     if !SNAPPING_ENABLED.load(Ordering::Relaxed) {
         let hwnd = get_window_hwnd(kind);
         if !hwnd.is_null() && IsWindow(hwnd) != 0 {
@@ -4454,9 +4497,30 @@ pub unsafe fn bring_fleet_to_top() {
     let eq_hwnd = get_window_hwnd(WindowKind::Equalizer);
     let vis_hwnd = get_window_hwnd(WindowKind::Visualizer);
 
-    // 1. Un-minimize main window if iconic
-    if !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 && IsIconic(main_hwnd) != 0 {
+    // 1. Un-minimize main window if iconic and not in a minimized cluster state
+    let main_root = get_component_root(WindowKind::Main);
+    let is_main_minimized = is_cluster_minimizing() || matches!(get_cluster_state(main_root), ClusterState::Minimized);
+    if !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 && IsIconic(main_hwnd) != 0 && !is_main_minimized {
         ShowWindow(main_hwnd, SW_RESTORE);
+    }
+
+    // 保底校正：若主視窗當前處於還原現身狀態，確保其寬高絕不低於基本底限 (380x500)
+    if !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 && IsWindowVisible(main_hwnd) != 0 && IsIconic(main_hwnd) == 0 {
+        let mut mr: RECT = std::mem::zeroed();
+        GetWindowRect(main_hwnd, &mut mr);
+        let mw = mr.right - mr.left;
+        let mh = mr.bottom - mr.top;
+        if mw < 380 || mh < 500 {
+            SetWindowPos(
+                main_hwnd,
+                std::ptr::null_mut(),
+                mr.left,
+                mr.top,
+                mw.max(460),
+                mh.max(680),
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+        }
     }
 
     // 2. Elevate all active visible fleet windows in bottom-to-top order atomically
@@ -5928,5 +5992,72 @@ mod tests {
         assert!(is_window_pinned(WindowKind::MiniPlayer));
 
         break_dock_relation(WindowKind::MiniPlayer);
+    }
+
+    #[test]
+    fn test_squashed_rect_clamp_and_root_priority_preservation() {
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        reset_all();
+
+        // 1. Abnormal squashed rect (Win32 iconic 180x27)
+        let squashed_main = RECT { left: 400, top: 300, right: 580, bottom: 327 };
+        update_known_rect(WindowKind::Main, squashed_main);
+
+        // get_window_normal_rect must clamp to min_size bounds (380x500) and preserve user coordinates
+        let norm_r = unsafe { get_window_normal_rect(WindowKind::Main) };
+        assert!(norm_r.right - norm_r.left >= 380, "Main width must be at least min_size width (380)");
+        assert!(norm_r.bottom - norm_r.top >= 500, "Main height must be at least min_size height (500)");
+
+        // 2. Priority check: Main (1) < MiniPlayer (2) < Equalizer (3) < Visualizer (4)
+        assert_eq!(WindowKind::Main.priority(), 1);
+        assert_eq!(WindowKind::MiniPlayer.priority(), 2);
+        assert_eq!(WindowKind::Equalizer.priority(), 3);
+        assert_eq!(WindowKind::Visualizer.priority(), 4);
+
+        // 3. Cluster topology: When all 4 windows are connected, Main must ALWAYS be root
+        let main_r = RECT { left: 100, top: 100, right: 560, bottom: 780 };
+        let mini_r = RECT { left: 560, top: 100, right: 1020, bottom: 440 };
+        let eq_r = RECT { left: 560, top: 440, right: 1020, bottom: 780 };
+        let vis_r = RECT { left: 1020, top: 100, right: 1740, bottom: 780 };
+
+        update_known_rect(WindowKind::Main, main_r);
+        update_known_rect(WindowKind::MiniPlayer, mini_r);
+        update_known_rect(WindowKind::Equalizer, eq_r);
+        update_known_rect(WindowKind::Visualizer, vis_r);
+
+        // Add edges: Main <-> MiniPlayer, MiniPlayer <-> Equalizer, MiniPlayer <-> Visualizer
+        add_dock_edge(WindowKind::Main, WindowKind::MiniPlayer);
+        add_dock_edge(WindowKind::MiniPlayer, WindowKind::Equalizer);
+        add_dock_edge(WindowKind::MiniPlayer, WindowKind::Visualizer);
+
+        let active = vec![WindowKind::Main, WindowKind::MiniPlayer, WindowKind::Equalizer, WindowKind::Visualizer];
+        let edges = vec![
+            (WindowKind::Main, WindowKind::MiniPlayer),
+            (WindowKind::MiniPlayer, WindowKind::Equalizer),
+            (WindowKind::MiniPlayer, WindowKind::Visualizer),
+        ];
+
+        let rect_map = [
+            (WindowKind::Main, main_r),
+            (WindowKind::MiniPlayer, mini_r),
+            (WindowKind::Equalizer, eq_r),
+            (WindowKind::Visualizer, vis_r),
+        ];
+
+        let tree = build_dock_tree_from_edges_and_rects(&active, &edges, |k| {
+            rect_map.iter().find(|(kind, _)| *kind == k).map(|(_, r)| *r)
+        });
+
+        with_dock_tree(|t| *t = tree);
+
+        // Root of the connected component must be Main, NEVER Visualizer
+        assert_eq!(get_component_root(WindowKind::Main), WindowKind::Main);
+        assert_eq!(get_component_root(WindowKind::MiniPlayer), WindowKind::Main);
+        assert_eq!(get_component_root(WindowKind::Equalizer), WindowKind::Main);
+        assert_eq!(get_component_root(WindowKind::Visualizer), WindowKind::Main);
+
+        // Visualizer is slave bonded, not master
+        assert_eq!(get_window_role(WindowKind::Visualizer), WindowRole::ClusterSlave);
+        assert_eq!(get_window_role(WindowKind::Main), WindowRole::ClusterMaster);
     }
 }

@@ -731,7 +731,19 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
             }
         }
 
-        crate::snapping::bring_fleet_to_top();
+        let is_main_minimized_or_hidden = main_hwnd.is_null()
+            || IsIconic(main_hwnd) != 0
+            || IsWindowVisible(main_hwnd) == 0
+            || crate::tray::is_window_hidden_to_tray()
+            || crate::snapping::is_cluster_minimizing()
+            || matches!(
+                crate::snapping::get_cluster_state(crate::snapping::WindowKind::Main),
+                crate::snapping::ClusterState::Minimized
+            );
+
+        if !is_main_minimized_or_hidden {
+            crate::snapping::bring_fleet_to_top();
+        }
     }
 
     if let Some(ref wv) = state.webview {
@@ -1554,7 +1566,20 @@ unsafe extern "system" fn visualizer_wnd_proc(
             if VISUALIZER_FULLSCREEN.swap(false, Ordering::SeqCst) {
                 VISUALIZER_HUD_MAIN_SHOWN.store(false, Ordering::SeqCst);
                 restore_hud_pinned_states();
-                crate::snapping::bring_fleet_to_top();
+                let main_hwnd = crate::tray::get_main_hwnd();
+                let is_main_minimized_or_hidden = main_hwnd.is_null()
+                    || IsIconic(main_hwnd) != 0
+                    || IsWindowVisible(main_hwnd) == 0
+                    || crate::tray::is_window_hidden_to_tray()
+                    || crate::snapping::is_cluster_minimizing()
+                    || matches!(
+                        crate::snapping::get_cluster_state(crate::snapping::WindowKind::Main),
+                        crate::snapping::ClusterState::Minimized
+                    );
+
+                if !is_main_minimized_or_hidden {
+                    crate::snapping::bring_fleet_to_top();
+                }
             }
             crate::spectrum::update_spectrum_needed_state();
             crate::snapping::handle_window_closed(crate::snapping::WindowKind::Visualizer);

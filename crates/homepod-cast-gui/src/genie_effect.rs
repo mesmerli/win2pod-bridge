@@ -277,6 +277,19 @@ fn run_genie_s_curve_animation<F>(
                         // Minimize to Taskbar:
                         // Move off-screen during animation so DWM has no visible surface to glitch
                         disable_window_dwm_transitions(hwnd);
+                        // 關鍵時序防護：在離屏前，先將真實常態幾何尺寸寫入 rcNormalPosition！
+                        // 杜絕任何在動畫期間發生的還原或中斷因負坐標落入 Win32 最小化預設寸 (180x27)
+                        let mut wp: WINDOWPLACEMENT = std::mem::zeroed();
+                        wp.length = std::mem::size_of::<WINDOWPLACEMENT>() as u32;
+                        if GetWindowPlacement(hwnd, &mut wp) != 0 {
+                            let safe_w = start_w.max(380);
+                            let safe_h = start_h.max(340);
+                            wp.rcNormalPosition.left = start_x;
+                            wp.rcNormalPosition.top = start_y;
+                            wp.rcNormalPosition.right = start_x + safe_w;
+                            wp.rcNormalPosition.bottom = start_y + safe_h;
+                            SetWindowPlacement(hwnd, &wp);
+                        }
                         SetWindowPos(
                             hwnd,
                             HWND_NOTOPMOST,
@@ -594,10 +607,12 @@ fn run_genie_s_curve_animation<F>(
                 let mut wp: WINDOWPLACEMENT = std::mem::zeroed();
                 wp.length = std::mem::size_of::<WINDOWPLACEMENT>() as u32;
                 if GetWindowPlacement(orig_h, &mut wp) != 0 {
+                    let safe_w = start_w.max(380);
+                    let safe_h = start_h.max(340);
                     wp.rcNormalPosition.left = start_x;
                     wp.rcNormalPosition.top = start_y;
-                    wp.rcNormalPosition.right = start_x + start_w;
-                    wp.rcNormalPosition.bottom = start_y + start_h;
+                    wp.rcNormalPosition.right = start_x + safe_w;
+                    wp.rcNormalPosition.bottom = start_y + safe_h;
                     SetWindowPlacement(orig_h, &wp);
                 }
             }
