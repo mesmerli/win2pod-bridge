@@ -15,6 +15,7 @@ pub mod policy_config;
 pub mod power;
 pub mod process_loopback;
 pub mod sidecar;
+pub mod sidecar_fsm;
 pub mod single_instance;
 pub mod snapping;
 pub mod spectrum;

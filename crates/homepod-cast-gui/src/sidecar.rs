@@ -1,11 +1,11 @@
 //! Sidecar Process Supervisor for win2pod-engine.
 //!
 //! Manages spawning, health monitoring, and Named Pipe IPC communication with
-//! the GPL-3.0 backend engine daemon (`win2pod-engine.exe`).
+//! the GPL-3.0 backend engine daemon (`win2pod-engine.exe`) under a formal
+//! finite state machine lifecycle.
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use anyhow::{anyhow, Context, Result};
@@ -14,25 +14,89 @@ use tracing::{info, warn};
 use win2pod_ipc::protocol::*;
 use win2pod_ipc::transport::{connect_pipe_client, PipeReader, PipeWriter, PipeTransport};
 
+pub use crate::sidecar_fsm::{
+    SidecarAction, SidecarLifecycleEvent, SidecarLifecycleFsm, SidecarLifecycleState,
+};
+
 pub struct SidecarClient {
+    fsm: Arc<std::sync::Mutex<SidecarLifecycleFsm>>,
     writer: Arc<Mutex<Option<PipeWriter<tokio::io::WriteHalf<tokio::net::windows::named_pipe::NamedPipeClient>>>>>,
     pending_response: Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<IpcResponse>>>>,
     request_lock: Arc<Mutex<()>>,
     event_sender: Arc<std::sync::Mutex<Option<mpsc::Sender<IpcEvent>>>>,
     child_process: Arc<Mutex<Option<Child>>>,
-    is_connected: Arc<AtomicBool>,
+    #[cfg(windows)]
+    job_handle: Arc<std::sync::Mutex<Option<isize>>>,
+}
+
+#[cfg(windows)]
+fn setup_job_object_for_child(child: &Child) -> Option<isize> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::System::JobObjects::*;
+    use windows_sys::Win32::Foundation::HANDLE;
+
+    unsafe {
+        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if job == 0 as _ {
+            warn!("[Sidecar] Failed to create Windows Job Object");
+            return None;
+        }
+
+        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+        let res = SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &info as *const _ as _,
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        );
+        if res == 0 {
+            warn!("[Sidecar] Failed to set JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE on Job Object");
+            windows_sys::Win32::Foundation::CloseHandle(job);
+            return None;
+        }
+
+        let child_handle = child.as_raw_handle() as HANDLE;
+        let assign_res = AssignProcessToJobObject(job, child_handle);
+        if assign_res == 0 {
+            warn!("[Sidecar] Failed to assign child process to Windows Job Object");
+            windows_sys::Win32::Foundation::CloseHandle(job);
+            return None;
+        }
+
+        info!("[Sidecar] Successfully bound win2pod-engine to Windows Job Object (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)");
+        Some(job as isize)
+    }
 }
 
 impl SidecarClient {
     pub fn new() -> Self {
         Self {
+            fsm: Arc::new(std::sync::Mutex::new(SidecarLifecycleFsm::new())),
             writer: Arc::new(Mutex::new(None)),
             pending_response: Arc::new(std::sync::Mutex::new(None)),
             request_lock: Arc::new(Mutex::new(())),
             event_sender: Arc::new(std::sync::Mutex::new(None)),
             child_process: Arc::new(Mutex::new(None)),
-            is_connected: Arc::new(AtomicBool::new(false)),
+            #[cfg(windows)]
+            job_handle: Arc::new(std::sync::Mutex::new(None)),
         }
+    }
+
+    /// Read the current formal lifecycle state of the sidecar.
+    pub fn state(&self) -> SidecarLifecycleState {
+        self.fsm.lock().unwrap().state().clone()
+    }
+
+    /// Check if the sidecar is currently connected (Ready or Streaming).
+    pub fn is_connected(&self) -> bool {
+        self.fsm.lock().unwrap().is_connected()
+    }
+
+    /// Check if the sidecar is shutting down or terminated.
+    pub fn is_shutting_down(&self) -> bool {
+        self.fsm.lock().unwrap().is_shutting_down()
     }
 
     /// Locate `win2pod-engine.exe` in the same directory as `win2pod.exe` or standard cargo output paths.
@@ -66,13 +130,21 @@ impl SidecarClient {
 
     fn spawn_reader_task(
         mut reader: PipeReader<tokio::io::ReadHalf<tokio::net::windows::named_pipe::NamedPipeClient>>,
-        is_connected: Arc<AtomicBool>,
+        fsm: Arc<std::sync::Mutex<SidecarLifecycleFsm>>,
         pending_response: Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<IpcResponse>>>>,
         event_sender: Arc<std::sync::Mutex<Option<mpsc::Sender<IpcEvent>>>>,
     ) {
         tokio::spawn(async move {
             info!("Sidecar dedicated reader loop started");
-            while is_connected.load(Ordering::Relaxed) {
+            loop {
+                // If shutting down, stop reading
+                {
+                    let f = fsm.lock().unwrap();
+                    if f.is_shutting_down() {
+                        break;
+                    }
+                }
+
                 match reader.read_message().await {
                     Ok(Some(IpcMessage::Event(evt))) => {
                         let tx_opt = event_sender.lock().unwrap().clone();
@@ -92,13 +164,35 @@ impl SidecarClient {
                         warn!("Received unexpected IPC message from sidecar: {:?}", msg);
                     }
                     Ok(None) => {
-                        warn!("Sidecar named pipe closed by engine");
-                        is_connected.store(false, Ordering::SeqCst);
+                        let is_shutting_down = {
+                            let f = fsm.lock().unwrap();
+                            f.is_shutting_down()
+                        };
+                        if is_shutting_down {
+                            info!("Sidecar named pipe closed as expected during shutdown");
+                        } else {
+                            warn!("Sidecar named pipe unexpectedly closed by engine");
+                            let mut f = fsm.lock().unwrap();
+                            let _ = f.transition(SidecarLifecycleEvent::PipeBroken {
+                                error: "Pipe closed by engine".into(),
+                            });
+                        }
                         break;
                     }
                     Err(e) => {
-                        warn!("Error reading from sidecar named pipe: {e:#}");
-                        is_connected.store(false, Ordering::SeqCst);
+                        let is_shutting_down = {
+                            let f = fsm.lock().unwrap();
+                            f.is_shutting_down()
+                        };
+                        if is_shutting_down {
+                            info!("Sidecar named pipe read error during shutdown: {e:#}");
+                        } else {
+                            warn!("Error reading from sidecar named pipe: {e:#}");
+                            let mut f = fsm.lock().unwrap();
+                            let _ = f.transition(SidecarLifecycleEvent::PipeBroken {
+                                error: format!("Pipe read error: {e:#}"),
+                            });
+                        }
                         break;
                     }
                 }
@@ -109,7 +203,13 @@ impl SidecarClient {
 
     /// Start the sidecar engine process and bind it to a Windows Job Object.
     pub async fn ensure_started(&self, pipe_name: Option<&str>) -> Result<()> {
-        if self.is_connected() {
+        let action = {
+            let mut fsm = self.fsm.lock().unwrap();
+            fsm.transition(SidecarLifecycleEvent::EnsureStarted)
+                .map_err(|e| anyhow!("{e}"))?
+        };
+
+        if action == SidecarAction::NoAction {
             return Ok(());
         }
 
@@ -125,11 +225,14 @@ impl SidecarClient {
                 let mut w_lock = self.writer.lock().await;
                 *w_lock = Some(writer);
             }
-            self.is_connected.store(true, Ordering::SeqCst);
+            {
+                let mut fsm = self.fsm.lock().unwrap();
+                let _ = fsm.transition(SidecarLifecycleEvent::Connected);
+            }
 
             Self::spawn_reader_task(
                 reader,
-                self.is_connected.clone(),
+                self.fsm.clone(),
                 self.pending_response.clone(),
                 self.event_sender.clone(),
             );
@@ -137,7 +240,12 @@ impl SidecarClient {
         }
 
         let engine_path = Self::find_engine_executable()
-            .ok_or_else(|| anyhow!("Could not find win2pod-engine.exe binary"))?;
+            .ok_or_else(|| {
+                let err = "Could not find win2pod-engine.exe binary".to_string();
+                let mut fsm = self.fsm.lock().unwrap();
+                let _ = fsm.transition(SidecarLifecycleEvent::FatalError { reason: err.clone() });
+                anyhow!(err)
+            })?;
 
         info!("Launching sidecar engine: {:?}", engine_path);
 
@@ -154,6 +262,13 @@ impl SidecarClient {
         }
 
         let child = cmd.spawn().with_context(|| format!("Failed to spawn {:?}", engine_path))?;
+        #[cfg(windows)]
+        {
+            if let Some(job) = setup_job_object_for_child(&child) {
+                let mut jh = self.job_handle.lock().unwrap();
+                *jh = Some(job);
+            }
+        }
         {
             let mut child_lock = self.child_process.lock().await;
             *child_lock = Some(child);
@@ -161,8 +276,16 @@ impl SidecarClient {
 
         // Connect with retry (up to 5 seconds)
         info!("Connecting to newly spawned win2pod-engine...");
-        let client = connect_pipe_client(Some(name), 50, Duration::from_millis(100)).await
-            .context("Failed to connect to win2pod-engine after spawning")?;
+        let client = match connect_pipe_client(Some(name), 50, Duration::from_millis(100)).await {
+            Ok(c) => c,
+            Err(e) => {
+                let mut fsm = self.fsm.lock().unwrap();
+                let _ = fsm.transition(SidecarLifecycleEvent::PipeBroken {
+                    error: format!("Failed to connect after spawning: {e:#}"),
+                });
+                return Err(e).context("Failed to connect to win2pod-engine after spawning");
+            }
+        };
 
         let transport = PipeTransport::new(client);
         let (reader, writer) = transport.split();
@@ -171,11 +294,14 @@ impl SidecarClient {
             let mut w_lock = self.writer.lock().await;
             *w_lock = Some(writer);
         }
-        self.is_connected.store(true, Ordering::SeqCst);
+        {
+            let mut fsm = self.fsm.lock().unwrap();
+            let _ = fsm.transition(SidecarLifecycleEvent::Connected);
+        }
 
         Self::spawn_reader_task(
             reader,
-            self.is_connected.clone(),
+            self.fsm.clone(),
             self.pending_response.clone(),
             self.event_sender.clone(),
         );
@@ -185,12 +311,7 @@ impl SidecarClient {
         Ok(())
     }
 
-    /// Send a request to the sidecar and receive its response.
-    pub async fn send_request(&self, req: IpcRequest) -> Result<IpcResponse> {
-        if !self.is_connected() {
-            return Err(anyhow!("Sidecar not connected"));
-        }
-
+    async fn send_request_internal(&self, req: IpcRequest, timeout: Duration) -> Result<IpcResponse> {
         // Sequentialize requests so only one request is in flight at a time
         let _req_guard = self.request_lock.lock().await;
 
@@ -206,12 +327,11 @@ impl SidecarClient {
             if let Err(e) = writer.write_message(&IpcMessage::Request(req)).await {
                 let mut pending = self.pending_response.lock().unwrap();
                 *pending = None;
-                self.is_connected.store(false, Ordering::SeqCst);
                 return Err(e);
             }
         }
 
-        match tokio::time::timeout(Duration::from_secs(5), resp_rx).await {
+        match tokio::time::timeout(timeout, resp_rx).await {
             Ok(Ok(resp)) => Ok(resp),
             Ok(Err(_)) => {
                 let mut pending = self.pending_response.lock().unwrap();
@@ -221,9 +341,18 @@ impl SidecarClient {
             Err(_) => {
                 let mut pending = self.pending_response.lock().unwrap();
                 *pending = None;
-                Err(anyhow!("Sidecar request timed out after 5 seconds"))
+                Err(anyhow!("Sidecar request timed out after {:?}", timeout))
             }
         }
+    }
+
+    /// Send a request to the sidecar and receive its response.
+    pub async fn send_request(&self, req: IpcRequest) -> Result<IpcResponse> {
+        if !self.is_connected() {
+            return Err(anyhow!("Sidecar not connected (state: {:?})", self.state()));
+        }
+
+        self.send_request_internal(req, Duration::from_secs(5)).await
     }
 
     /// Start listening for async events in the background.
@@ -233,10 +362,6 @@ impl SidecarClient {
     ) {
         let mut guard = self.event_sender.lock().unwrap();
         *guard = Some(event_sender);
-    }
-
-    pub fn is_connected(&self) -> bool {
-        self.is_connected.load(Ordering::Relaxed)
     }
 
     /// Enumerate audio endpoints via the unified engine.
@@ -272,26 +397,65 @@ impl SidecarClient {
     /// Switch the engine operating mode (Idle, AirPlay, LocalAo).
     pub async fn set_engine_mode(&self, mode: EngineModeIpc) -> Result<()> {
         self.ensure_started(None).await?;
-        match self.send_request(IpcRequest::SetEngineMode { mode }).await? {
+        let res = match self.send_request(IpcRequest::SetEngineMode { mode: mode.clone() }).await? {
             IpcResponse::Ok => Ok(()),
             IpcResponse::Error(e) => Err(anyhow!("SetEngineMode error: {e}")),
             other => Err(anyhow!("Unexpected response to SetEngineMode: {:?}", other)),
+        };
+
+        if res.is_ok() {
+            let mut fsm = self.fsm.lock().unwrap();
+            match mode {
+                EngineModeIpc::AirPlay => {
+                    let _ = fsm.transition(SidecarLifecycleEvent::StreamStarted { target: "AirPlay".into() });
+                }
+                EngineModeIpc::Idle => {
+                    let _ = fsm.transition(SidecarLifecycleEvent::StreamStopped);
+                }
+                EngineModeIpc::LocalAo { .. } => {
+                    let _ = fsm.transition(SidecarLifecycleEvent::StreamStarted { target: "LocalAo".into() });
+                }
+            }
         }
+
+        res
     }
 
-    /// Gracefully shutdown sidecar.
+    /// Gracefully shutdown sidecar under FSM management.
     pub async fn shutdown(&self) {
-        if self.is_connected() {
-            let _ = self.send_request(IpcRequest::Shutdown).await;
+        let is_connected_prior = self.is_connected();
+        {
+            let mut fsm = self.fsm.lock().unwrap();
+            let _ = fsm.transition(SidecarLifecycleEvent::ShutdownRequested);
         }
-        self.is_connected.store(false, Ordering::SeqCst);
+
+        if is_connected_prior {
+            // Send shutdown IPC with a tight timeout to allow graceful clean exit
+            let _ = self.send_request_internal(IpcRequest::Shutdown, Duration::from_millis(500)).await;
+        }
+
         {
             let mut writer_lock = self.writer.lock().await;
             *writer_lock = None;
         }
-        let mut child_lock = self.child_process.lock().await;
-        if let Some(mut child) = child_lock.take() {
-            let _ = child.kill();
+        {
+            let mut child_lock = self.child_process.lock().await;
+            if let Some(mut child) = child_lock.take() {
+                let _ = child.kill();
+            }
+        }
+        #[cfg(windows)]
+        {
+            let mut jh = self.job_handle.lock().unwrap();
+            if let Some(handle) = jh.take() {
+                unsafe {
+                    windows_sys::Win32::Foundation::CloseHandle(handle as windows_sys::Win32::Foundation::HANDLE);
+                }
+            }
+        }
+        {
+            let mut fsm = self.fsm.lock().unwrap();
+            let _ = fsm.transition(SidecarLifecycleEvent::CleanupComplete);
         }
     }
 }
