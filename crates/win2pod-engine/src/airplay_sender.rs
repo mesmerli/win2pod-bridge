@@ -85,10 +85,11 @@ fn to_core_device(ipc: &DeviceIpc) -> Result<Device> {
 }
 
 pub struct ActiveStreamSession {
-    connections: Vec<Connection>,
+    connections: Arc<tokio::sync::Mutex<Vec<Connection>>>,
     running: Arc<AtomicBool>,
     capture_thread: Option<JoinHandle<()>>,
     streamer: Option<AudioStreamer>,
+    feedback_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl ActiveStreamSession {
@@ -231,7 +232,7 @@ impl ActiveStreamSession {
             streamer.set_timing_updates(timing_rx).await;
             streamer.set_ptp_sync_mode(ptp_clock_id).await;
 
-            let (sender, decoder) = LiveAudioDecoder::create_pair(RATE, CHANNELS, 32);
+            let (sender, decoder) = LiveAudioDecoder::create_pair(RATE, CHANNELS, 256);
             let running = Arc::new(AtomicBool::new(true));
             let running_clone = running.clone();
 
@@ -253,11 +254,33 @@ impl ActiveStreamSession {
                 return Err(e.into());
             }
 
+            let connections = Arc::new(tokio::sync::Mutex::new(connections));
+            let conns_clone = connections.clone();
+            let running_feedback = running.clone();
+
+            let feedback_task = tokio::spawn(async move {
+                let mut interval = tokio::time::interval(Duration::from_secs(2));
+                interval.tick().await;
+                while running_feedback.load(Ordering::Relaxed) {
+                    interval.tick().await;
+                    if !running_feedback.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let mut conns = conns_clone.lock().await;
+                    for c in conns.iter_mut() {
+                        if let Err(e) = c.send_feedback().await {
+                            warn!("AirPlay 2 feedback keepalive failed for {}: {e:#}", c.device().name);
+                        }
+                    }
+                }
+            });
+
             Ok(Self {
                 connections,
                 running,
                 capture_thread: Some(capture_thread),
                 streamer: Some(streamer),
+                feedback_task: Some(feedback_task),
             })
         } else {
             // Single device streaming
@@ -267,7 +290,7 @@ impl ActiveStreamSession {
             conn.setup().await?;
             let _ = conn.set_volume(volume).await;
 
-            let (sender, decoder) = LiveAudioDecoder::create_pair(RATE, CHANNELS, 32);
+            let (sender, decoder) = LiveAudioDecoder::create_pair(RATE, CHANNELS, 256);
             let running = Arc::new(AtomicBool::new(true));
             let running_clone = running.clone();
 
@@ -287,17 +310,40 @@ impl ActiveStreamSession {
                 return Err(e.into());
             }
 
+            let connections = Arc::new(tokio::sync::Mutex::new(vec![conn]));
+            let conns_clone = connections.clone();
+            let running_feedback = running.clone();
+
+            let feedback_task = tokio::spawn(async move {
+                let mut interval = tokio::time::interval(Duration::from_secs(2));
+                interval.tick().await;
+                while running_feedback.load(Ordering::Relaxed) {
+                    interval.tick().await;
+                    if !running_feedback.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let mut conns = conns_clone.lock().await;
+                    for c in conns.iter_mut() {
+                        if let Err(e) = c.send_feedback().await {
+                            warn!("AirPlay 2 feedback keepalive failed for {}: {e:#}", c.device().name);
+                        }
+                    }
+                }
+            });
+
             Ok(Self {
-                connections: vec![conn],
+                connections,
                 running,
                 capture_thread: Some(capture_thread),
                 streamer: None,
+                feedback_task: Some(feedback_task),
             })
         }
     }
 
     pub async fn set_volume(&mut self, volume: f32, device_id: Option<&str>) -> Result<()> {
-        for conn in &mut self.connections {
+        let mut conns = self.connections.lock().await;
+        for conn in conns.iter_mut() {
             if let Some(id) = device_id {
                 if !conn.device().id.to_mac_string().eq_ignore_ascii_case(id) {
                     continue;
@@ -315,13 +361,17 @@ impl ActiveStreamSession {
     pub async fn stop(&mut self) {
         info!("Stopping active streaming session...");
         self.running.store(false, Ordering::SeqCst);
+        if let Some(task) = self.feedback_task.take() {
+            task.abort();
+        }
         if let Some(handle) = self.capture_thread.take() {
             let _ = handle.join();
         }
         if let Some(mut streamer) = self.streamer.take() {
             let _ = streamer.stop().await;
         }
-        for conn in &mut self.connections {
+        let mut conns = self.connections.lock().await;
+        for mut conn in conns.drain(..) {
             let _ = conn.disconnect().await;
         }
         info!("Streaming session stopped successfully");
@@ -330,60 +380,126 @@ impl ActiveStreamSession {
     fn capture_loop(stop: Arc<AtomicBool>, sender: LiveFrameSender) -> Result<()> {
         let _com = initialize_mta();
         let enumerator = DeviceEnumerator::new()?;
-        let device = enumerator.get_default_device(&Direction::Render)?;
-        let mut audio_client = device.get_iaudioclient()?;
-
-        let format = WaveFormat::new(32, 32, &SampleType::Float, RATE as usize, CHANNELS as usize, None);
-        let (_default_period, min_period) = audio_client.get_periods()?;
-        let mode = StreamMode::EventsShared {
-            autoconvert: true,
-            buffer_duration_hns: min_period,
-        };
-        audio_client.initialize_client(&format, &Direction::Capture, &mode)?;
-
-        let h_event = audio_client.set_get_eventhandle()?;
-        let capture_client = audio_client.get_audiocaptureclient()?;
-        let mut queue: VecDeque<u8> = VecDeque::new();
-        audio_client.start_stream()?;
-        info!("Sidecar loopback capture started ({RATE} Hz, {CHANNELS}ch, f32)");
-
         let bytes_per_frame = CHANNELS as usize * 4; // f32 per sample
         let silence = vec![0i16; (RATE as usize / 20) * CHANNELS as usize];
 
         while !stop.load(Ordering::Relaxed) {
-            capture_client.read_from_device_to_deque(&mut queue)?;
-
-            let n_frames = queue.len() / bytes_per_frame;
-            if n_frames > 0 {
-                let n_samples = n_frames * CHANNELS as usize;
-                let mut samples: Vec<i16> = Vec::with_capacity(n_samples);
-                for _ in 0..n_samples {
-                    let b = [
-                        queue.pop_front().unwrap(),
-                        queue.pop_front().unwrap(),
-                        queue.pop_front().unwrap(),
-                        queue.pop_front().unwrap(),
-                    ];
-                    let f = f32::from_le_bytes(b);
-                    samples.push((f.clamp(-1.0, 1.0) * 32767.0) as i16);
+            let device = match enumerator.get_default_device(&Direction::Render) {
+                Ok(d) => d,
+                Err(e) => {
+                    warn!("Sidecar failed to get default render device: {e:#}, retrying in 300ms");
+                    let _ = sender.try_send(LivePcmFrame {
+                        samples: silence.clone(),
+                        channels: CHANNELS,
+                        sample_rate: RATE,
+                    });
+                    std::thread::sleep(Duration::from_millis(300));
+                    continue;
                 }
-                sender.try_send(LivePcmFrame {
-                    samples,
-                    channels: CHANNELS,
-                    sample_rate: RATE,
-                });
-            } else {
-                sender.try_send(LivePcmFrame {
-                    samples: silence.clone(),
-                    channels: CHANNELS,
-                    sample_rate: RATE,
-                });
+            };
+
+            if let Ok(name) = device.get_friendlyname() {
+                info!("Sidecar capturing from default render endpoint: {name}");
             }
 
-            let _ = h_event.wait_for_event(50);
+            let mut audio_client = match device.get_iaudioclient() {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!("Sidecar failed to get IAudioClient: {e:#}, retrying in 300ms");
+                    std::thread::sleep(Duration::from_millis(300));
+                    continue;
+                }
+            };
+
+            let format = WaveFormat::new(32, 32, &SampleType::Float, RATE as usize, CHANNELS as usize, None);
+            let (_default_period, min_period) = match audio_client.get_device_period() {
+                Ok(p) => p,
+                Err(_) => (100_000, 100_000),
+            };
+            let mode = StreamMode::EventsShared {
+                autoconvert: true,
+                buffer_duration_hns: min_period,
+            };
+
+            if let Err(e) = audio_client.initialize_client(&format, &Direction::Capture, &mode) {
+                warn!("Sidecar failed to initialize audio client: {e:#}, retrying in 300ms");
+                std::thread::sleep(Duration::from_millis(300));
+                continue;
+            }
+
+            let h_event = match audio_client.set_get_eventhandle() {
+                Ok(h) => h,
+                Err(e) => {
+                    warn!("Sidecar failed to set event handle: {e:#}, retrying in 300ms");
+                    std::thread::sleep(Duration::from_millis(300));
+                    continue;
+                }
+            };
+
+            let capture_client = match audio_client.get_audiocaptureclient() {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!("Sidecar failed to get capture client: {e:#}, retrying in 300ms");
+                    std::thread::sleep(Duration::from_millis(300));
+                    continue;
+                }
+            };
+
+            let mut queue: VecDeque<u8> = VecDeque::new();
+            if let Err(e) = audio_client.start_stream() {
+                warn!("Sidecar failed to start stream: {e:#}, retrying in 300ms");
+                std::thread::sleep(Duration::from_millis(300));
+                continue;
+            }
+
+            info!("Sidecar loopback capture stream started ({RATE} Hz, {CHANNELS}ch, f32)");
+
+            while !stop.load(Ordering::Relaxed) {
+                match capture_client.read_from_device_to_deque(&mut queue) {
+                    Ok(_) => {
+                        let n_frames = queue.len() / bytes_per_frame;
+                        if n_frames > 0 {
+                            let n_samples = n_frames * CHANNELS as usize;
+                            let n_bytes = n_frames * bytes_per_frame;
+                            let mut samples: Vec<i16> = Vec::with_capacity(n_samples);
+                            let slice = &queue.make_contiguous()[..n_bytes];
+                            for chunk in slice.chunks_exact(4) {
+                                let f = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                                let s = (f.clamp(-1.0, 1.0) * 32767.0) as i16;
+                                samples.push(s);
+                            }
+                            queue.drain(..n_bytes);
+                            let _ = sender.try_send(LivePcmFrame {
+                                samples,
+                                channels: CHANNELS,
+                                sample_rate: RATE,
+                            });
+                        } else {
+                            let _ = sender.try_send(LivePcmFrame {
+                                samples: silence.clone(),
+                                channels: CHANNELS,
+                                sample_rate: RATE,
+                            });
+                        }
+                        let _ = h_event.wait_for_event(50);
+                    }
+                    Err(e) => {
+                        warn!("Sidecar WASAPI capture read error/reset: {e:#}, recycling capture endpoint in 300ms...");
+                        let _ = sender.try_send(LivePcmFrame {
+                            samples: silence.clone(),
+                            channels: CHANNELS,
+                            sample_rate: RATE,
+                        });
+                        std::thread::sleep(Duration::from_millis(300));
+                        break;
+                    }
+                }
+            }
+
+            let _ = audio_client.stop_stream();
         }
 
-        let _ = audio_client.stop_stream();
+        info!("Sidecar WASAPI capture thread exiting cleanly");
         Ok(())
     }
 }
