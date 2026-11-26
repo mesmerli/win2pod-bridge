@@ -566,6 +566,10 @@ pub unsafe fn apply_window_topmost(kind: WindowKind, pinned: bool) {
     } else {
         let hwnd = get_window_hwnd(kind);
         if !hwnd.is_null() && IsWindow(hwnd) != 0 {
+            // 防護：若視窗正處於最小化（Iconic），嚴禁調用 SetWindowPos 調整 Z-order，避免干擾 DWM 縮圖與視窗位置！
+            if IsIconic(hwnd) != 0 {
+                return;
+            }
             let is_fullscreen_hud = crate::visualizer::is_visualizer_fullscreen() && crate::visualizer::is_hud_shown();
             let effective_pinned = pinned || is_fullscreen_hud;
             let target_z = if effective_pinned { HWND_TOPMOST } else { HWND_NOTOPMOST };

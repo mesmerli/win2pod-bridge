@@ -129,7 +129,7 @@ pub fn hide_hud_cluster() {
             crate::snapping::set_window_pinned(m, was_pinned);
 
             let hwnd = crate::snapping::get_window_hwnd(m);
-            if !hwnd.is_null() && IsWindow(hwnd) != 0 && !crate::tray::is_window_hidden_to_tray() {
+            if !hwnd.is_null() && IsWindow(hwnd) != 0 && IsIconic(hwnd) == 0 && !crate::tray::is_window_hidden_to_tray() {
                 if !was_pinned {
                     SetWindowPos(
                         hwnd,
@@ -361,6 +361,11 @@ pub fn get_visualizer_hwnd() -> HWND {
 
 pub fn is_visualizer_fullscreen() -> bool {
     VISUALIZER_FULLSCREEN.load(Ordering::SeqCst)
+}
+
+#[cfg(test)]
+pub fn set_visualizer_fullscreen_mock(fs: bool) {
+    VISUALIZER_FULLSCREEN.store(fs, Ordering::SeqCst);
 }
 
 pub const VISUALIZER_WINDOW_STYLE: u32 = WS_POPUP
@@ -756,14 +761,13 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
         crate::controller::send_controller_cmd(crate::controller::GuiCmd::VisualizerFullscreenChanged(false));
 
         let main_hwnd = crate::tray::get_main_hwnd();
-        if !main_hwnd.is_null() {
+        if !main_hwnd.is_null() && unsafe { IsWindow(main_hwnd) != 0 && IsIconic(main_hwnd) == 0 } {
             const GWLP_HWNDPARENT: i32 = -8;
             if SetWindowLongPtrW(main_hwnd, GWLP_HWNDPARENT, 0) != 0 {
                 // Owner cleared
             }
             if !crate::tray::is_window_hidden_to_tray()
                 && !crate::snapping::is_window_pinned(crate::snapping::WindowKind::Main)
-                && IsIconic(main_hwnd) == 0
             {
                 SetWindowPos(main_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
@@ -1493,14 +1497,21 @@ unsafe extern "system" fn visualizer_wnd_proc(
         }
         WM_SIZE => {
             let resize_type = wparam as u32;
+            let is_fs = !state_ptr.is_null() && (*state_ptr).is_fullscreen;
             if resize_type == SIZE_RESTORED
+                && !is_fs
                 && !crate::snapping::is_cluster_minimizing()
                 && !crate::snapping::is_cluster_restoring()
             {
-                let role = crate::snapping::get_window_role(crate::snapping::WindowKind::Visualizer);
-                if role == crate::snapping::WindowRole::ClusterMaster || role == crate::snapping::WindowRole::ClusterSlave {
-                    unsafe {
-                        crate::snapping::restore_cluster(crate::snapping::WindowKind::Visualizer, hwnd);
+                // 關鍵防護：只有在視覺效果視窗本身確實處於最小化（Iconic），且被使用者自工作列還原時，
+                // 才允許聯動還原所屬群組。全螢幕切換/退出全螢幕絕非最小化還原事件，嚴禁干擾或詐屍喚醒其他最小化視窗！
+                let is_iconic = unsafe { IsIconic(hwnd) != 0 };
+                if is_iconic {
+                    let role = crate::snapping::get_window_role(crate::snapping::WindowKind::Visualizer);
+                    if role == crate::snapping::WindowRole::ClusterMaster || role == crate::snapping::WindowRole::ClusterSlave {
+                        unsafe {
+                            crate::snapping::restore_cluster(crate::snapping::WindowKind::Visualizer, hwnd);
+                        }
                     }
                 }
             }

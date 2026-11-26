@@ -26,6 +26,7 @@ use super::*;
         clear_ghost_exit_record();
         crate::visualizer::reset_hud_main_shown();
         crate::visualizer::restore_hud_pinned_states();
+        crate::visualizer::set_visualizer_fullscreen_mock(false);
     }
 
     #[test]
@@ -1114,6 +1115,54 @@ use super::*;
                 panic!("MiniPlayer state unexpected: {:?}", mini.state);
             }
         });
+    }
+
+    #[test]
+    fn test_minimize_cluster_during_hud_stays_minimized_on_fullscreen_exit() {
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        reset_all();
+
+        // 1. 初始化工作站群組：Main + MiniPlayer + Equalizer + Visualizer
+        let main_r = RECT { left: 100, top: 100, right: 500, bottom: 600 };
+        let mini_r = RECT { left: 500, top: 100, right: 900, bottom: 350 };
+        let eq_r = RECT { left: 500, top: 350, right: 900, bottom: 600 };
+        let vis_r = RECT { left: 900, top: 100, right: 1620, bottom: 600 };
+
+        update_known_rect(WindowKind::Main, main_r);
+        update_known_rect(WindowKind::MiniPlayer, mini_r);
+        update_known_rect(WindowKind::Equalizer, eq_r);
+        update_known_rect(WindowKind::Visualizer, vis_r);
+
+        set_dock_relation(WindowKind::MiniPlayer, WindowKind::Main, &mini_r, &main_r);
+        set_dock_relation(WindowKind::Equalizer, WindowKind::MiniPlayer, &eq_r, &mini_r);
+        set_dock_relation(WindowKind::Visualizer, WindowKind::MiniPlayer, &vis_r, &mini_r);
+
+        // 2. 視覺效果視窗進入全螢幕
+        crate::visualizer::set_visualizer_fullscreen_mock(true);
+        break_dock_bond();
+
+        // 驗證 Visualizer 進入全螢幕後與工作站群組徹底解耦（無任何殘留 edges）
+        assert_eq!(get_window_role(WindowKind::Visualizer), WindowRole::Standalone);
+
+        // 3. 呼叫全螢幕 HUD (按 🏠)
+        crate::visualizer::toggle_main_window_hud();
+        assert!(crate::visualizer::is_hud_shown());
+
+        // 4. 最小化工作站群組（使用者在全螢幕 HUD 點擊最小化）
+        unsafe {
+            collapse_cluster_animated(WindowKind::Main);
+        }
+        assert_eq!(get_cluster_state(WindowKind::Main), ClusterState::Minimized);
+
+        // 5. 退出全螢幕
+        crate::visualizer::set_visualizer_fullscreen_mock(false);
+        crate::window_manager::WindowManager::with_manager(|mgr| {
+            mgr.on_visualizer_fullscreen_toggled(false);
+        });
+
+        // 6. 核心不變量驗證：退出全螢幕後，工作站群組【絕對保持最小化】，嚴禁詐屍展開！
+        assert_eq!(get_cluster_state(WindowKind::Main), ClusterState::Minimized);
+        assert!(!crate::visualizer::is_hud_shown());
     }
 
     #[test]

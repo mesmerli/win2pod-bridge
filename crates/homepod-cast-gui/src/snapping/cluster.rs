@@ -815,11 +815,19 @@ pub unsafe fn expand_cluster_animated(root: WindowKind, root_hwnd: HWND) {
     }
 
     // 1. 還原根節點視窗（母體）
+    let root_r = get_window_normal_rect(root);
     if !root_hwnd.is_null() && IsWindow(root_hwnd) != 0 && IsIconic(root_hwnd) != 0 {
         ShowWindow(root_hwnd, SW_RESTORE);
+        SetWindowPos(
+            root_hwnd,
+            HWND_NOTOPMOST,
+            root_r.left,
+            root_r.top,
+            root_r.right - root_r.left,
+            root_r.bottom - root_r.top,
+            SWP_SHOWWINDOW | SWP_NOACTIVATE,
+        );
     }
-
-    let root_r = get_window_normal_rect(root);
     let targets = compute_cluster_docked_targets(root, &root_r);
 
     // 2. 收集子視窗動畫參數
@@ -1016,7 +1024,10 @@ pub fn set_dock_bond(vis_rect: &RECT, main_rect: &RECT) {
 }
 
 pub fn break_dock_bond() {
-    break_dock_relation(WindowKind::Visualizer);
+    remove_all_edges_for(WindowKind::Visualizer);
+    unsafe {
+        rebuild_dock_tree();
+    }
 }
 
 pub fn get_dock_bond() -> DockBond {

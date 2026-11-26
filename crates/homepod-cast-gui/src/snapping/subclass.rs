@@ -342,7 +342,7 @@ unsafe extern "system" fn unified_window_subclass_proc(
                         if was_collapsed {
                             expand_cluster_animated(root, hwnd);
                         } else {
-                            restore_cluster(kind, hwnd);
+                            restore_and_realign_all_children(root, hwnd);
                         }
                     }
                 }

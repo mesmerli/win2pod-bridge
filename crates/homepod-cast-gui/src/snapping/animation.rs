@@ -440,9 +440,9 @@ pub unsafe fn set_window_taskbar_grouped(child_hwnd: HWND, _root_hwnd: HWND, is_
         return;
     }
 
-    // 防護：若視窗當前不可見，嚴禁調用 SetWindowPos(SWP_FRAMECHANGED)！
-    // 否則 winit Win32 後端在處理 WM_WINDOWPOSCHANGED 時執行 ClientToScreen 失敗會引發致命 panic (exit code 101)。
-    if IsWindowVisible(child_hwnd) == 0 {
+    // 防護：若視窗當前不可見或處於最小化（Iconic），嚴禁調用 SetWindowPos(SWP_FRAMECHANGED) 或修改樣式！
+    // 否則 Win32 會將其 (-32000, -32000) 座標與 160x28 標題列覆寫入常態還原尺寸，徹底破壞 DWM 縮圖並形成死窗！
+    if IsWindowVisible(child_hwnd) == 0 || IsIconic(child_hwnd) != 0 {
         return;
     }
 
@@ -884,8 +884,9 @@ pub unsafe fn layout_modular_workstation(
         | windows_sys::Win32::UI::WindowsAndMessaging::SWP_SHOWWINDOW
         | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE;
 
-    // 輔助函式：取得視窗真實常態尺寸與矩形；若視窗處於最小化（Iconic），安全解除最小化並讀取 WINDOWPLACEMENT
-    let get_window_normal_rect = |hwnd: HWND, min_w: i32, min_h: i32| -> (RECT, i32, i32) {
+    // 輔助函式：取得視窗真實常態尺寸與矩形；若視窗處於最小化（Iconic），安全解除最小化並讀取 WINDOWPLACEMENT，
+    // 同時強制保底不低於其 min_size，若曾遭擠壓變形則自動校正為 default_size。
+    let get_window_safe_rect = |kind: WindowKind, hwnd: HWND| -> (RECT, i32, i32) {
         if hwnd.is_null() || windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(hwnd) == 0 {
             return (unsafe { std::mem::zeroed() }, 0, 0);
         }
@@ -895,47 +896,40 @@ pub unsafe fn layout_modular_workstation(
                     hwnd,
                     windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNOACTIVATE,
                 );
-                let mut wp: windows_sys::Win32::UI::WindowsAndMessaging::WINDOWPLACEMENT = std::mem::zeroed();
-                wp.length = std::mem::size_of::<windows_sys::Win32::UI::WindowsAndMessaging::WINDOWPLACEMENT>() as u32;
-                if windows_sys::Win32::UI::WindowsAndMessaging::GetWindowPlacement(hwnd, &mut wp) != 0 {
-                    let mut r = wp.rcNormalPosition;
-                    let w = (r.right - r.left).max(min_w);
-                    let h = (r.bottom - r.top).max(min_h);
-                    if r.left < -1000 || r.top < -1000 {
-                        r.left = 0;
-                        r.top = 0;
-                        r.right = w;
-                        r.bottom = h;
-                    }
-                    return (r, w, h);
-                }
             }
-            let mut r: RECT = std::mem::zeroed();
-            windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect(hwnd, &mut r);
-            let w = (r.right - r.left).max(min_w);
-            let h = (r.bottom - r.top).max(min_h);
-            (r, w, h)
+            let r = get_window_normal_rect(kind);
+            let min_s = kind.min_size();
+            let def_s = kind.default_size();
+            let mut w = r.right - r.left;
+            let mut h = r.bottom - r.top;
+            if w < min_s[0] as i32 {
+                w = def_s[0] as i32;
+            }
+            if h < min_s[1] as i32 {
+                h = def_s[1] as i32;
+            }
+            (RECT { left: r.left, top: r.top, right: r.left + w, bottom: r.top + h }, w, h)
         }
     };
 
     // 1. 取得主視窗目前的實際寬高與矩形
-    let (main_rect, main_w, main_h) = get_window_normal_rect(main_hwnd, 100, 100);
+    let (main_rect, main_w, main_h) = get_window_safe_rect(WindowKind::Main, main_hwnd);
 
     // 2. 取得迷你播放器目前的實際寬高與矩形（若有開啟）
-    let (has_mini, mini_rect, mini_w, mini_h) = if !mini_hwnd.is_null()
+    let (has_mini, mini_rect, mini_w, mut mini_h) = if !mini_hwnd.is_null()
         && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(mini_hwnd) != 0
     {
-        let (r, w, h) = get_window_normal_rect(mini_hwnd, 100, 50);
+        let (r, w, h) = get_window_safe_rect(WindowKind::MiniPlayer, mini_hwnd);
         (true, r, w, h)
     } else {
         (false, std::mem::zeroed(), 0, 0)
     };
 
     // 3. 取得等化器目前的實際寬高與矩形（若有開啟）
-    let (has_eq, eq_rect, eq_w, eq_h) = if !eq_hwnd.is_null()
+    let (has_eq, eq_rect, eq_w, mut eq_h) = if !eq_hwnd.is_null()
         && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(eq_hwnd) != 0
     {
-        let (r, w, h) = get_window_normal_rect(eq_hwnd, 100, 50);
+        let (r, w, h) = get_window_safe_rect(WindowKind::Equalizer, eq_hwnd);
         (true, r, w, h)
     } else {
         (false, std::mem::zeroed(), 0, 0)
@@ -946,32 +940,27 @@ pub unsafe fn layout_modular_workstation(
         && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(vis_hwnd) != 0
         && !crate::visualizer::is_visualizer_fullscreen()
     {
-        let (r, w, h) = get_window_normal_rect(vis_hwnd, 100, 100);
+        let (r, w, h) = get_window_safe_rect(WindowKind::Visualizer, vis_hwnd);
         (true, r, w, h)
     } else {
         (false, std::mem::zeroed(), 0, 0)
     };
 
-    // 計算各欄寬度與集群整體尺寸（迷你播放器與迷你等化器高度精準分配為主視窗高度的一半：main_h / 2，總和完美契合主視窗）
-    let (mini_h, eq_h) = if has_mini && has_eq {
+    // 計算各欄寬度與集群整體尺寸（若兩者皆存在且主視窗足夠高，各分配一半，但保證絕不低於各視窗的 min_size）
+    if has_mini && has_eq {
         let half = main_h / 2;
-        let m_h = half;
-        let e_h = main_h - m_h;
-        (m_h, e_h)
-    } else if has_mini {
-        (main_h / 2, eq_h)
-    } else if has_eq {
-        (mini_h, main_h / 2)
-    } else {
-        (mini_h, eq_h)
-    };
+        let mini_min_h = WindowKind::MiniPlayer.min_size()[1] as i32;
+        let eq_min_h = WindowKind::Equalizer.min_size()[1] as i32;
+        mini_h = half.max(mini_min_h);
+        eq_h = (main_h - mini_h).max(eq_min_h);
+    }
 
     let col2_w = if has_mini && has_eq {
-        mini_w.max(eq_w)
+        mini_w.max(eq_w).max(460)
     } else if has_mini {
-        mini_w
+        mini_w.max(380)
     } else if has_eq {
-        eq_w
+        eq_w.max(460)
     } else {
         0
     };
@@ -1073,6 +1062,16 @@ pub unsafe fn layout_modular_workstation(
     );
 
     if has_mini {
+        let mut cur_r: RECT = std::mem::zeroed();
+        windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect(mini_hwnd, &mut cur_r);
+        let cur_w = cur_r.right - cur_r.left;
+        let cur_h = cur_r.bottom - cur_r.top;
+        let flags = if cur_w < WindowKind::MiniPlayer.min_size()[0] as i32 || cur_h < WindowKind::MiniPlayer.min_size()[1] as i32 {
+            windows_sys::Win32::UI::WindowsAndMessaging::SWP_SHOWWINDOW
+                | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE
+        } else {
+            swp_flags
+        };
         windows_sys::Win32::UI::WindowsAndMessaging::SetWindowPos(
             mini_hwnd,
             top_tier,
@@ -1080,12 +1079,21 @@ pub unsafe fn layout_modular_workstation(
             mini_start_y,
             mini_w,
             mini_h,
-            windows_sys::Win32::UI::WindowsAndMessaging::SWP_SHOWWINDOW
-                | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
+            flags,
         );
     }
 
     if has_eq {
+        let mut cur_r: RECT = std::mem::zeroed();
+        windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect(eq_hwnd, &mut cur_r);
+        let cur_w = cur_r.right - cur_r.left;
+        let cur_h = cur_r.bottom - cur_r.top;
+        let flags = if cur_w < WindowKind::Equalizer.min_size()[0] as i32 || cur_h < WindowKind::Equalizer.min_size()[1] as i32 {
+            windows_sys::Win32::UI::WindowsAndMessaging::SWP_SHOWWINDOW
+                | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE
+        } else {
+            swp_flags
+        };
         windows_sys::Win32::UI::WindowsAndMessaging::SetWindowPos(
             eq_hwnd,
             top_tier,
@@ -1093,12 +1101,21 @@ pub unsafe fn layout_modular_workstation(
             eq_start_y,
             eq_w,
             eq_h,
-            windows_sys::Win32::UI::WindowsAndMessaging::SWP_SHOWWINDOW
-                | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
+            flags,
         );
     }
 
     if has_vis {
+        let mut cur_r: RECT = std::mem::zeroed();
+        windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect(vis_hwnd, &mut cur_r);
+        let cur_w = cur_r.right - cur_r.left;
+        let cur_h = cur_r.bottom - cur_r.top;
+        let flags = if cur_w < WindowKind::Visualizer.min_size()[0] as i32 || cur_h < WindowKind::Visualizer.min_size()[1] as i32 {
+            windows_sys::Win32::UI::WindowsAndMessaging::SWP_SHOWWINDOW
+                | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE
+        } else {
+            swp_flags
+        };
         windows_sys::Win32::UI::WindowsAndMessaging::SetWindowPos(
             vis_hwnd,
             top_tier,
@@ -1106,8 +1123,7 @@ pub unsafe fn layout_modular_workstation(
             vis_start_y,
             vis_w,
             vis_h,
-            windows_sys::Win32::UI::WindowsAndMessaging::SWP_SHOWWINDOW
-                | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
+            flags,
         );
     }
 
