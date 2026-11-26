@@ -173,6 +173,15 @@ pub fn is_main_window_in_foreground() -> bool {
 
 pub fn set_main_hwnd(hwnd: isize) {
     MAIN_HWND.store(hwnd, Ordering::SeqCst);
+    if hwnd != 0 {
+        crate::window_manager::WindowManager::with_manager(|mgr| {
+            mgr.register_window(crate::snapping::WindowKind::Main, hwnd as windows_sys::Win32::Foundation::HWND);
+        });
+    } else {
+        crate::window_manager::WindowManager::with_manager(|mgr| {
+            mgr.unregister_window(crate::snapping::WindowKind::Main);
+        });
+    }
 }
 
 pub fn set_main_window_pinned(pinned: bool) {
@@ -484,10 +493,19 @@ pub unsafe fn ensure_window_on_screen(hwnd: HWND) -> bool {
 
     use windows_sys::Win32::Foundation::RECT;
     use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
-    use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowRect, SetWindowPos, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowRect, IsIconic, SetWindowPos, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER};
+
+    if IsIconic(hwnd) != 0 {
+        return false;
+    }
 
     let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
     if GetWindowRect(hwnd, &mut rect) == 0 {
+        return false;
+    }
+
+    // Ignore iconic or parked coordinates (e.g. -32000 offscreen minimize)
+    if rect.left <= -10000 || rect.top <= -10000 {
         return false;
     }
 

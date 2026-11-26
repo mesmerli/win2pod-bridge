@@ -2318,11 +2318,8 @@ let animRunning = true;
 let prev = performance.now(), prevWall = prev;
 
 function renderFrame(nowMs) {
-  if (isEcoMode) {
-    animRunning = false;
-    renderer.setAnimationLoop(null);
-    return;
-  }
+  // Plan A: In silent Eco mode, do NOT freeze the scene!
+  // The visualizer continues smooth 60 FPS idle breathing & slow rotation.
   const rawMs = nowMs - prev, dt = Math.min(0.05, rawMs / 1000); prev = nowMs; const now = nowMs / 1000;
   const wall = performance.now(); adapt(wall - prevWall, now); prevWall = wall;   // wall clock: some browsers pace rAF stamps
   listen(now, dt);
@@ -2345,12 +2342,6 @@ function renderFrame(nowMs) {
 
 window.setEcoMode = function(eco) {
   isEcoMode = !!eco;
-  if (!isEcoMode && !animRunning) {
-    animRunning = true;
-    prev = performance.now();
-    prevWall = prev;
-    renderer.setAnimationLoop(renderFrame);
-  }
 };
 
 renderer.setAnimationLoop(renderFrame);

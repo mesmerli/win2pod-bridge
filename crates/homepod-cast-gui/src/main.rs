@@ -157,7 +157,7 @@ fn main() -> anyhow::Result<()> {
     let mut viewport_builder = egui::ViewportBuilder::default()
         .with_title("Win2Pod Bridge")
         .with_inner_size([460.0, 680.0])
-        .with_min_inner_size([360.0, 320.0])
+        .with_min_inner_size([380.0, 500.0])
         .with_resizable(true)
         .with_decorations(false)
         .with_transparent(true)

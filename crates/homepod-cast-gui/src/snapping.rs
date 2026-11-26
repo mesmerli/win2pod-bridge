@@ -737,7 +737,7 @@ impl WindowKind {
     /// 根據視窗標題比對此視窗是否吻合（涵蓋多國語言規格）
     pub fn matches_window_title(&self, title: &str) -> bool {
         match self {
-            WindowKind::Main => title == "Win2Pod",
+            WindowKind::Main => title == "Win2Pod" || title == "Win2Pod Bridge",
             WindowKind::Visualizer => title.contains("Visualizer") || title.contains("視覺") || title.contains("Paint Pulse"),
             WindowKind::Equalizer => {
                 crate::i18n::ALL_LANGUAGES.iter().any(|l| l.eq_window_title() == title || l.mini_equalizer_window_title() == title)
@@ -760,6 +760,15 @@ impl WindowKind {
 
 pub fn set_equalizer_hwnd(hwnd: HWND) {
     EQUALIZER_HWND.store(hwnd as isize, Ordering::SeqCst);
+    if !hwnd.is_null() {
+        crate::window_manager::WindowManager::with_manager(|mgr| {
+            mgr.register_window(WindowKind::Equalizer, hwnd);
+        });
+    } else {
+        crate::window_manager::WindowManager::with_manager(|mgr| {
+            mgr.unregister_window(WindowKind::Equalizer);
+        });
+    }
 }
 
 pub fn get_equalizer_hwnd() -> HWND {
@@ -769,6 +778,15 @@ pub fn get_equalizer_hwnd() -> HWND {
 pub fn set_mini_player_hwnd(hwnd: HWND) {
     MINI_PLAYER_HWND.store(hwnd as isize, Ordering::SeqCst);
     crate::spectrum::update_spectrum_needed_state();
+    if !hwnd.is_null() {
+        crate::window_manager::WindowManager::with_manager(|mgr| {
+            mgr.register_window(WindowKind::MiniPlayer, hwnd);
+        });
+    } else {
+        crate::window_manager::WindowManager::with_manager(|mgr| {
+            mgr.unregister_window(WindowKind::MiniPlayer);
+        });
+    }
 }
 
 pub fn get_mini_player_hwnd() -> HWND {
@@ -1694,10 +1712,22 @@ pub fn can_start_cluster_restore(root: WindowKind) -> bool {
 
 pub fn finish_cluster_minimize(root: WindowKind) {
     set_cluster_state(root, ClusterState::Minimized);
+    let members = get_cluster_members(root);
+    crate::window_manager::WindowManager::with_manager(|mgr| {
+        for m in members {
+            mgr.mark_window_minimized(m);
+        }
+    });
 }
 
 pub fn finish_cluster_restore(root: WindowKind) {
     set_cluster_state(root, ClusterState::Normal);
+    let members = get_cluster_members(root);
+    crate::window_manager::WindowManager::with_manager(|mgr| {
+        for m in members {
+            mgr.mark_window_restored(m);
+        }
+    });
 }
 
 pub fn is_cluster_minimizing() -> bool {
@@ -2451,10 +2481,13 @@ pub unsafe fn minimize_window_solo(kind: WindowKind) {
         if kind == WindowKind::Main && crate::tray::is_window_hidden_to_tray() {
             return;
         }
+        let normal_r = get_window_normal_rect(kind);
+        update_known_rect(kind, normal_r);
+        set_cluster_state(kind, ClusterState::Minimized);
         crate::genie_effect::disable_window_dwm_transitions(hwnd);
         let (hbmp, rect) = crate::genie_effect::capture_window_snapshot(hwnd);
         if hbmp != 0 {
-            crate::genie_effect::play_genie_s_curve_effect(
+            crate::genie_effect::play_genie_s_curve_effect_with_finish(
                 hbmp,
                 hwnd as usize,
                 rect.left,
@@ -2462,9 +2495,13 @@ pub unsafe fn minimize_window_solo(kind: WindowKind) {
                 rect.right - rect.left,
                 rect.bottom - rect.top,
                 crate::genie_effect::GenieTarget::Taskbar,
+                move || {
+                    finish_cluster_minimize(kind);
+                },
             );
         } else {
             ShowWindow(hwnd, SW_MINIMIZE);
+            finish_cluster_minimize(kind);
         }
     }
 }
@@ -2497,6 +2534,16 @@ pub unsafe fn restore_window_animated(kind: WindowKind, hwnd: HWND) {
                 if was_collapsed || has_hidden_or_iconic_children {
                     expand_cluster_animated(root, h);
                 } else {
+                    let nr = get_window_normal_rect(root);
+                    SetWindowPos(
+                        h,
+                        HWND_NOTOPMOST,
+                        nr.left,
+                        nr.top,
+                        nr.right - nr.left,
+                        nr.bottom - nr.top,
+                        SWP_SHOWWINDOW | SWP_NOACTIVATE,
+                    );
                     bring_cluster_to_top(root, h);
                     finish_cluster_restore(root);
                 }
@@ -2750,8 +2797,21 @@ pub unsafe fn restore_cluster(kind: WindowKind, active_hwnd: HWND) {
 
     let members = get_cluster_members(root);
     if members.len() <= 1 {
-        if !effective_root_hwnd.is_null() && IsWindow(effective_root_hwnd) != 0 && IsIconic(effective_root_hwnd) != 0 {
-            ShowWindow(effective_root_hwnd, SW_RESTORE);
+        if !effective_root_hwnd.is_null() && IsWindow(effective_root_hwnd) != 0 {
+            if IsIconic(effective_root_hwnd) != 0 {
+                ShowWindow(effective_root_hwnd, SW_RESTORE);
+            }
+            let nr = get_window_normal_rect(root);
+            SetWindowPos(
+                effective_root_hwnd,
+                HWND_NOTOPMOST,
+                nr.left,
+                nr.top,
+                nr.right - nr.left,
+                nr.bottom - nr.top,
+                SWP_SHOWWINDOW | SWP_NOACTIVATE,
+            );
+            finish_cluster_restore(root);
         }
         return;
     }
@@ -3270,12 +3330,21 @@ pub unsafe fn layout_modular_workstation(
 
             bring_cluster_to_top(WindowKind::Main, m_h);
             rebuild_dock_tree();
+            crate::window_manager::WindowManager::with_manager(|mgr| {
+                mgr.on_workstation_aligned(
+                    main_r,
+                    if has_mini { Some(mini_r) } else { None },
+                    if has_eq { Some(eq_r) } else { None },
+                    if has_vis { Some(vis_r) } else { None },
+                );
+            });
         }
     });
 }
 
 /// 逆向磁吸塌縮動畫 (Clustered Implosion Animation)
 /// 當使用者點擊 ⛝ 關閉視窗群組時，外圍附屬視窗原地迅速向主機核心視窗聚攏吸入背後，隨後整組乾脆俐落地原地隱沒。
+
 pub fn animate_cluster_implosion<F>(origin: WindowKind, on_complete: F)
 where
     F: FnOnce() + Send + 'static,
@@ -3699,6 +3768,13 @@ unsafe extern "system" fn unified_window_subclass_proc(
         }
         WM_EXITSIZEMOVE => {
             crate::custom_cursor::set_window_moving(kind, false);
+            let mut r: RECT = std::mem::zeroed();
+            if GetWindowRect(hwnd, &mut r) != 0 {
+                crate::window_manager::WindowManager::with_manager(|mgr| {
+                    mgr.on_user_resize(kind, r);
+                    mgr.on_user_move(kind, r);
+                });
+            }
             handle_window_exit_size_move(kind, hwnd);
         }
         WM_CAPTURECHANGED => {
@@ -3715,21 +3791,13 @@ unsafe extern "system" fn unified_window_subclass_proc(
                         }
                     }
                 } else if resize_type == SIZE_RESTORED {
-                    if kind == WindowKind::Main {
-                        crate::tray::ensure_window_on_screen(hwnd);
-                    }
                     if !is_kind_cluster_minimizing(kind) && !is_kind_cluster_restoring(kind) {
+                        if IsIconic(hwnd) != 0 || crate::tray::is_window_hidden_to_tray() {
+                            return DefSubclassProc(hwnd, msg, wparam, lparam);
+                        }
                         let root = get_component_root(kind);
-                        let members = get_cluster_members(root);
-                        let has_hidden_or_iconic_children = members.iter().any(|&m| {
-                            if m == root {
-                                return false;
-                            }
-                            let m_h = get_window_hwnd(m);
-                            !m_h.is_null() && IsWindow(m_h) != 0 && (IsIconic(m_h) != 0 || IsWindowVisible(m_h) == 0)
-                        });
                         let was_collapsed = can_start_cluster_restore(root);
-                        if was_collapsed || has_hidden_or_iconic_children {
+                        if was_collapsed {
                             expand_cluster_animated(root, hwnd);
                         } else {
                             restore_cluster(kind, hwnd);

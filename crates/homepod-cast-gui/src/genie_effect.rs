@@ -607,13 +607,10 @@ fn run_genie_s_curve_animation<F>(
                 let mut wp: WINDOWPLACEMENT = std::mem::zeroed();
                 wp.length = std::mem::size_of::<WINDOWPLACEMENT>() as u32;
                 if GetWindowPlacement(orig_h, &mut wp) != 0 {
-                    let safe_w = start_w.max(380);
-                    let safe_h = start_h.max(340);
-                    wp.showCmd = SW_MINIMIZE as u32;
                     wp.rcNormalPosition.left = start_x;
                     wp.rcNormalPosition.top = start_y;
-                    wp.rcNormalPosition.right = start_x + safe_w;
-                    wp.rcNormalPosition.bottom = start_y + safe_h;
+                    wp.rcNormalPosition.right = start_x + start_w;
+                    wp.rcNormalPosition.bottom = start_y + start_h;
                     SetWindowPlacement(orig_h, &wp);
                 }
             }

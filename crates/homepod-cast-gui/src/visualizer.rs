@@ -224,16 +224,9 @@ pub fn exit_visualizer_fullscreen() {
 }
 
 pub fn toggle_main_window_hud() {
-    let main_hwnd = crate::tray::get_main_hwnd();
-    let is_hidden = main_hwnd.is_null()
-        || unsafe { IsWindow(main_hwnd) == 0 || IsWindowVisible(main_hwnd) == 0 }
-        || crate::tray::is_window_hidden_to_tray();
-
-    if !is_hidden && VISUALIZER_HUD_MAIN_SHOWN.load(Ordering::SeqCst) {
-        hide_hud_cluster();
-    } else {
-        show_hud_cluster();
-    }
+    crate::window_manager::WindowManager::with_manager(|mgr| {
+        mgr.toggle_fullscreen_hud();
+    });
 }
 
 pub fn set_language(lang_code: &str) {
@@ -687,6 +680,9 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
             }
 
             hide_hud_cluster();
+            crate::window_manager::WindowManager::with_manager(|mgr| {
+                mgr.on_visualizer_fullscreen_toggled(true);
+            });
 
             // Keep taskbar beneath the fullscreen visualizer
             let taskbar_class: Vec<u16> = "Shell_TrayWnd\0".encode_utf16().collect();
@@ -736,6 +732,10 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
                 SetWindowPos(main_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
         }
+
+        crate::window_manager::WindowManager::with_manager(|mgr| {
+            mgr.on_visualizer_fullscreen_toggled(false);
+        });
     }
 
     if let Some(ref wv) = state.webview {
@@ -792,13 +792,13 @@ unsafe fn run_visualizer_window() {
     let main_hwnd = crate::tray::get_main_hwnd();
     let has_main = !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 && IsWindowVisible(main_hwnd) != 0;
 
-    let def_size = crate::snapping::WindowKind::Visualizer.default_size();
-    let w = def_size[0] as i32;
-    let h = def_size[1] as i32;
+    let (def_w, def_h, spawn_x, spawn_y) = crate::window_manager::WindowManager::with_manager(|mgr| {
+        mgr.get_visualizer_spawn_rect()
+    });
 
     let (width, height, x, y, chosen_anchor) = if has_main {
         let spawner = crate::snapping::get_window_spawner(crate::snapping::WindowKind::Visualizer);
-        let (best_rect, anchor) = crate::snapping::find_best_spawn_rect(crate::snapping::WindowKind::Visualizer, w, h, spawner);
+        let (best_rect, anchor) = crate::snapping::find_best_spawn_rect(crate::snapping::WindowKind::Visualizer, def_w, def_h, spawner);
         (
             best_rect.right - best_rect.left,
             best_rect.bottom - best_rect.top,
@@ -807,11 +807,7 @@ unsafe fn run_visualizer_window() {
             anchor,
         )
     } else {
-        let screen_w = GetSystemMetrics(SM_CXSCREEN);
-        let screen_h = GetSystemMetrics(SM_CYSCREEN);
-        let init_x = (screen_w - w) / 2;
-        let init_y = (screen_h - h) / 2;
-        (w, h, init_x, init_y, None)
+        (def_w, def_h, spawn_x, spawn_y, None)
     };
 
     let hwnd = CreateWindowExW(
@@ -841,6 +837,9 @@ unsafe fn run_visualizer_window() {
     SendMessageW(hwnd, WM_SETICON, ICON_SMALL as usize, icon as isize);
 
     VISUALIZER_HWND.store(hwnd as isize, Ordering::SeqCst);
+    crate::window_manager::WindowManager::with_manager(|mgr| {
+        mgr.register_window(crate::snapping::WindowKind::Visualizer, hwnd);
+    });
     crate::spectrum::update_spectrum_needed_state();
 
     // Directly bind magnetic dock with chosen anchor upon creation!
@@ -1208,11 +1207,6 @@ unsafe extern "system" fn visualizer_wnd_proc(
         WM_USER_WAKE_ECO => {
             if VISUALIZER_ECO_MODE.swap(false, Ordering::SeqCst) {
                 SetTimer(hwnd, TIMER_AUDIO_SPECTRUM, 16, None);
-                if !state_ptr.is_null() {
-                    if let Some(ref wv) = (*state_ptr).webview {
-                        let _ = wv.evaluate_script("if (typeof window.setEcoMode === 'function') window.setEcoMode(false);");
-                    }
-                }
             }
             0
         }
@@ -1238,9 +1232,28 @@ unsafe extern "system" fn visualizer_wnd_proc(
             }
             0
         }
+        WM_GETMINMAXINFO => {
+            let res = DefWindowProcW(hwnd, msg, wparam, lparam);
+            let mmi = lparam as *mut MINMAXINFO;
+            if !mmi.is_null() {
+                let min_s = crate::snapping::WindowKind::Visualizer.min_size();
+                unsafe {
+                    (*mmi).ptMinTrackSize.x = min_s[0] as i32;
+                    (*mmi).ptMinTrackSize.y = min_s[1] as i32;
+                }
+            }
+            res
+        }
         WM_EXITSIZEMOVE => {
             crate::custom_cursor::set_window_moving(crate::snapping::WindowKind::Visualizer, false);
             if !state_ptr.is_null() && !(*state_ptr).is_fullscreen {
+                let mut actual_r: RECT = unsafe { std::mem::zeroed() };
+                if unsafe { GetWindowRect(hwnd, &mut actual_r) } != 0 {
+                    crate::window_manager::WindowManager::with_manager(|mgr| {
+                        mgr.on_user_resize(crate::snapping::WindowKind::Visualizer, actual_r);
+                        mgr.on_user_move(crate::snapping::WindowKind::Visualizer, actual_r);
+                    });
+                }
                 unsafe {
                     crate::snapping::handle_window_exit_size_move(
                         crate::snapping::WindowKind::Visualizer,
@@ -1486,10 +1499,10 @@ unsafe extern "system" fn visualizer_wnd_proc(
                     }
                 }
 
-                // Smart Eco Mode:
-                // When visualizer is not fullscreen, mouse is not hovering, and audio has been silent for > 30s,
-                // pause 3D WebGL rendering loop and switch timer to low frequency (250ms).
-                // This stops all GPU presents and allows Windows to enter natural display/system sleep!
+                // Smart Eco Mode (Plan A: Idle Drift):
+                // When audio has been silent for > 30s, Windows sleep suppression is released by PowerArbiter (AllowSleep).
+                // The visualizer never freezes, continuing its smooth 3D idle breathing & slow rotation,
+                // while throttling the spectrum timer from 16ms to 100ms to conserve CPU during silence.
                 let is_fullscreen = is_visualizer_fullscreen();
                 let is_audio_active = crate::spectrum::is_audio_active_30s();
                 let should_eco = !is_fullscreen && !inside && !is_audio_active;
@@ -1498,24 +1511,10 @@ unsafe extern "system" fn visualizer_wnd_proc(
                 if should_eco != was_eco {
                     VISUALIZER_ECO_MODE.store(should_eco, Ordering::SeqCst);
                     if should_eco {
-                        SetTimer(hwnd, TIMER_AUDIO_SPECTRUM, 250, None);
-                        if !state_ptr.is_null() {
-                            if let Some(ref wv) = (*state_ptr).webview {
-                                let _ = wv.evaluate_script("if (typeof window.setEcoMode === 'function') window.setEcoMode(true);");
-                            }
-                        }
+                        SetTimer(hwnd, TIMER_AUDIO_SPECTRUM, 100, None);
                     } else {
                         SetTimer(hwnd, TIMER_AUDIO_SPECTRUM, 16, None);
-                        if !state_ptr.is_null() {
-                            if let Some(ref wv) = (*state_ptr).webview {
-                                let _ = wv.evaluate_script("if (typeof window.setEcoMode === 'function') window.setEcoMode(false);");
-                            }
-                        }
                     }
-                }
-
-                if should_eco {
-                    return 0;
                 }
 
                 if !state_ptr.is_null() && !VISUALIZER_CLOSING.load(Ordering::SeqCst) {
@@ -1572,6 +1571,9 @@ unsafe extern "system" fn visualizer_wnd_proc(
         WM_DESTROY => {
             VISUALIZER_HIDDEN_WITH_CLUSTER.store(false, Ordering::SeqCst);
             VISUALIZER_HWND.store(0, Ordering::SeqCst);
+            crate::window_manager::WindowManager::with_manager(|mgr| {
+                mgr.unregister_window(crate::snapping::WindowKind::Visualizer);
+            });
             let main_hwnd = crate::tray::get_main_hwnd();
             if !main_hwnd.is_null() {
                 const GWLP_HWNDPARENT: i32 = -8;
