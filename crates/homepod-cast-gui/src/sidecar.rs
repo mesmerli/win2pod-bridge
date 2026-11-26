@@ -12,10 +12,13 @@ use anyhow::{anyhow, Context, Result};
 use tokio::sync::{mpsc, Mutex};
 use tracing::{info, warn};
 use win2pod_ipc::protocol::*;
-use win2pod_ipc::transport::{connect_pipe_client, PipeTransport};
+use win2pod_ipc::transport::{connect_pipe_client, PipeReader, PipeWriter, PipeTransport};
 
 pub struct SidecarClient {
-    transport: Arc<Mutex<Option<PipeTransport<tokio::net::windows::named_pipe::NamedPipeClient>>>>,
+    writer: Arc<Mutex<Option<PipeWriter<tokio::io::WriteHalf<tokio::net::windows::named_pipe::NamedPipeClient>>>>>,
+    pending_response: Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<IpcResponse>>>>,
+    request_lock: Arc<Mutex<()>>,
+    event_sender: Arc<std::sync::Mutex<Option<mpsc::Sender<IpcEvent>>>>,
     child_process: Arc<Mutex<Option<Child>>>,
     is_connected: Arc<AtomicBool>,
 }
@@ -23,7 +26,10 @@ pub struct SidecarClient {
 impl SidecarClient {
     pub fn new() -> Self {
         Self {
-            transport: Arc::new(Mutex::new(None)),
+            writer: Arc::new(Mutex::new(None)),
+            pending_response: Arc::new(std::sync::Mutex::new(None)),
+            request_lock: Arc::new(Mutex::new(())),
+            event_sender: Arc::new(std::sync::Mutex::new(None)),
             child_process: Arc::new(Mutex::new(None)),
             is_connected: Arc::new(AtomicBool::new(false)),
         }
@@ -58,6 +64,49 @@ impl SidecarClient {
         None
     }
 
+    fn spawn_reader_task(
+        mut reader: PipeReader<tokio::io::ReadHalf<tokio::net::windows::named_pipe::NamedPipeClient>>,
+        is_connected: Arc<AtomicBool>,
+        pending_response: Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<IpcResponse>>>>,
+        event_sender: Arc<std::sync::Mutex<Option<mpsc::Sender<IpcEvent>>>>,
+    ) {
+        tokio::spawn(async move {
+            info!("Sidecar dedicated reader loop started");
+            while is_connected.load(Ordering::Relaxed) {
+                match reader.read_message().await {
+                    Ok(Some(IpcMessage::Event(evt))) => {
+                        let tx_opt = event_sender.lock().unwrap().clone();
+                        if let Some(tx) = tx_opt {
+                            let _ = tx.send(evt).await;
+                        }
+                    }
+                    Ok(Some(IpcMessage::Response(resp))) => {
+                        let tx_opt = pending_response.lock().unwrap().take();
+                        if let Some(tx) = tx_opt {
+                            let _ = tx.send(resp);
+                        } else {
+                            warn!("Received unexpected or timed-out IPC response: {:?}", resp);
+                        }
+                    }
+                    Ok(Some(msg)) => {
+                        warn!("Received unexpected IPC message from sidecar: {:?}", msg);
+                    }
+                    Ok(None) => {
+                        warn!("Sidecar named pipe closed by engine");
+                        is_connected.store(false, Ordering::SeqCst);
+                        break;
+                    }
+                    Err(e) => {
+                        warn!("Error reading from sidecar named pipe: {e:#}");
+                        is_connected.store(false, Ordering::SeqCst);
+                        break;
+                    }
+                }
+            }
+            info!("Sidecar dedicated reader loop terminated");
+        });
+    }
+
     /// Start the sidecar engine process and bind it to a Windows Job Object.
     pub async fn ensure_started(&self, pipe_name: Option<&str>) -> Result<()> {
         if self.is_connected() {
@@ -69,9 +118,21 @@ impl SidecarClient {
         // First attempt a fast connection in case it's already running
         if let Ok(client) = connect_pipe_client(Some(name), 1, Duration::from_millis(100)).await {
             info!("Connected to existing win2pod-engine daemon on {name}");
-            let mut trans_lock = self.transport.lock().await;
-            *trans_lock = Some(PipeTransport::new(client));
+            let transport = PipeTransport::new(client);
+            let (reader, writer) = transport.split();
+
+            {
+                let mut w_lock = self.writer.lock().await;
+                *w_lock = Some(writer);
+            }
             self.is_connected.store(true, Ordering::SeqCst);
+
+            Self::spawn_reader_task(
+                reader,
+                self.is_connected.clone(),
+                self.pending_response.clone(),
+                self.event_sender.clone(),
+            );
             return Ok(());
         }
 
@@ -103,9 +164,22 @@ impl SidecarClient {
         let client = connect_pipe_client(Some(name), 50, Duration::from_millis(100)).await
             .context("Failed to connect to win2pod-engine after spawning")?;
 
-        let mut trans_lock = self.transport.lock().await;
-        *trans_lock = Some(PipeTransport::new(client));
+        let transport = PipeTransport::new(client);
+        let (reader, writer) = transport.split();
+
+        {
+            let mut w_lock = self.writer.lock().await;
+            *w_lock = Some(writer);
+        }
         self.is_connected.store(true, Ordering::SeqCst);
+
+        Self::spawn_reader_task(
+            reader,
+            self.is_connected.clone(),
+            self.pending_response.clone(),
+            self.event_sender.clone(),
+        );
+
         info!("Successfully established IPC link with win2pod-engine");
 
         Ok(())
@@ -113,24 +187,43 @@ impl SidecarClient {
 
     /// Send a request to the sidecar and receive its response.
     pub async fn send_request(&self, req: IpcRequest) -> Result<IpcResponse> {
-        let mut trans_lock = self.transport.lock().await;
-        let transport = trans_lock.as_mut()
-            .ok_or_else(|| anyhow!("Sidecar not connected"))?;
+        if !self.is_connected() {
+            return Err(anyhow!("Sidecar not connected"));
+        }
 
-        transport.write_message(&IpcMessage::Request(req)).await?;
+        // Sequentialize requests so only one request is in flight at a time
+        let _req_guard = self.request_lock.lock().await;
 
-        // Read until we get the corresponding response
-        while let Some(msg) = transport.read_message().await? {
-            match msg {
-                IpcMessage::Response(resp) => return Ok(resp),
-                IpcMessage::Event(evt) => {
-                    info!("Received asynchronous event during request wait: {:?}", evt);
-                }
-                _ => {}
+        let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
+        {
+            let mut pending = self.pending_response.lock().unwrap();
+            *pending = Some(resp_tx);
+        }
+
+        {
+            let mut writer_lock = self.writer.lock().await;
+            let writer = writer_lock.as_mut().ok_or_else(|| anyhow!("Sidecar writer not connected"))?;
+            if let Err(e) = writer.write_message(&IpcMessage::Request(req)).await {
+                let mut pending = self.pending_response.lock().unwrap();
+                *pending = None;
+                self.is_connected.store(false, Ordering::SeqCst);
+                return Err(e);
             }
         }
 
-        Err(anyhow!("Pipe closed before response received"))
+        match tokio::time::timeout(Duration::from_secs(5), resp_rx).await {
+            Ok(Ok(resp)) => Ok(resp),
+            Ok(Err(_)) => {
+                let mut pending = self.pending_response.lock().unwrap();
+                *pending = None;
+                Err(anyhow!("Sidecar channel closed before sending response"))
+            }
+            Err(_) => {
+                let mut pending = self.pending_response.lock().unwrap();
+                *pending = None;
+                Err(anyhow!("Sidecar request timed out after 5 seconds"))
+            }
+        }
     }
 
     /// Start listening for async events in the background.
@@ -138,39 +231,8 @@ impl SidecarClient {
         &self,
         event_sender: mpsc::Sender<IpcEvent>,
     ) {
-        let is_connected = self.is_connected.clone();
-        let transport_arc = self.transport.clone();
-
-        tokio::spawn(async move {
-            info!("Sidecar event listener loop started");
-            loop {
-                if !is_connected.load(Ordering::Relaxed) {
-                    tokio::time::sleep(Duration::from_millis(200)).await;
-                    continue;
-                }
-
-                let mut trans_lock = transport_arc.lock().await;
-                if let Some(transport) = trans_lock.as_mut() {
-                    match transport.read_message().await {
-                        Ok(Some(IpcMessage::Event(evt))) => {
-                            let _ = event_sender.send(evt).await;
-                        }
-                        Ok(Some(_)) => {}
-                        Ok(None) => {
-                            warn!("Sidecar pipe closed");
-                            is_connected.store(false, Ordering::SeqCst);
-                        }
-                        Err(e) => {
-                            warn!("Error reading from sidecar: {e:#}");
-                            is_connected.store(false, Ordering::SeqCst);
-                        }
-                    }
-                } else {
-                    drop(trans_lock);
-                    tokio::time::sleep(Duration::from_millis(200)).await;
-                }
-            }
-        });
+        let mut guard = self.event_sender.lock().unwrap();
+        *guard = Some(event_sender);
     }
 
     pub fn is_connected(&self) -> bool {
@@ -221,6 +283,11 @@ impl SidecarClient {
     pub async fn shutdown(&self) {
         if self.is_connected() {
             let _ = self.send_request(IpcRequest::Shutdown).await;
+        }
+        self.is_connected.store(false, Ordering::SeqCst);
+        {
+            let mut writer_lock = self.writer.lock().await;
+            *writer_lock = None;
         }
         let mut child_lock = self.child_process.lock().await;
         if let Some(mut child) = child_lock.take() {

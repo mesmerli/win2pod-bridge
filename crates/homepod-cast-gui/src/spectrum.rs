@@ -154,6 +154,25 @@ pub fn get_raw_spectrum() -> [u8; RAW_SPECTRUM_SIZE] {
     }
 }
 
+const BAND_BIN_RANGES: [(usize, usize); SPECTRUM_BANDS] = [
+    (0, 1),
+    (1, 2),
+    (1, 2),
+    (1, 3),
+    (2, 5),
+    (4, 7),
+    (6, 12),
+    (11, 18),
+    (17, 28),
+    (27, 45),
+    (44, 70),
+    (69, 99),
+    (98, 134),
+    (133, 175),
+    (174, 215),
+    (214, 255),
+];
+
 /// Update raw 256-bin FFT spectrum directly from win2pod-engine IPC push.
 pub fn update_raw_spectrum_from_engine(raw: &[u8]) {
     if raw.len() == RAW_SPECTRUM_SIZE {
@@ -162,7 +181,31 @@ pub fn update_raw_spectrum_from_engine(raw: &[u8]) {
         if let Ok(mut guard) = RAW_SPECTRUM.lock() {
             *guard = arr;
         }
-        record_audio_activity();
+
+        let mut has_audio = false;
+
+        // Downsample the 256 bins into the 16 bands for GUI meters
+        for (band_idx, &(start_bin, end_bin)) in BAND_BIN_RANGES.iter().enumerate() {
+            let mut max_val = 0u8;
+            for bin in start_bin..=end_bin.min(RAW_SPECTRUM_SIZE - 1) {
+                if raw[bin] > max_val {
+                    max_val = raw[bin];
+                }
+            }
+            if max_val > 0 {
+                has_audio = true;
+            }
+            let norm_val = max_val as f32 / 255.0;
+            // Perceptual tilt consistent with SpectrumAnalyzer
+            let tilt = 1.0 + (band_idx as f32 / SPECTRUM_BANDS as f32) * 0.35;
+            let level = (norm_val * tilt).clamp(0.0, 1.0);
+            let scaled = (level * 10000.0) as u32;
+            SPECTRUM_LEVELS[band_idx].store(scaled, Ordering::Relaxed);
+        }
+
+        if has_audio {
+            record_audio_activity();
+        }
     }
 }
 
@@ -343,5 +386,35 @@ mod tests {
         // Call record_audio_activity to wake
         record_audio_activity();
         assert!(is_audio_active_30s());
+    }
+
+    #[test]
+    fn test_update_raw_spectrum_from_engine_downsampling() {
+        reset_spectrum_levels();
+        let initial_levels = get_spectrum_levels();
+        assert!(initial_levels.iter().all(|&v| v == 0.0));
+
+        // Create a simulated 256-byte spectrum with a peak around bin 12 (~1 kHz)
+        let mut simulated_raw = [0u8; RAW_SPECTRUM_SIZE];
+        simulated_raw[12] = 200;
+
+        update_raw_spectrum_from_engine(&simulated_raw);
+
+        // Verify raw spectrum is stored for 3D visualizer
+        let raw = get_raw_spectrum();
+        assert_eq!(raw[12], 200);
+
+        // Verify 16-band levels were downsampled for GUI meters
+        let levels = get_spectrum_levels();
+        // Bin 12 falls into band 6 ((6, 12)) or band 7 ((11, 18))
+        assert!(levels[6] > 0.0 || levels[7] > 0.0, "Expected non-zero level in bands around bin 12");
+        assert!(is_audio_active_30s());
+
+        // Feeding silence should reset levels and not wake audio active
+        reset_spectrum_levels();
+        let silent_raw = [0u8; RAW_SPECTRUM_SIZE];
+        update_raw_spectrum_from_engine(&silent_raw);
+        let silent_levels = get_spectrum_levels();
+        assert!(silent_levels.iter().all(|&v| v == 0.0));
     }
 }

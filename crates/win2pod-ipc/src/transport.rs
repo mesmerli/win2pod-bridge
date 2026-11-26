@@ -6,17 +6,18 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient, NamedPipeServer, ServerOptions};
 use crate::protocol::{IpcMessage, DEFAULT_PIPE_NAME};
 
-pub struct PipeTransport<S> {
-    reader: BufReader<tokio::io::ReadHalf<S>>,
-    writer: tokio::io::WriteHalf<S>,
+pub struct PipeReader<R> {
+    reader: BufReader<R>,
 }
 
-impl<S: tokio::io::AsyncRead + tokio::io::AsyncWrite> PipeTransport<S> {
-    pub fn new(stream: S) -> Self {
-        let (read_half, write_half) = tokio::io::split(stream);
+pub struct PipeWriter<W> {
+    writer: W,
+}
+
+impl<R: tokio::io::AsyncRead + Unpin> PipeReader<R> {
+    pub fn new(reader: R) -> Self {
         Self {
-            reader: BufReader::new(read_half),
-            writer: write_half,
+            reader: BufReader::new(reader),
         }
     }
 
@@ -32,6 +33,12 @@ impl<S: tokio::io::AsyncRead + tokio::io::AsyncWrite> PipeTransport<S> {
             .context("Failed to parse IPC message JSON")?;
         Ok(Some(msg))
     }
+}
+
+impl<W: tokio::io::AsyncWrite + Unpin> PipeWriter<W> {
+    pub fn new(writer: W) -> Self {
+        Self { writer }
+    }
 
     /// Write message formatted as JSON line.
     pub async fn write_message(&mut self, msg: &IpcMessage) -> Result<()> {
@@ -43,6 +50,35 @@ impl<S: tokio::io::AsyncRead + tokio::io::AsyncWrite> PipeTransport<S> {
         self.writer.flush().await
             .context("Failed to flush named pipe")?;
         Ok(())
+    }
+}
+
+pub struct PipeTransport<S> {
+    reader: PipeReader<tokio::io::ReadHalf<S>>,
+    writer: PipeWriter<tokio::io::WriteHalf<S>>,
+}
+
+impl<S: tokio::io::AsyncRead + tokio::io::AsyncWrite> PipeTransport<S> {
+    pub fn new(stream: S) -> Self {
+        let (read_half, write_half) = tokio::io::split(stream);
+        Self {
+            reader: PipeReader::new(read_half),
+            writer: PipeWriter::new(write_half),
+        }
+    }
+
+    pub fn split(self) -> (PipeReader<tokio::io::ReadHalf<S>>, PipeWriter<tokio::io::WriteHalf<S>>) {
+        (self.reader, self.writer)
+    }
+
+    /// Read next message delimited by newline.
+    pub async fn read_message(&mut self) -> Result<Option<IpcMessage>> {
+        self.reader.read_message().await
+    }
+
+    /// Write message formatted as JSON line.
+    pub async fn write_message(&mut self, msg: &IpcMessage) -> Result<()> {
+        self.writer.write_message(msg).await
     }
 }
 

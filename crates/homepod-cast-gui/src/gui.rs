@@ -8986,6 +8986,7 @@ mod tests {
 
     #[test]
     fn test_flyoutapp_equalizer_state_sync() {
+        let _lock = crate::snapping::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         use crate::snapping::WindowKind;
         let mut app = FlyoutApp::new_mock();
         assert_eq!(app.current_page, Page::Main);
