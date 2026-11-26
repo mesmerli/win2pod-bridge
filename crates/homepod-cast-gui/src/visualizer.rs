@@ -799,14 +799,12 @@ unsafe fn run_visualizer_window() {
     // Directly dock to the right (or left) of the Main Window upon creation!
     let main_hwnd = crate::tray::get_main_hwnd();
     let has_main = !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 && IsWindowVisible(main_hwnd) != 0;
-    let mut main_rect: RECT = std::mem::zeroed();
+
+    let def_size = crate::snapping::WindowKind::Visualizer.default_size();
+    let w = def_size[0] as i32;
+    let h = def_size[1] as i32;
 
     let (width, height, x, y, chosen_anchor) = if has_main {
-        GetWindowRect(main_hwnd, &mut main_rect);
-        let main_h = (main_rect.bottom - main_rect.top).max(300);
-        let w = 720;
-        let h = main_h;
-
         let spawner = crate::snapping::get_window_spawner(crate::snapping::WindowKind::Visualizer);
         let (best_rect, anchor) = crate::snapping::find_best_spawn_rect(crate::snapping::WindowKind::Visualizer, w, h, spawner);
         (
@@ -819,8 +817,6 @@ unsafe fn run_visualizer_window() {
     } else {
         let screen_w = GetSystemMetrics(SM_CXSCREEN);
         let screen_h = GetSystemMetrics(SM_CYSCREEN);
-        let w = 720;
-        let h = 680;
         let init_x = (screen_w - w) / 2;
         let init_y = (screen_h - h) / 2;
         (w, h, init_x, init_y, None)

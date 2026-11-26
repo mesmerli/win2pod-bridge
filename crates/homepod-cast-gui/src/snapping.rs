@@ -4197,16 +4197,14 @@ pub unsafe fn position_and_dock_spawned_window(kind: WindowKind, hwnd: HWND) {
         h = def[1] as i32;
     }
 
-    // 迷你播放器與迷你等化器高度精準貼合主視窗的一半 (main_h / 2)
+    // 迷你播放器與迷你等化器高度精準貼合主視窗的一半 (main_h / 2)，且保底不低於其 min_size
     if kind == WindowKind::MiniPlayer || kind == WindowKind::Equalizer {
         let main_hwnd = get_window_hwnd(WindowKind::Main);
         if !main_hwnd.is_null() && IsWindow(main_hwnd) != 0 {
             let mut main_r: RECT = std::mem::zeroed();
             GetWindowRect(main_hwnd, &mut main_r);
-            let mh = main_r.bottom - main_r.top;
-            if mh > 100 {
-                h = mh / 2;
-            }
+            let mh = (main_r.bottom - main_r.top).max(680);
+            h = (mh / 2).max(kind.min_size()[1] as i32);
         }
     }
 
