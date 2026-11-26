@@ -99,15 +99,23 @@ flowchart TD
   - `crates/homepod-cast-gui/src/snapping/cluster.rs`
   - `crates/homepod-cast-gui/src/snapping/geometry.rs`
   - `crates/homepod-cast-gui/src/snapping/types.rs`
+- **詳細設計專題**：[SNAPPING_TOPOLOGY_AND_LOCK_CENTRALIZATION_INSIGHTS.md](file:///C:/Users/mesme/workspace/win2pod-bridge/docs/SNAPPING_TOPOLOGY_AND_LOCK_CENTRALIZATION_INSIGHTS.md)
 - **核心職責**：
   - 負責視窗之間的吸附幾何關係、邊界接觸檢測與主從架構仲裁。
+  - **純邏輯資料結構 (`ClusterTopology`)**：
+    將接觸邊集合、主從樹映射與快取座標整併為統一的 `ClusterTopology` 結構體。演算法運作期間 0 個 Win32 依賴、0 個 Mutex 鎖，100% 離線可測。
+  - **快照式無鎖計算模式（Snapshot Pattern）**：
+    在推導停靠目標（`compute_cluster_docked_targets`）或重建樹（`rebuild_dock_tree`）時，以 $< 1\mu\text{s}$ 複製局部不可變快照後立即釋放鎖，在快照上進行無鎖幾何演算，徹底消除巢狀重入死鎖（Anti-Deadlock）。
   - **接觸圖（Contact Graph）至 生成樹（Directed Tree）演算法**：
-    1. **無向接觸圖 (`DOCK_EDGES`)**：
+    1. **無向接觸圖 (`edges`)**：
        當兩視窗相鄰在吸附容差半徑（Snap Threshold，如 16px）且平行重疊長度足夠時，記錄雙向接觸邊（包含 `DockSide`: Left, Right, Top, Bottom 與 `DockBond`）。
     2. **嚴格優先級仲裁（Arbitration Hierarchy）**：
        $$\text{Main} (4) > \text{MiniPlayer} (3) > \text{Equalizer} (2) > \text{Visualizer} (1)$$
-    3. **定向生成樹 (`DOCK_TREE`)**：
+    3. **定向生成樹 (`tree`)**：
        在每次移動事件觸發時，由被拖曳視窗作為根節點（Root），或由高優先級視窗單向指向低優先級視窗，將無向網狀接觸圖即時退化為 **有向無環樹（Directed Acyclic Forest）**。
+    4. **消除連鎖迴圈（Anti-Loop Propagation）**：
+       位移傳遞（Move Propagation）僅由 Parent 走訪 Children，絕不向上反饋，以數學保證永遠不發生循環推動（Ping-Pong Deadlock）。
+    5. **工作站佈局演算**：`find_best_spawn_rect` 與 `compute_workstation_targets`。
     4. **消除連鎖迴圈（Anti-Loop Propagation）**：
        位移傳遞（Move Propagation）僅由 Parent 走訪 Children，絕不向上反饋，以數學保證永遠不發生循環推動（Ping-Pong Deadlock）。
 
