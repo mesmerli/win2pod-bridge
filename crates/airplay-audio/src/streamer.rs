@@ -184,7 +184,7 @@ fn sender_thread_main(
 
     let burst_size = burst_size.max(1); // Minimum 1
     let frame_duration_ns = frame_duration.as_nanos() as u64;
-    let burst_duration_ns = frame_duration_ns * burst_size as u64;
+    let _burst_duration_ns = frame_duration_ns * burst_size as u64;
     #[cfg(target_os = "linux")]
     let mut next_deadline_ns = monotonic_now_ns();
     #[cfg(not(target_os = "linux"))]

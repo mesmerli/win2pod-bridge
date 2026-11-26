@@ -14,7 +14,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::sync::{mpsc, Mutex};
 use tracing::{debug, info, warn, error, instrument};
 
-use airplay_client::{AirPlayClient, PlaybackState, ClientEvent, CallbackHandler, EqConfig};
+use airplay_client::{AirPlayClient, PlaybackState, ClientEvent, CallbackHandler};
 #[cfg(any(all(feature = "bluetooth", target_os = "linux"), feature = "usb-audio"))]
 use airplay_client::{LiveFrameSender, LivePcmFrame};
 use airplay_core::{Device, StreamConfig};

@@ -1515,15 +1515,6 @@ pub fn record_and_configure_streaming_device(device_id: Option<&str>) {
     set_audio_shield_state(AudioShieldState::AirPlayStreaming);
 }
 
-#[allow(dead_code)]
-pub fn record_and_configure_streaming_speakers() {
-    record_and_configure_streaming_device(None);
-}
-
-#[allow(dead_code)]
-pub fn record_and_mute_speakers() {
-    record_and_configure_streaming_device(None);
-}
 
 static INITIAL_DEFAULT_DEVICE_ID: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 static INITIAL_DEFAULT_DEVICE_MUTED: std::sync::Mutex<Option<bool>> = std::sync::Mutex::new(None);
@@ -1856,26 +1847,9 @@ pub fn get_endpoint_mute(device_id: Option<&str>) -> anyhow::Result<bool> {
 }
 
 /// Control the master Windows speaker output volume (0.0 to 1.0)
-#[allow(dead_code)]
-pub fn set_speaker_volume(level: f32) -> anyhow::Result<()> {
-    set_endpoint_volume(None, level)
-}
-
-/// Query the master Windows speaker output volume (0.0 to 1.0)
-#[allow(dead_code)]
-pub fn get_speaker_volume() -> anyhow::Result<f32> {
-    get_endpoint_volume(None)
-}
-
 /// Control the master Windows speaker output mute state via IAudioEndpointVolume
 pub fn set_speaker_mute(mute: bool) -> anyhow::Result<()> {
     set_endpoint_mute(None, mute)
-}
-
-/// Query the master Windows speaker output mute state
-#[allow(dead_code)]
-pub fn get_speaker_mute() -> anyhow::Result<bool> {
-    get_endpoint_mute(None)
 }
 
 static MONOTONIC_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
@@ -2620,8 +2594,6 @@ enum AudioRouteRuntime {
     Streaming(Session),
     SidecarStreaming {
         client: Arc<crate::sidecar::SidecarClient>,
-        target_name: String,
-        device_ids: Vec<String>,
     },
 }
 
@@ -3818,8 +3790,6 @@ pub fn spawn_controller(
                                         };
                                         runtime = AudioRouteRuntime::SidecarStreaming {
                                             client: sidecar_client.clone(),
-                                            target_name: display_title.clone(),
-                                            device_ids: dev_items.iter().map(|d| d.id_string()).collect(),
                                         };
 
                                         // Configure target device speakers for streaming if auto-mute is active

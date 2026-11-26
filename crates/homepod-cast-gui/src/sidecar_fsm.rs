@@ -76,7 +76,6 @@ pub enum SidecarLifecycleEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SidecarAction {
     SpawnOrConnect,
-    DisconnectAndCleanPipe,
     KillProcess,
     ScheduleRetry {
         attempt: u32,

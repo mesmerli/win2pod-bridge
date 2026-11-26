@@ -14,8 +14,6 @@ use windows::Win32::Media::Audio::*;
 use windows::Win32::System::Com::*;
 use win2pod_ipc::protocol::AudioEndpointIpc;
 
-pub const RATE: u32 = 44_100;
-pub const CHANNELS: u8 = 2;
 const FFT_SIZE: usize = 512;
 pub const RAW_SPECTRUM_SIZE: usize = 256;
 
@@ -89,33 +87,6 @@ pub fn set_speaker_mute(mute: bool, device_id: Option<&str>) -> Result<()> {
         }
     }
     Ok(())
-}
-
-/// Query hardware speaker mute status.
-pub fn get_speaker_mute(device_id: Option<&str>) -> Result<bool> {
-    unsafe {
-        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-        let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)
-            .context("CoCreateInstance MMDeviceEnumerator failed")?;
-
-        if let Some(id) = device_id {
-            if id != "default" && !id.is_empty() {
-                let w_id: Vec<u16> = id.encode_utf16().chain(std::iter::once(0)).collect();
-                let device = enumerator.GetDevice(windows::core::PCWSTR(w_id.as_ptr()))
-                    .context("GetDevice failed")?;
-                let ep_vol: IAudioEndpointVolume = device.Activate(CLSCTX_ALL, None)
-                    .context("Activate IAudioEndpointVolume failed")?;
-                return Ok(ep_vol.GetMute()?.as_bool());
-            }
-        }
-
-        if let Ok(dev) = enumerator.GetDefaultAudioEndpoint(eRender, eConsole) {
-            if let Ok(ep_vol) = dev.Activate::<IAudioEndpointVolume>(CLSCTX_ALL, None) {
-                return Ok(ep_vol.GetMute()?.as_bool());
-            }
-        }
-    }
-    Ok(false)
 }
 
 /// Real-time Spectrum Analyzer & Audio Activity Tracker for Engine.
