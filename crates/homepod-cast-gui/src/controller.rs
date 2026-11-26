@@ -3812,7 +3812,11 @@ pub fn spawn_controller(
                                     Ok(()) => {
                                         tracing::info!("Sidecar engine connected successfully to [{display_title}]");
                                         state.status = DeviceStatus::Streaming;
-                                        state.diagnostics.timing_mode = "Sidecar PTP".to_string();
+                                        state.diagnostics.timing_mode = if dev_items.len() > 1 {
+                                            "Sidecar PTP (Group)".to_string()
+                                        } else {
+                                            "Sidecar NTP".to_string()
+                                        };
                                         let visualizer_stop = Arc::new(AtomicBool::new(false));
                                         let v_stop_clone = visualizer_stop.clone();
                                         let visualizer_handle = std::thread::Builder::new()
