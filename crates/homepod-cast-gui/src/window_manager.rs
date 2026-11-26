@@ -172,42 +172,17 @@ impl WindowManager {
                 vis.enter_fullscreen();
             }
         } else {
-            // 退出全螢幕：
+            // 退出全螢幕：純粹還原視覺特效視窗的幾何與樣式，其餘所有視窗保持其真實螢幕位置與生命週期
             if let Some(vis) = self.windows.get_mut(&WindowKind::Visualizer) {
                 vis.exit_fullscreen();
-            }
-
-            // 關鍵防護：檢查其他所有視窗。
-            // 若視窗內部狀態機處於 Minimized，【絕對尊重其自主權，維持最小化】！
-            // 杜絕任何退出全螢幕擅自把主視窗或子視窗彈出或置中的錯誤！
-            for k in [WindowKind::Main, WindowKind::MiniPlayer, WindowKind::Equalizer] {
-                if let Some(w) = self.windows.get_mut(&k) {
-                    if w.state.is_hud() {
-                        w.exit_hud();
-                    }
-                    // 若是 Minimized，完全不做任何動作，安全維持在工作列！
-                }
             }
         }
     }
 
     /// 全螢幕 HUD 懸浮層開關事件同步
-    pub fn on_hud_toggled(&mut self, is_shown: bool) {
-        for w in self.windows.values_mut() {
-            if w.kind != WindowKind::Visualizer && w.is_alive() {
-                if is_shown {
-                    if !w.state.is_hud() {
-                        let rect = w.canonical_rect;
-                        let prior = Box::new(w.state.clone());
-                        w.state = WindowLifecycleState::FullscreenHud {
-                            prior_state: prior,
-                            hud_rect: rect,
-                        };
-                    }
-                } else if w.state.is_hud() {
-                    w.exit_hud();
-                }
-            }
-        }
+    pub fn on_hud_toggled(&mut self, _is_shown: bool) {
+        // 全螢幕 HUD 顯隱純粹為圖層層級 (Topmost / 沉降) 與釘選狀態管理，
+        // 各視窗自主維持其真實常態生命週期（Floating 或 WorkstationDocked），
+        // 狀態機無需介入偽裝或備份，徹底杜絕幽靈位移與座標倒退。
     }
 }
