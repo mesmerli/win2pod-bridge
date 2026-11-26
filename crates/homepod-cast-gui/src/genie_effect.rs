@@ -243,7 +243,7 @@ fn run_genie_s_curve_animation<F>(
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DestroyWindow,
-        GetWindowLongW, GetWindowPlacement, SetWindowPlacement, WINDOWPLACEMENT,
+        GetWindowLongW,
         RegisterClassExW, SetWindowLongW, SetWindowPos, ShowWindow,
         UpdateLayeredWindow,
         GWL_EXSTYLE, HWND_NOTOPMOST,
@@ -275,30 +275,11 @@ fn run_genie_s_curve_animation<F>(
                         );
                     } else {
                         // Minimize to Taskbar:
-                        // Move off-screen during animation so DWM has no visible surface to glitch
+                        // Win32 原生安全最小化：關閉 DWM 動畫後直接在原螢幕坐標處執行最小化！
+                        // 讓 Win32 核心原生記錄正確的 (start_x, start_y, start_w, start_h) 為常態還原坐標，
+                        // 絕不將視窗手動 SetWindowPos 移到離屏 (-32000, -32000)，從根本上徹底根除 DWM 縮圖毀損！
                         disable_window_dwm_transitions(hwnd);
-                        // 關鍵時序防護：在離屏前，先將真實常態幾何尺寸寫入 rcNormalPosition！
-                        // 杜絕任何在動畫期間發生的還原或中斷因負坐標落入 Win32 最小化預設寸 (180x27)
-                        let mut wp: WINDOWPLACEMENT = std::mem::zeroed();
-                        wp.length = std::mem::size_of::<WINDOWPLACEMENT>() as u32;
-                        if GetWindowPlacement(hwnd, &mut wp) != 0 {
-                            let safe_w = start_w.max(380);
-                            let safe_h = start_h.max(340);
-                            wp.rcNormalPosition.left = start_x;
-                            wp.rcNormalPosition.top = start_y;
-                            wp.rcNormalPosition.right = start_x + safe_w;
-                            wp.rcNormalPosition.bottom = start_y + safe_h;
-                            SetWindowPlacement(hwnd, &wp);
-                        }
-                        SetWindowPos(
-                            hwnd,
-                            HWND_NOTOPMOST,
-                            -32000,
-                            -32000,
-                            0,
-                            0,
-                            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-                        );
+                        ShowWindow(hwnd, SW_MINIMIZE);
                     }
                 }
             }
@@ -597,21 +578,9 @@ fn run_genie_s_curve_animation<F>(
         if target == GenieTarget::Taskbar {
             let orig_h = orig_hwnd_val as HWND;
             if !orig_h.is_null() && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(orig_h) != 0 {
-                disable_window_dwm_transitions(orig_h);
-                // 1. 關鍵時序防護：先在離屏坐標 (-32000, -32000) 處直接執行最小化！
-                //    此時視窗處於螢幕工作區之外，DWM 在原始螢幕坐標上完全沒有任何可繪製表面，物理上杜絕任何閃現！
-                ShowWindow(orig_h, SW_MINIMIZE);
-
-                // 2. 視窗此時已進入最小化（Iconic）狀態，此時寫入常態還原坐標 (rcNormalPosition)。
-                //    Win32 規範：對已最小化的視窗寫入 rcNormalPosition，系統僅靜默更新其還原坐標，絕不會將視窗呈現在螢幕上！
-                let mut wp: WINDOWPLACEMENT = std::mem::zeroed();
-                wp.length = std::mem::size_of::<WINDOWPLACEMENT>() as u32;
-                if GetWindowPlacement(orig_h, &mut wp) != 0 {
-                    wp.rcNormalPosition.left = start_x;
-                    wp.rcNormalPosition.top = start_y;
-                    wp.rcNormalPosition.right = start_x + start_w;
-                    wp.rcNormalPosition.bottom = start_y + start_h;
-                    SetWindowPlacement(orig_h, &wp);
+                if windows_sys::Win32::UI::WindowsAndMessaging::IsIconic(orig_h) == 0 {
+                    disable_window_dwm_transitions(orig_h);
+                    ShowWindow(orig_h, SW_MINIMIZE);
                 }
             }
         } else {

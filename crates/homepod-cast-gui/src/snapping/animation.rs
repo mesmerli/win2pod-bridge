@@ -805,7 +805,20 @@ pub unsafe fn restore_window_animated(kind: WindowKind, hwnd: HWND) {
         unsafe {
             if IsWindow(h) != 0 {
                 crate::genie_effect::disable_window_dwm_transitions(h);
-                ShowWindow(h, SW_RESTORE);
+                if IsIconic(h) != 0 {
+                    ShowWindow(h, SW_RESTORE);
+                }
+
+                let nr = get_window_normal_rect(root);
+                SetWindowPos(
+                    h,
+                    HWND_NOTOPMOST,
+                    nr.left,
+                    nr.top,
+                    nr.right - nr.left,
+                    nr.bottom - nr.top,
+                    SWP_SHOWWINDOW | SWP_NOACTIVATE,
+                );
 
                 let members = get_cluster_members(root);
                 let has_hidden_or_iconic_children = members.iter().any(|&m| {
@@ -819,16 +832,6 @@ pub unsafe fn restore_window_animated(kind: WindowKind, hwnd: HWND) {
                 if was_collapsed || has_hidden_or_iconic_children {
                     expand_cluster_animated(root, h);
                 } else {
-                    let nr = get_window_normal_rect(root);
-                    SetWindowPos(
-                        h,
-                        HWND_NOTOPMOST,
-                        nr.left,
-                        nr.top,
-                        nr.right - nr.left,
-                        nr.bottom - nr.top,
-                        SWP_SHOWWINDOW | SWP_NOACTIVATE,
-                    );
                     bring_cluster_to_top(root, h);
                     finish_cluster_restore(root);
                 }

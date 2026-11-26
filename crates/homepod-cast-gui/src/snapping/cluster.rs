@@ -806,18 +806,30 @@ pub unsafe fn expand_cluster_animated(root: WindowKind, root_hwnd: HWND) {
     set_cluster_state(root, ClusterState::Restoring(std::time::Instant::now()));
 
     let members = get_cluster_members(root);
+    let root_r = get_window_normal_rect(root);
     if members.len() <= 1 {
-        finish_cluster_restore(root);
         if !root_hwnd.is_null() && IsWindow(root_hwnd) != 0 {
-            ShowWindow(root_hwnd, SW_RESTORE);
+            if IsIconic(root_hwnd) != 0 {
+                ShowWindow(root_hwnd, SW_RESTORE);
+            }
+            SetWindowPos(
+                root_hwnd,
+                HWND_NOTOPMOST,
+                root_r.left,
+                root_r.top,
+                root_r.right - root_r.left,
+                root_r.bottom - root_r.top,
+                SWP_SHOWWINDOW | SWP_NOACTIVATE,
+            );
         }
+        finish_cluster_restore(root);
         return;
     }
 
-    // 1. 還原根節點視窗（母體）
-    let root_r = get_window_normal_rect(root);
-    if !root_hwnd.is_null() && IsWindow(root_hwnd) != 0 && IsIconic(root_hwnd) != 0 {
-        ShowWindow(root_hwnd, SW_RESTORE);
+    if !root_hwnd.is_null() && IsWindow(root_hwnd) != 0 {
+        if IsIconic(root_hwnd) != 0 {
+            ShowWindow(root_hwnd, SW_RESTORE);
+        }
         SetWindowPos(
             root_hwnd,
             HWND_NOTOPMOST,

@@ -387,6 +387,19 @@ unsafe extern "system" fn unified_window_subclass_proc(
                 if crate::genie_effect::has_cached_snapshot_for_hwnd(hwnd as usize) {
                     restore_window_animated(kind, hwnd);
                     return 0;
+                } else {
+                    let nr = get_window_normal_rect(kind);
+                    ShowWindow(hwnd, SW_RESTORE);
+                    SetWindowPos(
+                        hwnd,
+                        HWND_NOTOPMOST,
+                        nr.left,
+                        nr.top,
+                        nr.right - nr.left,
+                        nr.bottom - nr.top,
+                        SWP_SHOWWINDOW | SWP_NOACTIVATE,
+                    );
+                    return 0;
                 }
             }
             let is_slave = role == WindowRole::ClusterSlave;
