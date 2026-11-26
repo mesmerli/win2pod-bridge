@@ -177,6 +177,46 @@ impl SidecarClient {
         self.is_connected.load(Ordering::Relaxed)
     }
 
+    /// Enumerate audio endpoints via the unified engine.
+    pub async fn enumerate_audio_endpoints(&self) -> Result<Vec<AudioEndpointIpc>> {
+        self.ensure_started(None).await?;
+        match self.send_request(IpcRequest::EnumerateAudioEndpoints).await? {
+            IpcResponse::AudioEndpoints(endpoints) => Ok(endpoints),
+            IpcResponse::Error(e) => Err(anyhow!("EnumerateAudioEndpoints error: {e}")),
+            other => Err(anyhow!("Unexpected response to EnumerateAudioEndpoints: {:?}", other)),
+        }
+    }
+
+    /// Set hardware speaker mute on an audio endpoint via the unified engine.
+    pub async fn set_speaker_mute(&self, mute: bool, device_id: Option<String>) -> Result<()> {
+        self.ensure_started(None).await?;
+        match self.send_request(IpcRequest::SetSpeakerMute { mute, device_id }).await? {
+            IpcResponse::Ok => Ok(()),
+            IpcResponse::Error(e) => Err(anyhow!("SetSpeakerMute error: {e}")),
+            other => Err(anyhow!("Unexpected response to SetSpeakerMute: {:?}", other)),
+        }
+    }
+
+    /// Set Stand-in device redirection ID for AirPods protection.
+    pub async fn set_standin_redirection(&self, standin_id: Option<String>) -> Result<()> {
+        self.ensure_started(None).await?;
+        match self.send_request(IpcRequest::SetStandinRedirection { standin_id }).await? {
+            IpcResponse::Ok => Ok(()),
+            IpcResponse::Error(e) => Err(anyhow!("SetStandinRedirection error: {e}")),
+            other => Err(anyhow!("Unexpected response to SetStandinRedirection: {:?}", other)),
+        }
+    }
+
+    /// Switch the engine operating mode (Idle, AirPlay, LocalAo).
+    pub async fn set_engine_mode(&self, mode: EngineModeIpc) -> Result<()> {
+        self.ensure_started(None).await?;
+        match self.send_request(IpcRequest::SetEngineMode { mode }).await? {
+            IpcResponse::Ok => Ok(()),
+            IpcResponse::Error(e) => Err(anyhow!("SetEngineMode error: {e}")),
+            other => Err(anyhow!("Unexpected response to SetEngineMode: {:?}", other)),
+        }
+    }
+
     /// Gracefully shutdown sidecar.
     pub async fn shutdown(&self) {
         if self.is_connected() {

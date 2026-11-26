@@ -98,7 +98,7 @@ impl ActiveStreamSession {
         volume: f32,
         low_latency: bool,
         cache: &HashMap<String, Device>,
-        _event_tx: mpsc::Sender<IpcEvent>,
+        event_tx: mpsc::Sender<IpcEvent>,
     ) -> Result<Self> {
         let (latency_min, latency_max) = if low_latency {
             (11025, 44100) // ~250ms at 44.1kHz
@@ -235,11 +235,12 @@ impl ActiveStreamSession {
             let (sender, decoder) = LiveAudioDecoder::create_pair(RATE, CHANNELS, 256);
             let running = Arc::new(AtomicBool::new(true));
             let running_clone = running.clone();
+            let evt_tx = event_tx.clone();
 
             let capture_thread = std::thread::Builder::new()
                 .name("win2pod-engine-capture".into())
                 .spawn(move || {
-                    if let Err(e) = Self::capture_loop(running_clone, sender) {
+                    if let Err(e) = Self::capture_loop(running_clone, sender, evt_tx) {
                         error!("WASAPI loopback capture error: {e:#}");
                     }
                 })
@@ -293,11 +294,12 @@ impl ActiveStreamSession {
             let (sender, decoder) = LiveAudioDecoder::create_pair(RATE, CHANNELS, 256);
             let running = Arc::new(AtomicBool::new(true));
             let running_clone = running.clone();
+            let evt_tx = event_tx.clone();
 
             let capture_thread = std::thread::Builder::new()
                 .name("win2pod-engine-capture".into())
                 .spawn(move || {
-                    if let Err(e) = Self::capture_loop(running_clone, sender) {
+                    if let Err(e) = Self::capture_loop(running_clone, sender, evt_tx) {
                         error!("WASAPI loopback capture error: {e:#}");
                     }
                 })
@@ -377,11 +379,13 @@ impl ActiveStreamSession {
         info!("Streaming session stopped successfully");
     }
 
-    fn capture_loop(running: Arc<AtomicBool>, sender: LiveFrameSender) -> Result<()> {
+    fn capture_loop(running: Arc<AtomicBool>, sender: LiveFrameSender, event_tx: mpsc::Sender<IpcEvent>) -> Result<()> {
         let _com = initialize_mta();
         let enumerator = DeviceEnumerator::new()?;
         let bytes_per_frame = CHANNELS as usize * 4; // f32 per sample
         let silence = vec![0i16; (RATE as usize / 20) * CHANNELS as usize];
+        let mut spectrum_engine = crate::audio_manager::SpectrumEngine::new();
+        let mut mono_buf: Vec<f32> = Vec::with_capacity(512);
 
         while running.load(Ordering::Relaxed) {
             let device = match enumerator.get_default_device(&Direction::Render) {
@@ -462,13 +466,22 @@ impl ActiveStreamSession {
                             let n_samples = n_frames * CHANNELS as usize;
                             let n_bytes = n_frames * bytes_per_frame;
                             let mut samples: Vec<i16> = Vec::with_capacity(n_samples);
+                            mono_buf.clear();
                             let slice = &queue.make_contiguous()[..n_bytes];
                             for chunk in slice.chunks_exact(4) {
                                 let f = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
                                 let s = (f.clamp(-1.0, 1.0) * 32767.0) as i16;
                                 samples.push(s);
                             }
+                            for chunk in samples.chunks_exact(2) {
+                                mono_buf.push(((chunk[0] as f32 + chunk[1] as f32) * 0.5) / 32768.0);
+                            }
                             queue.drain(..n_bytes);
+
+                            if let Some(raw) = spectrum_engine.process_samples(&mono_buf) {
+                                let _ = event_tx.try_send(IpcEvent::RawSpectrumUpdate(raw.to_vec()));
+                            }
+
                             let _ = sender.try_send(LivePcmFrame {
                                 samples,
                                 channels: CHANNELS,

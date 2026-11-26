@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use anyhow::Result;
 use tokio::sync::{mpsc, Mutex, RwLock};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use win2pod_ipc::protocol::*;
 
 use airplay_core::device::Device;
@@ -141,6 +141,28 @@ impl Engine {
             }
             IpcRequest::SetAirPodsMonitoring { enabled } => {
                 info!("SetAirPodsMonitoring: {enabled}");
+                Ok(IpcResponse::Ok)
+            }
+            IpcRequest::EnumerateAudioEndpoints => {
+                match crate::audio_manager::enumerate_render_endpoints() {
+                    Ok(endpoints) => Ok(IpcResponse::AudioEndpoints(endpoints)),
+                    Err(e) => Ok(IpcResponse::Error(e.to_string())),
+                }
+            }
+            IpcRequest::SetSpeakerMute { mute, device_id } => {
+                info!("SetSpeakerMute: mute={mute}, device_id={:?}", device_id);
+                if let Err(e) = crate::audio_manager::set_speaker_mute(mute, device_id.as_deref()) {
+                    warn!("Failed to set speaker mute: {e:#}");
+                    return Ok(IpcResponse::Error(e.to_string()));
+                }
+                Ok(IpcResponse::Ok)
+            }
+            IpcRequest::SetStandinRedirection { standin_id } => {
+                info!("SetStandinRedirection: standin_id={:?}", standin_id);
+                Ok(IpcResponse::Ok)
+            }
+            IpcRequest::SetEngineMode { mode } => {
+                info!("SetEngineMode: mode={:?}", mode);
                 Ok(IpcResponse::Ok)
             }
             IpcRequest::Shutdown => {

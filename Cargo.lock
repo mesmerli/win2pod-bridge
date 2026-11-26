@@ -6717,6 +6717,7 @@ dependencies = [
  "airplay-receiver",
  "anyhow",
  "crossbeam-channel",
+ "realfft",
  "serde",
  "serde_json",
  "tokio",

@@ -6,6 +6,7 @@
 
 mod engine;
 mod airplay_sender;
+mod audio_manager;
 
 use std::sync::Arc;
 use anyhow::Result;

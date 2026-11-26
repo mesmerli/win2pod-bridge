@@ -430,6 +430,7 @@ pub enum GuiCmd {
     RefreshDevices,
     DevicesRefreshed(Vec<DeviceItem>),
     RefreshAudioDevices,
+    AudioEndpointsLoaded(Vec<AudioDeviceItem>),
     RefreshAudioApps,
     SetAudioSource(AudioSource),
     Connect(Vec<DeviceItem>),
@@ -2609,8 +2610,6 @@ enum AudioRouteRuntime {
         client: Arc<crate::sidecar::SidecarClient>,
         target_name: String,
         device_ids: Vec<String>,
-        visualizer_stop: Arc<AtomicBool>,
-        visualizer_handle: Option<std::thread::JoinHandle<()>>,
     },
 }
 
@@ -2638,11 +2637,7 @@ impl AudioRouteRuntime {
             Self::Streaming(session) => {
                 session.stop().await;
             }
-            Self::SidecarStreaming { client, visualizer_stop, mut visualizer_handle, .. } => {
-                visualizer_stop.store(true, Ordering::SeqCst);
-                if let Some(h) = visualizer_handle.take() {
-                    let _ = h.join();
-                }
+            Self::SidecarStreaming { client, .. } => {
                 let _ = client.send_request(win2pod_ipc::protocol::IpcRequest::Disconnect).await;
             }
             Self::AoMode(runner) => {
@@ -2653,107 +2648,6 @@ impl AudioRouteRuntime {
         crate::spectrum::reset_spectrum_levels();
         set_audio_peak_level(0.0);
     }
-}
-
-fn spawn_visualizer_tap_loop(stop: Arc<AtomicBool>) {
-    let _com = initialize_mta();
-    let Ok(enumerator) = DeviceEnumerator::new() else { return; };
-    let bytes_per_frame = CHANNELS as usize * 4;
-
-    while !stop.load(Ordering::Relaxed) {
-        let Ok(device) = enumerator.get_default_device(&Direction::Render) else {
-            std::thread::sleep(Duration::from_millis(500));
-            continue;
-        };
-
-        let Ok(mut audio_client) = device.get_iaudioclient() else {
-            std::thread::sleep(Duration::from_millis(500));
-            continue;
-        };
-
-        let format = WaveFormat::new(32, 32, &SampleType::Float, RATE as usize, CHANNELS as usize, None);
-        let (_def_period, min_period) = match audio_client.get_device_period() {
-            Ok(p) => p,
-            Err(_) => (100_000, 100_000),
-        };
-        let mode = StreamMode::EventsShared {
-            autoconvert: true,
-            buffer_duration_hns: min_period,
-        };
-
-        if audio_client.initialize_client(&format, &Direction::Capture, &mode).is_err() {
-            std::thread::sleep(Duration::from_millis(500));
-            continue;
-        }
-
-        let Ok(h_event) = audio_client.set_get_eventhandle() else {
-            std::thread::sleep(Duration::from_millis(500));
-            continue;
-        };
-
-        let Ok(capture_client) = audio_client.get_audiocaptureclient() else {
-            std::thread::sleep(Duration::from_millis(500));
-            continue;
-        };
-
-        let mut queue: VecDeque<u8> = VecDeque::new();
-        if audio_client.start_stream().is_err() {
-            std::thread::sleep(Duration::from_millis(500));
-            continue;
-        }
-
-        tracing::info!("Sidecar visualizer tap active on default render device");
-
-        while !stop.load(Ordering::Relaxed) {
-            if DEFAULT_DEVICE_CHANGED.swap(false, Ordering::SeqCst) {
-                break;
-            }
-
-            // Zero-CPU optimization: if window is not visible, skip FFT
-            if !crate::spectrum::is_spectrum_needed() && !crate::tray::is_any_window_visible() {
-                queue.clear();
-                crate::spectrum::reset_spectrum_levels();
-                set_audio_peak_level(0.0);
-                std::thread::sleep(Duration::from_millis(150));
-                continue;
-            }
-
-            match capture_client.read_from_device_to_deque(&mut queue) {
-                Ok(_) => {
-                    let n_frames = queue.len() / bytes_per_frame;
-                    if n_frames > 0 {
-                        let n_samples = n_frames * CHANNELS as usize;
-                        let n_bytes = n_frames * bytes_per_frame;
-                        let mut samples: Vec<i16> = Vec::with_capacity(n_samples);
-                        let slice = &queue.make_contiguous()[..n_bytes];
-                        for b in slice.chunks_exact(4) {
-                            let f = f32::from_le_bytes([b[0], b[1], b[2], b[3]]);
-                            let s = (f.clamp(-1.0, 1.0) * 32767.0) as i16;
-                            samples.push(s);
-                        }
-                        queue.drain(..n_bytes);
-
-                        crate::spectrum::process_post_dsp_pcm(&samples);
-                    } else {
-                        crate::spectrum::reset_spectrum_levels();
-                        set_audio_peak_level(0.0);
-                    }
-                    let _ = h_event.wait_for_event(50);
-                }
-                Err(_) => {
-                    crate::spectrum::reset_spectrum_levels();
-                    set_audio_peak_level(0.0);
-                    std::thread::sleep(Duration::from_millis(200));
-                    break;
-                }
-            }
-        }
-
-        let _ = audio_client.stop_stream();
-    }
-
-    crate::spectrum::reset_spectrum_levels();
-    set_audio_peak_level(0.0);
 }
 
 fn spawn_ao_runner(
@@ -3213,10 +3107,19 @@ pub fn spawn_controller(
             let mut last_sent_track: Option<(String, String, String)> = None;
             let mut saved_homepod_volume: f32 = load_volume();
             let sidecar_client = Arc::new(crate::sidecar::SidecarClient::new());
+            let (sidecar_evt_tx, mut sidecar_evt_rx) = tokio::sync::mpsc::channel(128);
+            sidecar_client.start_event_listener(sidecar_evt_tx);
             let sc_prewarm = sidecar_client.clone();
+            let cmd_tx_warm = cmd_tx.clone();
             tokio::spawn(async move {
-                if let Err(e) = sc_prewarm.ensure_started(None).await {
-                    tracing::warn!("Sidecar engine pre-warm postponed until connection: {e:#}");
+                if let Ok(()) = sc_prewarm.ensure_started(None).await {
+                    if let Ok(endpoints) = sc_prewarm.enumerate_audio_endpoints().await {
+                        let _ = cmd_tx_warm.send(GuiCmd::AudioEndpointsLoaded(
+                            endpoints.into_iter().map(|e| AudioDeviceItem { id: e.id, name: e.name }).collect()
+                        )).await;
+                    }
+                } else {
+                    tracing::warn!("Sidecar engine pre-warm postponed until connection");
                 }
             });
 
@@ -3429,6 +3332,27 @@ pub fn spawn_controller(
                                     ).await;
                                 }
                             }
+                        }
+                    }
+                    Some(evt) = sidecar_evt_rx.recv() => {
+                        match evt {
+                            win2pod_ipc::protocol::IpcEvent::RawSpectrumUpdate(raw_bytes) => {
+                                crate::spectrum::update_raw_spectrum_from_engine(&raw_bytes);
+                            }
+                            win2pod_ipc::protocol::IpcEvent::AudioActivityChanged { is_active, peak_level } => {
+                                set_audio_peak_level(peak_level);
+                                if is_active {
+                                    crate::spectrum::record_audio_activity();
+                                }
+                            }
+                            win2pod_ipc::protocol::IpcEvent::AudioEndpointsChanged(endpoints) => {
+                                state.audio_devices = endpoints.into_iter().map(|e| AudioDeviceItem {
+                                    id: e.id,
+                                    name: e.name,
+                                }).collect();
+                                broadcast(&state);
+                            }
+                            _ => {}
                         }
                     }
                     _ = tick_interval.tick() => {
@@ -3689,6 +3613,10 @@ pub fn spawn_controller(
 
                                 broadcast(&state);
                             }
+                            GuiCmd::AudioEndpointsLoaded(devices) => {
+                                state.audio_devices = devices;
+                                broadcast(&state);
+                            }
                             GuiCmd::RefreshAudioApps => {
                                 state.audio_apps = crate::app_enumerator::get_audio_applications();
                                 broadcast(&state);
@@ -3820,21 +3748,10 @@ pub fn spawn_controller(
                                         } else {
                                             "Sidecar NTP".to_string()
                                         };
-                                        let visualizer_stop = Arc::new(AtomicBool::new(false));
-                                        let v_stop_clone = visualizer_stop.clone();
-                                        let visualizer_handle = std::thread::Builder::new()
-                                            .name("win2pod-visualizer-tap".into())
-                                            .spawn(move || {
-                                                spawn_visualizer_tap_loop(v_stop_clone);
-                                            })
-                                            .ok();
-
                                         runtime = AudioRouteRuntime::SidecarStreaming {
                                             client: sidecar_client.clone(),
                                             target_name: display_title.clone(),
                                             device_ids: dev_items.iter().map(|d| d.id_string()).collect(),
-                                            visualizer_stop,
-                                            visualizer_handle,
                                         };
 
                                         // Configure target device speakers for streaming if auto-mute is active

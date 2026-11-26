@@ -154,6 +154,18 @@ pub fn get_raw_spectrum() -> [u8; RAW_SPECTRUM_SIZE] {
     }
 }
 
+/// Update raw 256-bin FFT spectrum directly from win2pod-engine IPC push.
+pub fn update_raw_spectrum_from_engine(raw: &[u8]) {
+    if raw.len() == RAW_SPECTRUM_SIZE {
+        let mut arr = [0u8; RAW_SPECTRUM_SIZE];
+        arr.copy_from_slice(raw);
+        if let Ok(mut guard) = RAW_SPECTRUM.lock() {
+            *guard = arr;
+        }
+        record_audio_activity();
+    }
+}
+
 /// Reset all spectrum levels to zero.
 pub fn reset_spectrum_levels() {
     for val in &SPECTRUM_LEVELS {

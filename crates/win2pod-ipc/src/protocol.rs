@@ -56,6 +56,17 @@ pub enum IpcRequest {
     SetAirPodsMonitoring {
         enabled: bool,
     },
+    EnumerateAudioEndpoints,
+    SetEngineMode {
+        mode: EngineModeIpc,
+    },
+    SetSpeakerMute {
+        mute: bool,
+        device_id: Option<String>,
+    },
+    SetStandinRedirection {
+        standin_id: Option<String>,
+    },
     GetStatus,
     Shutdown,
 }
@@ -70,6 +81,7 @@ pub enum IpcResponse {
     Ok,
     Error(String),
     Status(EngineStatusIpc),
+    AudioEndpoints(Vec<AudioEndpointIpc>),
 }
 
 /// Asynchronous events emitted by the Sidecar engine to the GUI frontend.
@@ -87,6 +99,12 @@ pub enum IpcEvent {
     AirPodsStateUpdate(AirPodsStatusIpc),
     ReceiverStateUpdate(ReceiverStatusIpc),
     FftSpectrumUpdate(Vec<f32>),
+    RawSpectrumUpdate(Vec<u8>),
+    AudioActivityChanged {
+        is_active: bool,
+        peak_level: f32,
+    },
+    AudioEndpointsChanged(Vec<AudioEndpointIpc>),
     RemoteMediaControl(RemoteCmdIpc),
 }
 
@@ -186,6 +204,28 @@ pub enum RemoteCmdIpc {
     NextTrack,
     PreviousTrack,
     Stop,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AudioEndpointIpc {
+    pub id: String,
+    pub name: String,
+    pub is_default: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum EngineModeIpc {
+    Idle,
+    AirPlay,
+    LocalAo {
+        target_output_device: Option<String>,
+    },
+}
+
+impl Default for EngineModeIpc {
+    fn default() -> Self {
+        Self::Idle
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
