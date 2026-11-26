@@ -609,6 +609,7 @@ fn run_genie_s_curve_animation<F>(
                 if GetWindowPlacement(orig_h, &mut wp) != 0 {
                     let safe_w = start_w.max(380);
                     let safe_h = start_h.max(340);
+                    wp.showCmd = SW_MINIMIZE as u32;
                     wp.rcNormalPosition.left = start_x;
                     wp.rcNormalPosition.top = start_y;
                     wp.rcNormalPosition.right = start_x + safe_w;
