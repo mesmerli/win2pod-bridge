@@ -6,7 +6,7 @@ use std::num::NonZeroIsize;
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::thread;
 use wry::dpi::{PhysicalPosition, PhysicalSize, Position, Size};
-use wry::WebViewBuilder;
+use wry::{WebViewBuilder, WebViewExtWindows};
 
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::Graphics::Gdi::*;
@@ -41,6 +41,15 @@ pub fn reset_hud_main_shown() {
 
 pub fn is_hud_shown() -> bool {
     VISUALIZER_HUD_MAIN_SHOWN.load(Ordering::SeqCst)
+}
+
+/// 透過 WebView2 原生 PostWebMessageAsJson 發布 JSON 訊息給前端
+/// 免除 V8 重新解析腳本字串的開銷，達到最低 CPU 與延遲
+pub fn post_web_message_json(wv: &wry::WebView, json_str: &str) {
+    let holder = webview2_com::CoTaskMemPWSTR::from(json_str);
+    unsafe {
+        let _ = wv.webview().PostWebMessageAsJson(*holder.as_ref().as_pcwstr());
+    }
 }
 
 /// 取得當前全螢幕 HUD 浮層所涵蓋的所有視窗（包括主視窗，以及任何已開啟/可見的子視窗）。
@@ -407,13 +416,12 @@ pub unsafe fn update_visualizer_title(hwnd: HWND) {
         if !state_ptr.is_null() {
             if let Some(ref wv) = (*state_ptr).webview {
                 let is_docked = crate::snapping::is_main_in_cluster(crate::snapping::WindowKind::Visualizer);
-                let script = format!(
-                    "if (typeof window.updateTitleBadge === 'function') window.updateTitleBadge({:?});\
-                     if (typeof window.handleVisDockChanged === 'function') window.handleVisDockChanged({});",
-                    badge_str,
-                    if is_docked { "true" } else { "false" }
-                );
-                let _ = wv.evaluate_script(&script);
+                let msg = serde_json::json!({
+                    "type": "title_badge",
+                    "badge": badge_str,
+                    "docked": is_docked
+                });
+                post_web_message_json(wv, &msg.to_string());
             }
         }
     } else {
@@ -610,11 +618,12 @@ unsafe fn set_pin(hwnd: HWND, state: &mut VisualizerState, pinned: bool) {
     }
 
     if let Some(ref wv) = state.webview {
-        let script = format!(
-            "if (typeof window.handleVisPinChanged === 'function') window.handleVisPinChanged({}, true);",
-            state.is_pinned
-        );
-        let _ = wv.evaluate_script(&script);
+        let msg = serde_json::json!({
+            "type": "vis_pin_changed",
+            "pinned": state.is_pinned,
+            "from_host": true
+        });
+        post_web_message_json(wv, &msg.to_string());
     }
 }
 
@@ -676,7 +685,11 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
             crate::controller::send_controller_cmd(crate::controller::GuiCmd::VisualizerFullscreenChanged(true));
 
             if let Some(ref wv) = state.webview {
-                let _ = wv.evaluate_script("document.body.classList.add('fullscreen');");
+                let msg = serde_json::json!({
+                    "type": "vis_fullscreen_changed",
+                    "fullscreen": true
+                });
+                post_web_message_json(wv, &msg.to_string());
             }
 
             hide_hud_cluster();
@@ -715,7 +728,11 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
         apply_visualizer_theme(hwnd);
         update_visualizer_title(hwnd);
         if let Some(ref wv) = state.webview {
-            let _ = wv.evaluate_script("document.body.classList.remove('fullscreen');");
+            let msg = serde_json::json!({
+                "type": "vis_fullscreen_changed",
+                "fullscreen": false
+            });
+            post_web_message_json(wv, &msg.to_string());
         }
         crate::controller::send_controller_cmd(crate::controller::GuiCmd::VisualizerFullscreenChanged(false));
 
@@ -748,11 +765,11 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
             size: Size::Physical(PhysicalSize::new(w, h)),
         });
 
-        let script = format!(
-            "if (typeof window.handleFullscreenChanged === 'function') window.handleFullscreenChanged({});",
-            state.is_fullscreen
-        );
-        let _ = wv.evaluate_script(&script);
+        let msg = serde_json::json!({
+            "type": "vis_fullscreen_changed",
+            "fullscreen": state.is_fullscreen
+        });
+        post_web_message_json(wv, &msg.to_string());
     }
 }
 
@@ -1082,17 +1099,14 @@ unsafe fn run_visualizer_window() {
                 crate::snapping::WindowRole::ClusterSlave => "📎",
                 crate::snapping::WindowRole::Standalone => "",
             };
-            let script = format!(
-                "if (typeof window.setLanguage === 'function') window.setLanguage({:?});\
-                 if (typeof window.handleVisPinChanged === 'function') window.handleVisPinChanged({}, false);\
-                 if (typeof window.updateTitleBadge === 'function') window.updateTitleBadge({:?});\
-                 if (typeof window.handleVisDockChanged === 'function') window.handleVisDockChanged({}, false);",
-                lang_code,
-                if initial_pinned { "true" } else { "false" },
-                badge_str,
-                if init_docked { "true" } else { "false" }
-            );
-            let _ = wv.evaluate_script(&script);
+            let msg = serde_json::json!({
+                "type": "init_state",
+                "lang": lang_code,
+                "pinned": initial_pinned,
+                "badge": badge_str,
+                "docked": init_docked
+            });
+            post_web_message_json(&wv, &msg.to_string());
             if let Ok(mut applied) = APPLIED_LANG.lock() {
                 *applied = Some(lang_code.clone());
             }
@@ -1171,11 +1185,11 @@ unsafe extern "system" fn visualizer_wnd_proc(
                             if let Ok(mut applied) = APPLIED_LANG.lock() {
                                 *applied = Some(current.clone());
                             }
-                            let script = format!(
-                                "if (typeof window.setLanguage === 'function') window.setLanguage({:?});",
-                                current
-                            );
-                            let _ = wv.evaluate_script(&script);
+                            let msg = serde_json::json!({
+                                "type": "set_language",
+                                "lang": current
+                            });
+                            post_web_message_json(wv, &msg.to_string());
                         }
                     }
                 }
@@ -1195,10 +1209,12 @@ unsafe extern "system" fn visualizer_wnd_proc(
             if !state_ptr.is_null() {
                 unsafe {
                     if let Some(ref wv) = (*state_ptr).webview {
-                        let script = format!(
-                            "if (typeof window.syncOpacityFromHost === 'function') window.syncOpacityFromHost({pct}, {show_hud});"
-                        );
-                        let _ = wv.evaluate_script(&script);
+                        let msg = serde_json::json!({
+                            "type": "sync_opacity",
+                            "val": pct,
+                            "show_hud": show_hud
+                        });
+                        post_web_message_json(wv, &msg.to_string());
                     }
                 }
             }
@@ -1524,24 +1540,22 @@ unsafe extern "system" fn visualizer_wnd_proc(
                                 if let Ok(mut applied) = APPLIED_LANG.lock() {
                                     if applied.as_deref() != Some(current.as_str()) {
                                         *applied = Some(current.clone());
-                                        let script = format!(
-                                            "if (typeof window.setLanguage === 'function') window.setLanguage({:?});",
-                                            current
-                                        );
-                                        let _ = wv.evaluate_script(&script);
+                                        let msg = serde_json::json!({
+                                            "type": "set_language",
+                                            "lang": current
+                                        });
+                                        post_web_message_json(wv, &msg.to_string());
                                     }
                                 }
                             }
                         }
 
                         let spectrum = crate::spectrum::get_raw_spectrum();
-                        if let Ok(json_data) = serde_json::to_string(&spectrum[..]) {
-                            let script = format!(
-                                "if (typeof window.handleHostAudio === 'function') window.handleHostAudio({{\"type\":\"spectrum\",\"data\":{}}});",
-                                json_data
-                            );
-                            let _ = wv.evaluate_script(&script);
-                        }
+                        let msg = serde_json::json!({
+                            "type": "spectrum",
+                            "data": &spectrum[..]
+                        });
+                        post_web_message_json(wv, &msg.to_string());
                     }
                 }
             }

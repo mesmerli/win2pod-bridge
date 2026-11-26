@@ -1550,8 +1550,39 @@ function handleHostAudio(data) {
     try { data = JSON.parse(data); } catch { return; }
   }
   if (!data) return;
+  if (data.type === 'init_state') {
+    if (data.lang) applyLanguage(data.lang);
+    if (typeof window.handleVisPinChanged === 'function') window.handleVisPinChanged(data.pinned, false);
+    if (typeof window.updateTitleBadge === 'function') window.updateTitleBadge(data.badge);
+    if (typeof window.handleVisDockChanged === 'function') window.handleVisDockChanged(data.docked, false);
+    return;
+  }
   if (data.type === 'set_language' && data.lang) {
     applyLanguage(data.lang);
+    return;
+  }
+  if (data.type === 'title_badge') {
+    if (typeof window.updateTitleBadge === 'function') window.updateTitleBadge(data.badge);
+    if (typeof window.handleVisDockChanged === 'function') window.handleVisDockChanged(data.docked);
+    return;
+  }
+  if (data.type === 'vis_pin_changed') {
+    if (typeof window.handleVisPinChanged === 'function') window.handleVisPinChanged(data.pinned, data.from_host);
+    return;
+  }
+  if (data.type === 'vis_fullscreen_changed') {
+    if (typeof window.handleFullscreenChanged === 'function') window.handleFullscreenChanged(data.fullscreen);
+    if (data.fullscreen) {
+      document.body.classList.add('fullscreen');
+    } else {
+      document.body.classList.remove('fullscreen');
+    }
+    return;
+  }
+  if (data.type === 'sync_opacity') {
+    if (typeof window.syncOpacityFromHost === 'function') {
+      window.syncOpacityFromHost(data.val, !!data.show_hud);
+    }
     return;
   }
   if (data.type === 'spectrum' && data.data) {
