@@ -206,13 +206,10 @@ pub fn get_active_window_rects(exclude: WindowKind) -> Vec<(WindowKind, RECT)> {
     let mut list = Vec::new();
     #[cfg(test)]
     {
-        if let Ok(guard) = LAST_KNOWN_RECTS.lock() {
-            if let Some(ref map) = *guard {
-                for (&k, &r) in map {
-                    if k != exclude {
-                        list.push((k, r));
-                    }
-                }
+        let map = crate::snapping::cluster::get_all_known_rects();
+        for (&k, &r) in &map {
+            if k != exclude {
+                list.push((k, r));
             }
         }
     }

@@ -64,38 +64,43 @@ pub enum OpacityState {
 
 pub(crate) static OPACITY_FSM: Mutex<Option<HashMap<WindowKind, OpacityState>>> = Mutex::new(None);
 
-pub fn get_opacity_state(kind: WindowKind) -> OpacityState {
+pub(crate) fn with_opacity_fsm<R>(f: impl FnOnce(&mut HashMap<WindowKind, OpacityState>) -> R) -> R {
     let mut guard = OPACITY_FSM.lock().unwrap_or_else(|e| e.into_inner());
     let map = guard.get_or_insert_with(HashMap::new);
-    let state = map.entry(kind).or_insert(OpacityState::Normal);
-    match *state {
-        OpacityState::Tuning(start) => {
-            if start.elapsed() > std::time::Duration::from_millis(850) {
-                *state = OpacityState::Fading(std::time::Instant::now());
+    f(map)
+}
+
+pub fn get_opacity_state(kind: WindowKind) -> OpacityState {
+    with_opacity_fsm(|map| {
+        let state = map.entry(kind).or_insert(OpacityState::Normal);
+        match *state {
+            OpacityState::Tuning(start) => {
+                if start.elapsed() > std::time::Duration::from_millis(850) {
+                    *state = OpacityState::Fading(std::time::Instant::now());
+                }
             }
-        }
-        OpacityState::Fading(start) => {
-            if start.elapsed() > std::time::Duration::from_millis(200) {
-                *state = OpacityState::Normal;
+            OpacityState::Fading(start) => {
+                if start.elapsed() > std::time::Duration::from_millis(200) {
+                    *state = OpacityState::Normal;
+                }
             }
+            _ => {}
         }
-        _ => {}
-    }
-    *state
+        *state
+    })
 }
 
 pub fn set_opacity_state(kind: WindowKind, new_state: OpacityState) {
-    let mut guard = OPACITY_FSM.lock().unwrap_or_else(|e| e.into_inner());
-    let map = guard.get_or_insert_with(HashMap::new);
-    map.insert(kind, new_state);
+    with_opacity_fsm(|map| {
+        map.insert(kind, new_state);
+    });
     crate::gui::request_ui_repaint();
 }
 
 pub fn clear_all_opacity_fsm() {
-    let mut guard = OPACITY_FSM.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(map) = guard.as_mut() {
+    with_opacity_fsm(|map| {
         map.clear();
-    }
+    });
 }
 
 pub fn trigger_opacity_tuning(kind: WindowKind) {

@@ -5,11 +5,8 @@ use windows_sys::Win32::Foundation::{HWND, RECT};
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 use super::*;
-/// Global Dock Tree: tracks every Slave window's single Master parent
-pub(crate) static DOCK_TREE: Mutex<Option<HashMap<WindowKind, DockBond>>> = Mutex::new(None);
 
-
-
+/// Canonical representation of an undirected edge between two windows
 pub fn canonical_edge(a: WindowKind, b: WindowKind) -> (WindowKind, WindowKind) {
     if (a as u32) < (b as u32) {
         (a, b)
@@ -18,44 +15,178 @@ pub fn canonical_edge(a: WindowKind, b: WindowKind) -> (WindowKind, WindowKind) 
     }
 }
 
-pub(crate) static DOCK_EDGES: Mutex<Option<HashSet<(WindowKind, WindowKind)>>> = Mutex::new(None);
-pub(crate) static LAST_KNOWN_RECTS: Mutex<Option<HashMap<WindowKind, RECT>>> = Mutex::new(None);
+/// Pure Logical Data Structure for multi-window snapping topology and dock tree hierarchy.
+/// Contains no Win32 calls, no Mutex locks inside, and is 100% deterministically unit-testable.
+#[derive(Clone, Default)]
+pub struct ClusterTopology {
+    pub edges: HashSet<(WindowKind, WindowKind)>,
+    pub tree: HashMap<WindowKind, DockBond>,
+    pub known_rects: HashMap<WindowKind, RECT>,
+}
+
+impl std::fmt::Debug for ClusterTopology {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClusterTopology")
+            .field("edges", &self.edges)
+            .field("tree", &self.tree)
+            .finish()
+    }
+}
+
+impl ClusterTopology {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn add_edge(&mut self, a: WindowKind, b: WindowKind) {
+        self.edges.insert(canonical_edge(a, b));
+    }
+
+    pub fn remove_edge(&mut self, a: WindowKind, b: WindowKind) {
+        self.edges.remove(&canonical_edge(a, b));
+    }
+
+    pub fn remove_all_edges_for(&mut self, kind: WindowKind) {
+        self.edges.retain(|&(a, b)| a != kind && b != kind);
+    }
+
+    pub fn update_known_rect(&mut self, kind: WindowKind, rect: RECT) {
+        self.known_rects.insert(kind, rect);
+    }
+
+    pub fn get_known_rect(&self, kind: WindowKind) -> Option<RECT> {
+        self.known_rects.get(&kind).copied()
+    }
+
+    pub fn clear_known_rects(&mut self) {
+        self.known_rects.clear();
+    }
+
+    pub fn is_in_cluster(&self, kind: WindowKind) -> bool {
+        self.edges.iter().any(|&(a, b)| a == kind || b == kind)
+    }
+
+    pub fn get_cluster_members(&self, kind: WindowKind) -> Vec<WindowKind> {
+        let mut members = HashSet::new();
+        let mut queue = VecDeque::new();
+        members.insert(kind);
+        queue.push_back(kind);
+        while let Some(curr) = queue.pop_front() {
+            for &(a, b) in &self.edges {
+                let neighbor = if a == curr {
+                    Some(b)
+                } else if b == curr {
+                    Some(a)
+                } else {
+                    None
+                };
+                if let Some(n) = neighbor {
+                    if members.insert(n) {
+                        queue.push_back(n);
+                    }
+                }
+            }
+        }
+        let mut list: Vec<_> = members.into_iter().collect();
+        list.sort_by_key(|k| k.priority());
+        list
+    }
+
+    pub fn get_root(&self, kind: WindowKind) -> WindowKind {
+        let members = self.get_cluster_members(kind);
+        members.into_iter().min_by_key(|k| k.priority()).unwrap_or(kind)
+    }
+
+    pub fn get_role(&self, kind: WindowKind) -> WindowRole {
+        if !self.is_in_cluster(kind) {
+            return WindowRole::Standalone;
+        }
+        if self.get_root(kind) == kind {
+            WindowRole::ClusterMaster
+        } else {
+            WindowRole::ClusterSlave
+        }
+    }
+
+    pub fn get_component_root(&self, kind: WindowKind) -> WindowKind {
+        let mut curr = kind;
+        let mut visited = HashSet::new();
+        while let Some(bond) = self.tree.get(&curr) {
+            if !bond.is_bonded || visited.contains(&curr) {
+                break;
+            }
+            visited.insert(curr);
+            curr = bond.parent;
+        }
+        curr
+    }
+
+    pub fn build_tree(
+        &mut self,
+        active_windows: &[WindowKind],
+        get_rect: impl Fn(WindowKind) -> Option<RECT>,
+    ) {
+        let edge_slice: Vec<(WindowKind, WindowKind)> = self.edges.iter().copied().collect();
+        self.tree = build_dock_tree_from_edges_and_rects(active_windows, &edge_slice, get_rect);
+    }
+}
+
+pub(crate) static CLUSTER_TOPOLOGY: Mutex<Option<ClusterTopology>> = Mutex::new(None);
+
+pub fn with_cluster_topology<R>(f: impl FnOnce(&mut ClusterTopology) -> R) -> R {
+    let mut guard = CLUSTER_TOPOLOGY.lock().unwrap_or_else(|e| e.into_inner());
+    let top = guard.get_or_insert_with(ClusterTopology::new);
+    f(top)
+}
 
 pub fn with_dock_edges<R>(f: impl FnOnce(&mut HashSet<(WindowKind, WindowKind)>) -> R) -> R {
-    let mut guard = DOCK_EDGES.lock().unwrap();
-    let edges = guard.get_or_insert_with(HashSet::new);
-    f(edges)
+    with_cluster_topology(|top| f(&mut top.edges))
 }
 
 pub fn add_dock_edge(a: WindowKind, b: WindowKind) {
-    with_dock_edges(|edges| {
-        edges.insert(canonical_edge(a, b));
+    with_cluster_topology(|top| {
+        top.add_edge(a, b);
     });
 }
 
 pub fn remove_dock_edge(a: WindowKind, b: WindowKind) {
-    with_dock_edges(|edges| {
-        edges.remove(&canonical_edge(a, b));
+    with_cluster_topology(|top| {
+        top.remove_edge(a, b);
     });
 }
 
 pub fn remove_all_edges_for(kind: WindowKind) {
-    with_dock_edges(|edges| {
-        edges.retain(|&(a, b)| a != kind && b != kind);
+    with_cluster_topology(|top| {
+        top.remove_all_edges_for(kind);
     });
 }
 
 pub fn update_known_rect(kind: WindowKind, rect: RECT) {
-    if let Ok(mut guard) = LAST_KNOWN_RECTS.lock() {
-        let map = guard.get_or_insert_with(HashMap::new);
-        map.insert(kind, rect);
-    }
+    with_cluster_topology(|top| {
+        top.update_known_rect(kind, rect);
+    });
+}
+
+pub fn get_known_rect(kind: WindowKind) -> Option<RECT> {
+    with_cluster_topology(|top| {
+        top.get_known_rect(kind)
+    })
+}
+
+pub fn get_all_known_rects() -> HashMap<WindowKind, RECT> {
+    with_cluster_topology(|top| {
+        top.known_rects.clone()
+    })
+}
+
+pub fn clear_known_rects() {
+    with_cluster_topology(|top| {
+        top.clear_known_rects();
+    });
 }
 
 pub fn with_dock_tree<R>(f: impl FnOnce(&mut HashMap<WindowKind, DockBond>) -> R) -> R {
-    let mut guard = DOCK_TREE.lock().unwrap();
-    let tree = guard.get_or_insert_with(HashMap::new);
-    f(tree)
+    with_cluster_topology(|top| f(&mut top.tree))
 }
 
 
@@ -188,14 +319,11 @@ pub unsafe fn rebuild_dock_tree() {
 
     #[cfg(test)]
     {
-        if let Ok(guard) = LAST_KNOWN_RECTS.lock() {
-            if let Some(ref map) = *guard {
-                for (&k, &r) in map {
-                    if !active.contains(&k) {
-                        rects.insert(k, r);
-                        active.push(k);
-                    }
-                }
+        let map = get_all_known_rects();
+        for (&k, &r) in &map {
+            if !active.contains(&k) {
+                rects.insert(k, r);
+                active.push(k);
             }
         }
     }
@@ -207,6 +335,20 @@ pub unsafe fn rebuild_dock_tree() {
         return;
     }
 
+    let tree_snapshot = with_dock_tree(|tree| tree.clone());
+    let get_root_from_snapshot = |kind: WindowKind| -> WindowKind {
+        let mut curr = kind;
+        let mut visited = HashSet::new();
+        while let Some(bond) = tree_snapshot.get(&curr) {
+            if !bond.is_bonded || visited.contains(&curr) {
+                break;
+            }
+            visited.insert(curr);
+            curr = bond.parent;
+        }
+        curr
+    };
+
     let edges: Vec<(WindowKind, WindowKind)> = with_dock_edges(|edge_set| {
         edge_set.retain(|&(a, b)| {
             if !active.contains(&a) || !active.contains(&b) {
@@ -215,10 +357,10 @@ pub unsafe fn rebuild_dock_tree() {
             // 關鍵不變量保護：若視窗或其所屬叢集正處於收攏隱藏、最小化、或正在進行過渡動畫，
             // 嚴禁在重新拓撲時破壞該磁吸關係鏈！
             let is_in_collapsed_or_anim = |k: WindowKind| -> bool {
-                let root = get_component_root(k);
+                let root = get_root_from_snapshot(k);
                 matches!(get_cluster_state(root), ClusterState::Minimized)
-                    || is_kind_cluster_minimizing(k)
-                    || is_kind_cluster_restoring(k)
+                    || matches!(get_cluster_state(root), ClusterState::Minimizing(_))
+                    || matches!(get_cluster_state(root), ClusterState::Restoring(_))
                     || {
                         let h = get_window_hwnd(k);
                         !h.is_null() && unsafe { IsIconic(h) != 0 || IsWindowVisible(h) == 0 }
@@ -328,17 +470,14 @@ pub fn handle_window_closed(closed_kind: WindowKind) {
         #[cfg(test)]
         {
             if active.is_empty() {
-                if let Ok(guard) = LAST_KNOWN_RECTS.lock() {
-                    if let Some(ref map) = *guard {
-                        for (&k, &r) in map {
-                            if k != closed_kind {
-                                if k == WindowKind::Main && crate::tray::is_window_hidden_to_tray() {
-                                    continue;
-                                }
-                                rects.insert(k, r);
-                                active.push(k);
-                            }
+                let map = get_all_known_rects();
+                for (&k, &r) in &map {
+                    if k != closed_kind {
+                        if k == WindowKind::Main && crate::tray::is_window_hidden_to_tray() {
+                            continue;
                         }
+                        rects.insert(k, r);
+                        active.push(k);
                     }
                 }
             }
@@ -608,49 +747,48 @@ pub fn compute_cluster_docked_targets(
     let mut targets = HashMap::new();
     targets.insert(root, *root_rect);
 
-    with_dock_tree(|tree| {
-        let mut queue = VecDeque::new();
-        queue.push_back(root);
+    let tree = with_dock_tree(|t| t.clone());
+    let mut queue = VecDeque::new();
+    queue.push_back(root);
 
-        while let Some(parent) = queue.pop_front() {
-            let parent_rect = match targets.get(&parent).copied() {
-                Some(r) => r,
-                None => continue,
-            };
+    while let Some(parent) = queue.pop_front() {
+        let parent_rect = match targets.get(&parent).copied() {
+            Some(r) => r,
+            None => continue,
+        };
 
-            for (&child, bond) in tree.iter() {
-                if bond.is_bonded && bond.parent == parent && !targets.contains_key(&child) {
-                    let normal_r = unsafe { get_window_normal_rect(child) };
-                    let raw_w = normal_r.right - normal_r.left;
-                    let raw_h = normal_r.bottom - normal_r.top;
-                    let (def_w, def_h) = {
-                        let s = child.default_size();
-                        (s[0] as i32, s[1] as i32)
-                    };
-                    let w = if raw_w > 50 { raw_w } else { def_w };
-                    let h = if raw_h > 50 { raw_h } else { def_h };
+        for (&child, bond) in tree.iter() {
+            if bond.is_bonded && bond.parent == parent && !targets.contains_key(&child) {
+                let normal_r = unsafe { get_window_normal_rect(child) };
+                let raw_w = normal_r.right - normal_r.left;
+                let raw_h = normal_r.bottom - normal_r.top;
+                let (def_w, def_h) = {
+                    let s = child.default_size();
+                    (s[0] as i32, s[1] as i32)
+                };
+                let w = if raw_w > 50 { raw_w } else { def_w };
+                let h = if raw_h > 50 { raw_h } else { def_h };
 
-                    let child_dummy_rect = RECT {
-                        left: 0,
-                        top: 0,
-                        right: w,
-                        bottom: h,
-                    };
+                let child_dummy_rect = RECT {
+                    left: 0,
+                    top: 0,
+                    right: w,
+                    bottom: h,
+                };
 
-                    let (x, y) = calc_bonded_visualizer_pos(bond, &child_dummy_rect, &parent_rect);
-                    let child_target_rect = RECT {
-                        left: x,
-                        top: y,
-                        right: x + w,
-                        bottom: y + h,
-                    };
+                let (x, y) = calc_bonded_visualizer_pos(bond, &child_dummy_rect, &parent_rect);
+                let child_target_rect = RECT {
+                    left: x,
+                    top: y,
+                    right: x + w,
+                    bottom: y + h,
+                };
 
-                    targets.insert(child, child_target_rect);
-                    queue.push_back(child);
-                }
+                targets.insert(child, child_target_rect);
+                queue.push_back(child);
             }
         }
-    });
+    }
 
     targets
 }
@@ -1005,14 +1143,11 @@ pub unsafe fn summon_and_dock_main_window_animated(anchor_kind: WindowKind) {
     #[cfg(test)]
     {
         if member_rects.is_empty() {
-            if let Ok(guard) = LAST_KNOWN_RECTS.lock() {
-                if let Some(ref map) = *guard {
-                    for &m in &members {
-                        if m != WindowKind::Main {
-                            if let Some(&r) = map.get(&m) {
-                                member_rects.push((m, r));
-                            }
-                        }
+            let map = get_all_known_rects();
+            for &m in &members {
+                if m != WindowKind::Main {
+                    if let Some(&r) = map.get(&m) {
+                        member_rects.push((m, r));
                     }
                 }
             }

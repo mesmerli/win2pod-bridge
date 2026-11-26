@@ -293,18 +293,14 @@ pub fn find_mini_player_hwnd() -> HWND {
 pub(crate) static LAST_SPAWNER: Mutex<Option<HashMap<WindowKind, WindowKind>>> = Mutex::new(None);
 
 pub fn set_window_spawner(target: WindowKind, spawner: WindowKind) {
-    if let Ok(mut guard) = LAST_SPAWNER.lock() {
-        let map = guard.get_or_insert_with(HashMap::new);
-        map.insert(target, spawner);
-    }
+    let mut guard = LAST_SPAWNER.lock().unwrap_or_else(|e| e.into_inner());
+    let map = guard.get_or_insert_with(HashMap::new);
+    map.insert(target, spawner);
 }
 
 pub fn get_window_spawner(target: WindowKind) -> Option<WindowKind> {
-    if let Ok(guard) = LAST_SPAWNER.lock() {
-        guard.as_ref().and_then(|m| m.get(&target).copied())
-    } else {
-        None
-    }
+    let guard = LAST_SPAWNER.lock().unwrap_or_else(|e| e.into_inner());
+    guard.as_ref().and_then(|m| m.get(&target).copied())
 }
 
 

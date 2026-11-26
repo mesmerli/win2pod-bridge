@@ -8,11 +8,7 @@ use super::*;
     pub fn reset_all() {
         with_dock_edges(|e| e.clear());
         with_dock_tree(|t| t.clear());
-        if let Ok(mut guard) = LAST_KNOWN_RECTS.lock() {
-            if let Some(ref mut m) = *guard {
-                m.clear();
-            }
-        }
+        clear_known_rects();
         clear_all_cluster_fsm();
         clear_all_opacity_fsm();
         set_window_opacity(WindowKind::Main, 1.0);

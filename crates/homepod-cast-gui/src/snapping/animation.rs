@@ -69,72 +69,78 @@ pub enum ClusterState {
 
 pub(crate) static CLUSTER_FSM: Mutex<Option<HashMap<WindowKind, ClusterState>>> = Mutex::new(None);
 
-pub fn get_cluster_state(root: WindowKind) -> ClusterState {
+pub(crate) fn with_cluster_fsm<R>(f: impl FnOnce(&mut HashMap<WindowKind, ClusterState>) -> R) -> R {
     let mut guard = CLUSTER_FSM.lock().unwrap_or_else(|e| e.into_inner());
     let map = guard.get_or_insert_with(HashMap::new);
-    let state = map.entry(root).or_insert(ClusterState::Normal);
-    match *state {
-        ClusterState::Minimizing(start) => {
-            if start.elapsed() > std::time::Duration::from_millis(450) {
-                *state = ClusterState::Minimized;
+    f(map)
+}
+
+pub fn get_cluster_state(root: WindowKind) -> ClusterState {
+    with_cluster_fsm(|map| {
+        let state = map.entry(root).or_insert(ClusterState::Normal);
+        match *state {
+            ClusterState::Minimizing(start) => {
+                if start.elapsed() > std::time::Duration::from_millis(450) {
+                    *state = ClusterState::Minimized;
+                }
             }
-        }
-        ClusterState::Restoring(start) => {
-            if start.elapsed() > std::time::Duration::from_millis(450) {
-                *state = ClusterState::Normal;
+            ClusterState::Restoring(start) => {
+                if start.elapsed() > std::time::Duration::from_millis(450) {
+                    *state = ClusterState::Normal;
+                }
             }
+            _ => {}
         }
-        _ => {}
-    }
-    *state
+        *state
+    })
 }
 
 pub fn set_cluster_state(root: WindowKind, new_state: ClusterState) {
-    let mut guard = CLUSTER_FSM.lock().unwrap_or_else(|e| e.into_inner());
-    let map = guard.get_or_insert_with(HashMap::new);
-    map.insert(root, new_state);
+    with_cluster_fsm(|map| {
+        map.insert(root, new_state);
+    });
 }
 
 pub fn can_start_cluster_minimize(root: WindowKind) -> bool {
-    let mut guard = CLUSTER_FSM.lock().unwrap_or_else(|e| e.into_inner());
-    let map = guard.get_or_insert_with(HashMap::new);
-    let state = map.entry(root).or_insert(ClusterState::Normal);
-    match *state {
-        ClusterState::Normal => {
-            *state = ClusterState::Minimizing(std::time::Instant::now());
-            true
-        }
-        ClusterState::Minimizing(start) => {
-            if start.elapsed() > std::time::Duration::from_millis(450) {
+    with_cluster_fsm(|map| {
+        let state = map.entry(root).or_insert(ClusterState::Normal);
+        match *state {
+            ClusterState::Normal => {
                 *state = ClusterState::Minimizing(std::time::Instant::now());
                 true
-            } else {
-                false
             }
+            ClusterState::Minimizing(start) => {
+                if start.elapsed() > std::time::Duration::from_millis(450) {
+                    *state = ClusterState::Minimizing(std::time::Instant::now());
+                    true
+                } else {
+                    false
+                }
+            }
+            _ => false,
         }
-        _ => false,
-    }
+    })
 }
 
 pub fn can_start_cluster_restore(root: WindowKind) -> bool {
-    let mut guard = CLUSTER_FSM.lock().unwrap_or_else(|e| e.into_inner());
-    let map = guard.get_or_insert_with(HashMap::new);
-    let state = map.entry(root).or_insert(ClusterState::Normal);
-    match *state {
-        ClusterState::Minimized => {
-            *state = ClusterState::Restoring(std::time::Instant::now());
-            true
-        }
-        ClusterState::Restoring(start) => {
-            if start.elapsed() > std::time::Duration::from_millis(450) {
+    with_cluster_fsm(|map| {
+        let state = map.entry(root).or_insert(ClusterState::Normal);
+        match *state {
+            ClusterState::Minimized => {
                 *state = ClusterState::Restoring(std::time::Instant::now());
                 true
-            } else {
-                false
             }
+            ClusterState::Restoring(start) => {
+                if start.elapsed() > std::time::Duration::from_millis(450) {
+                    *state = ClusterState::Restoring(std::time::Instant::now());
+                    true
+                } else {
+                    false
+                }
+            }
+            _ => false,
         }
-        _ => false,
-    }
+    })
 }
 
 pub fn finish_cluster_minimize(root: WindowKind) {
@@ -158,27 +164,21 @@ pub fn finish_cluster_restore(root: WindowKind) {
 }
 
 pub fn is_cluster_minimizing() -> bool {
-    let mut guard = CLUSTER_FSM.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(map) = guard.as_mut() {
+    with_cluster_fsm(|map| {
         map.values().any(|&s| match s {
             ClusterState::Minimizing(start) => start.elapsed() <= std::time::Duration::from_millis(450),
             _ => false,
         })
-    } else {
-        false
-    }
+    })
 }
 
 pub fn is_cluster_restoring() -> bool {
-    let mut guard = CLUSTER_FSM.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(map) = guard.as_mut() {
+    with_cluster_fsm(|map| {
         map.values().any(|&s| match s {
             ClusterState::Restoring(start) => start.elapsed() <= std::time::Duration::from_millis(450),
             _ => false,
         })
-    } else {
-        false
-    }
+    })
 }
 
 pub fn is_kind_cluster_minimizing(kind: WindowKind) -> bool {
@@ -192,10 +192,9 @@ pub fn is_kind_cluster_restoring(kind: WindowKind) -> bool {
 }
 
 pub fn clear_all_cluster_fsm() {
-    let mut guard = CLUSTER_FSM.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(map) = guard.as_mut() {
+    with_cluster_fsm(|map| {
         map.clear();
-    }
+    });
 }
 
 
@@ -279,19 +278,15 @@ pub unsafe fn get_window_normal_rect(kind: WindowKind) -> RECT {
 
     let hwnd = get_window_hwnd(kind);
     if hwnd.is_null() || IsWindow(hwnd) == 0 {
-        if let Ok(guard) = LAST_KNOWN_RECTS.lock() {
-            if let Some(map) = guard.as_ref() {
-                if let Some(kr) = map.get(&kind) {
-                    let w = (kr.right - kr.left).max(min_w);
-                    let h = (kr.bottom - kr.top).max(min_h);
-                    return RECT {
-                        left: kr.left,
-                        top: kr.top,
-                        right: kr.left + w,
-                        bottom: kr.top + h,
-                    };
-                }
-            }
+        if let Some(kr) = crate::snapping::cluster::get_known_rect(kind) {
+            let w = (kr.right - kr.left).max(min_w);
+            let h = (kr.bottom - kr.top).max(min_h);
+            return RECT {
+                left: kr.left,
+                top: kr.top,
+                right: kr.left + w,
+                bottom: kr.top + h,
+            };
         }
         return RECT {
             left: 100,
@@ -318,20 +313,16 @@ pub unsafe fn get_window_normal_rect(kind: WindowKind) -> RECT {
                 return pr;
             }
         }
-        if let Ok(guard) = LAST_KNOWN_RECTS.lock() {
-            if let Some(map) = guard.as_ref() {
-                if let Some(kr) = map.get(&kind) {
-                    if kr.left >= -1000 && kr.top >= -1000 {
-                        let kw = (kr.right - kr.left).max(min_w);
-                        let kh = (kr.bottom - kr.top).max(min_h);
-                        return RECT {
-                            left: kr.left,
-                            top: kr.top,
-                            right: kr.left + kw,
-                            bottom: kr.top + kh,
-                        };
-                    }
-                }
+        if let Some(kr) = crate::snapping::cluster::get_known_rect(kind) {
+            if kr.left >= -1000 && kr.top >= -1000 {
+                let kw = (kr.right - kr.left).max(min_w);
+                let kh = (kr.bottom - kr.top).max(min_h);
+                return RECT {
+                    left: kr.left,
+                    top: kr.top,
+                    right: kr.left + kw,
+                    bottom: kr.top + kh,
+                };
             }
         }
     }
