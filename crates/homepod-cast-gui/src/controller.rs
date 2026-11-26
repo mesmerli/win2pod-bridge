@@ -3360,12 +3360,41 @@ pub fn spawn_controller(
                     Some(evt) = sidecar_evt_rx.recv() => {
                         match evt {
                             win2pod_ipc::protocol::IpcEvent::RawSpectrumUpdate(raw_bytes) => {
+                                let has_sound = raw_bytes.iter().any(|&v| v > 0);
                                 crate::spectrum::update_raw_spectrum_from_engine(&raw_bytes);
+                                if has_sound && !state.is_audio_active && !state.is_muted {
+                                    state.is_audio_active = true;
+                                    if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::AudioActivityChanged {
+                                        is_active: true,
+                                        peak_level: get_audio_peak_level(),
+                                    }) {
+                                        state.power_state = ps;
+                                    }
+                                    if let Ok(mut lock) = shared_state.write() {
+                                        lock.is_audio_active = true;
+                                        lock.power_state = state.power_state;
+                                    }
+                                    broadcast(&state);
+                                }
                             }
                             win2pod_ipc::protocol::IpcEvent::AudioActivityChanged { is_active, peak_level } => {
                                 set_audio_peak_level(peak_level);
                                 if is_active {
                                     crate::spectrum::record_audio_activity();
+                                }
+                                if state.is_audio_active != is_active {
+                                    state.is_audio_active = is_active;
+                                    if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::AudioActivityChanged {
+                                        is_active,
+                                        peak_level,
+                                    }) {
+                                        state.power_state = ps;
+                                    }
+                                    if let Ok(mut lock) = shared_state.write() {
+                                        lock.is_audio_active = state.is_audio_active;
+                                        lock.power_state = state.power_state;
+                                    }
+                                    broadcast(&state);
                                 }
                             }
                             win2pod_ipc::protocol::IpcEvent::AudioEndpointsChanged(endpoints) => {
@@ -3395,8 +3424,10 @@ pub fn spawn_controller(
                         let now = monotonic_now_ms();
                         // Active if non-silent audio was captured within the last 30 seconds and not muted (Scenario B)
                         let is_active = !state.is_muted && last_active > 0 && now.saturating_sub(last_active) <= 30_000;
+                        let mut state_changed = false;
                         if state.is_audio_active != is_active {
                             state.is_audio_active = is_active;
+                            state_changed = true;
                             if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::AudioActivityChanged {
                                 is_active,
                                 peak_level: get_audio_peak_level(),
@@ -3415,6 +3446,11 @@ pub fn spawn_controller(
                                 lock.diagnostics.timing_mode = state.diagnostics.timing_mode.clone();
                             }
                             lock.is_audio_active = state.is_audio_active;
+                            lock.power_state = state.power_state;
+                        }
+
+                        if state_changed {
+                            broadcast(&state);
                         }
 
                         if let Some(removed_at) = airpods_both_removed_at {
@@ -4879,12 +4915,14 @@ pub fn spawn_controller(
                                 set_audio_peak_level(0.0);
                                 if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::SystemSuspend) {
                                     state.power_state = ps;
+                                    broadcast(&state);
                                 }
                             }
                             GuiCmd::SystemResume => {
                                 tracing::info!("Power event: System resume from sleep. Reconnecting HomePod stream...");
                                 if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::SystemResume) {
                                     state.power_state = ps;
+                                    broadcast(&state);
                                 }
                                 if state.auto_mute_speakers && state.license_tier.is_auto_mute_allowed() && (state.selected_audio_device == "default" || state.selected_audio_device.is_empty()) {
                                     let guard = match SAVED_ENDPOINT_STATES.lock() {
