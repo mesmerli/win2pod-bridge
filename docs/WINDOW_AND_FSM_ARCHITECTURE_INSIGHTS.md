@@ -189,6 +189,16 @@ stateDiagram-v2
 
 ---
 
+### 8. 全螢幕 HUD 生命週期與 Prior State 徹底消滅（SSOT 幾何真理源）
+* **所在位置**：`window_entity.rs` / `window_manager.rs` / `visualizer.rs`
+* **詳細規格**：參見專題心法文件 [FULLSCREEN_HUD_LIFECYCLE_AND_PRIOR_STATE_ELIMINATION_INSIGHTS.md](file:///C:/Users/mesme/workspace/win2pod-bridge/docs/FULLSCREEN_HUD_LIFECYCLE_AND_PRIOR_STATE_ELIMINATION_INSIGHTS.md)
+* **核心防護**：
+  - **消滅沙盒假定**：廢除 `WindowLifecycleState::FullscreenHud { prior_state: Box<..>, .. }`。使用者在全螢幕下的拖曳、縮放與拆解吸附全都是真實、永久的狀態變更。
+  - **消滅座標倒退**：視窗當前物理坐標（`canonical_rect`）即唯一幾何真理，退出全螢幕或隱藏 HUD 時嚴禁調用任何 `apply_geometry` 將視窗搬移回過去的舊位置。
+  - **三維單一真理源（SSOT）**：幾何歸 `canonical_rect`，拓撲歸 `dock_tree`，圖層顯隱歸 `is_hud_shown`。視窗自主保持 `Floating` 或 `WorkstationDocked`，零堆積引用開銷。
+
+---
+
 ## 四、 電源管理與視覺美學的思辨：方案 A（怠速漫遊）
 
 在討論「ECO 模式（靜音 > 30s）視覺視窗是否該停止運動」時，我們釐清了 Windows 作業系統底層的電源運作原理：
