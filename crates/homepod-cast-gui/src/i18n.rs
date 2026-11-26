@@ -2438,6 +2438,36 @@ impl Language {
         }
     }
 
+    pub fn power_badge_tooltip(&self, state: crate::power::PowerState) -> &'static str {
+        match state {
+            crate::power::PowerState::AwakePresentation => match self {
+                Self::TraditionalChinese => "全螢幕視覺化中 (紅色警示)：阻止系統休眠且螢幕保持恆亮",
+                Self::SimplifiedChinese => "全屏可视化中 (红色警示)：阻止系统休眠且屏幕保持恒亮",
+                _ => "Fullscreen visualizer (Red): keeps PC awake and display on",
+            },
+            crate::power::PowerState::AwakeStreaming => match self {
+                Self::TraditionalChinese => "音訊播放中 (黃色)：阻止系統休眠，螢幕可依照系統設定自動關閉省電",
+                Self::SimplifiedChinese => "音频播放中 (黄色)：阻止系统休眠，屏幕可依照系统设置自动关闭省电",
+                _ => "Audio streaming (Yellow): keeps PC awake, display can turn off to save power",
+            },
+            crate::power::PowerState::EcoSilent => match self {
+                Self::TraditionalChinese => "靜音超過 30 秒 (綠色 ECO)：最省電模式，已釋放防休眠鎖，電腦可正常休眠",
+                Self::SimplifiedChinese => "静音超过 30 秒 (绿色 ECO)：最省电模式，已释放防休眠锁，电脑可正常休眠",
+                _ => "Silent >30s (Green ECO): maximum power saving, sleep lock released",
+            },
+            crate::power::PowerState::Standby => match self {
+                Self::TraditionalChinese => "待命中 (白色)：未啟用休眠抑制，不參與決定電源設定",
+                Self::SimplifiedChinese => "待命中 (白色)：未启用休眠抑制，不参与决定电源设置",
+                _ => "Standby (White): sleep prevention inactive",
+            },
+            crate::power::PowerState::Suspended => match self {
+                Self::TraditionalChinese => "系統休眠中",
+                Self::SimplifiedChinese => "系统休眠中",
+                _ => "System suspended",
+            },
+        }
+    }
+
     pub fn hint_sleep_active(&self) -> &'static str {
         match self {
             Self::TraditionalChinese => "🟢 偵測到音訊串流中，系統睡眠已暫時抑制 (螢幕可關閉省電)。",

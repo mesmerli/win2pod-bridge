@@ -6638,13 +6638,20 @@ impl FlyoutApp {
                     cb.on_hover_text(lang.prevent_sleep_tooltip());
 
                     let (badge_text, badge_color) = match self.state.power_state {
-                        crate::power::PowerState::AwakeStreaming => ("● AWAKE", egui::Color32::from_rgb(76, 175, 80)),
-                        crate::power::PowerState::AwakePresentation => ("● DISPLAY AWAKE", egui::Color32::from_rgb(33, 150, 243)),
-                        crate::power::PowerState::EcoSilent => ("● ECO (SILENT >30S)", egui::Color32::from_rgb(255, 152, 0)),
-                        crate::power::PowerState::Standby => ("○ STANDBY", egui::Color32::from_rgb(158, 158, 158)),
+                        // 🔴 螢幕恆亮（最高耗電與最高警示性）
+                        crate::power::PowerState::AwakePresentation => ("● DISPLAY AWAKE", egui::Color32::from_rgb(255, 69, 58)),
+                        // 🟡 播放中（系統防休眠，但螢幕可關）
+                        crate::power::PowerState::AwakeStreaming => ("● AWAKE", egui::Color32::from_rgb(255, 179, 0)),
+                        // 🟢 靜音 >30s（最省電 ECO，全釋放）
+                        crate::power::PowerState::EcoSilent => ("● ECO (SILENT >30S)", egui::Color32::from_rgb(52, 199, 89)),
+                        // ⚪ 待命（不干涉系統，中立白）
+                        crate::power::PowerState::Standby => ("○ STANDBY", egui::Color32::from_rgb(200, 200, 200)),
+                        // 🌑 系統休眠中
                         crate::power::PowerState::Suspended => ("○ SUSPENDED", egui::Color32::from_rgb(120, 120, 120)),
                     };
-                    ui.label(egui::RichText::new(badge_text).size(10.5).color(badge_color));
+                    let badge_tooltip = lang.power_badge_tooltip(self.state.power_state);
+                    ui.label(egui::RichText::new(badge_text).size(10.5).color(badge_color))
+                        .on_hover_text(badge_tooltip);
                 });
 
                 ui.add_space(2.0);
