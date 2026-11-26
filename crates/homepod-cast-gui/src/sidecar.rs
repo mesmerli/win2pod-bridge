@@ -83,7 +83,7 @@ impl SidecarClient {
         let mut cmd = Command::new(&engine_path);
         cmd.arg("--pipe-name").arg(name);
 
-        #[cfg(windows)]
+        #[cfg(all(windows, not(debug_assertions)))]
         {
             use std::os::windows::process::CommandExt;
             const CREATE_NO_WINDOW: u32 = 0x08000000;
