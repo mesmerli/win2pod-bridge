@@ -226,6 +226,14 @@ impl ManagedWindow {
         match &mut self.state {
             WindowLifecycleState::Floating { rect } => *rect = safe,
             WindowLifecycleState::WorkstationDocked { rect, .. } => *rect = safe,
+            WindowLifecycleState::FullscreenHud { prior_state, hud_rect } => {
+                *hud_rect = safe;
+                match prior_state.as_mut() {
+                    WindowLifecycleState::Floating { rect } => *rect = safe,
+                    WindowLifecycleState::WorkstationDocked { rect, .. } => *rect = safe,
+                    _ => {}
+                }
+            }
             _ => {}
         }
     }
@@ -240,6 +248,14 @@ impl ManagedWindow {
         match &mut self.state {
             WindowLifecycleState::Floating { rect } => *rect = safe,
             WindowLifecycleState::WorkstationDocked { rect, .. } => *rect = safe,
+            WindowLifecycleState::FullscreenHud { prior_state, hud_rect } => {
+                *hud_rect = safe;
+                match prior_state.as_mut() {
+                    WindowLifecycleState::Floating { rect } => *rect = safe,
+                    WindowLifecycleState::WorkstationDocked { rect, .. } => *rect = safe,
+                    _ => {}
+                }
+            }
             _ => {}
         }
     }
@@ -349,31 +365,27 @@ impl ManagedWindow {
             return;
         }
         let safe = self.clamp_rect(hud_rect);
+        self.canonical_rect = safe;
         let prior = Box::new(self.state.clone());
         self.state = WindowLifecycleState::FullscreenHud {
             prior_state: prior,
             hud_rect: safe,
         };
-        self.apply_geometry(safe, true);
     }
 
     /// 退出 HUD 模式
     pub fn exit_hud(&mut self) {
         if let WindowLifecycleState::FullscreenHud { prior_state, .. } = &self.state {
-            let p = *prior_state.clone();
-            self.state = p;
-            match &self.state {
-                WindowLifecycleState::Minimized { .. } => {
-                    self.minimize(MinimizeTarget::Taskbar);
-                }
-                WindowLifecycleState::Floating { rect } => {
-                    self.apply_geometry(*rect, false);
-                }
-                WindowLifecycleState::WorkstationDocked { rect, .. } => {
-                    self.apply_geometry(*rect, false);
-                }
+            let mut p = *prior_state.clone();
+            // 退出 HUD 模式時，最新幾何絕對繼承自當前的 canonical_rect，絕不倒退回過去舊坐標
+            match &mut p {
+                WindowLifecycleState::Floating { rect } => *rect = self.canonical_rect,
+                WindowLifecycleState::WorkstationDocked { rect, .. } => *rect = self.canonical_rect,
                 _ => {}
             }
+            self.state = p;
+            // 關鍵防護：退出 HUD 或退出全螢幕時，絕不調用 apply_geometry 強制搬移視窗或觸發 SWP_SHOWWINDOW。
+            // 視窗已在使用者放置的位置（canonical_rect），尊重其當前物理螢幕位置。
         }
     }
 

@@ -204,8 +204,8 @@ impl WindowManager {
                             hud_rect: rect,
                         };
                     }
-                } else if let WindowLifecycleState::FullscreenHud { prior_state, .. } = &w.state {
-                    w.state = *prior_state.clone();
+                } else if w.state.is_hud() {
+                    w.exit_hud();
                 }
             }
         }

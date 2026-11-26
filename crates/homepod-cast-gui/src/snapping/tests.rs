@@ -24,6 +24,8 @@ use super::*;
         set_last_custom_opacity(WindowKind::Equalizer, 30);
         set_last_custom_opacity(WindowKind::Visualizer, 30);
         clear_ghost_exit_record();
+        crate::visualizer::reset_hud_main_shown();
+        crate::visualizer::restore_hud_pinned_states();
     }
 
     #[test]
@@ -999,6 +1001,7 @@ use super::*;
         crate::visualizer::show_hud_cluster();
         assert!(is_window_pinned(WindowKind::Main));
         crate::visualizer::restore_hud_pinned_states();
+        crate::visualizer::reset_hud_main_shown();
         assert!(!is_window_pinned(WindowKind::Main), "Main must restore to unpinned on fullscreen exit");
         assert!(!is_window_pinned(WindowKind::MiniPlayer));
         assert!(!is_window_pinned(WindowKind::Equalizer));
@@ -1048,6 +1051,69 @@ use super::*;
         assert!(!is_window_pinned(WindowKind::Main));
         assert!(!is_window_pinned(WindowKind::MiniPlayer));
         assert!(!is_window_pinned(WindowKind::Equalizer));
+    }
+
+    #[test]
+    fn test_hud_window_move_preserved_across_fullscreen_exit() {
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        reset_all();
+
+        // 1. 初始化 4 個拆散的浮動視窗
+        let main_r = RECT { left: 100, top: 100, right: 500, bottom: 600 };
+        let mini_r = RECT { left: 600, top: 100, right: 1000, bottom: 350 };
+        let eq_r = RECT { left: 600, top: 400, right: 1000, bottom: 650 };
+        let vis_r = RECT { left: 1100, top: 100, right: 1820, bottom: 820 };
+
+        crate::window_manager::WindowManager::with_manager(|mgr| {
+            mgr.register_window(WindowKind::Main, 1 as _);
+            mgr.register_window(WindowKind::MiniPlayer, 2 as _);
+            mgr.register_window(WindowKind::Equalizer, 3 as _);
+            mgr.register_window(WindowKind::Visualizer, 4 as _);
+
+            mgr.on_user_move(WindowKind::Main, main_r);
+            mgr.on_user_move(WindowKind::MiniPlayer, mini_r);
+            mgr.on_user_move(WindowKind::Equalizer, eq_r);
+            mgr.on_user_move(WindowKind::Visualizer, vis_r);
+        });
+
+        // 2. 視覺效果視窗進入全螢幕
+        crate::window_manager::WindowManager::with_manager(|mgr| {
+            mgr.on_visualizer_fullscreen_toggled(true);
+        });
+
+        // 3. 呼叫全螢幕 HUD (按房子)
+        crate::visualizer::toggle_main_window_hud();
+        assert!(crate::visualizer::is_hud_shown());
+
+        // 4. 使用者在全螢幕 HUD 下拖曳移動 MiniPlayer 視窗到新位置（寬 400，高 300 > min_size 295）
+        let new_mini_r = RECT { left: 800, top: 200, right: 1200, bottom: 500 };
+        crate::window_manager::WindowManager::with_manager(|mgr| {
+            mgr.on_user_move(WindowKind::MiniPlayer, new_mini_r);
+        });
+
+        // 5. 退出全螢幕
+        crate::window_manager::WindowManager::with_manager(|mgr| {
+            mgr.on_visualizer_fullscreen_toggled(false);
+        });
+
+        // 6. 驗證被移動的視窗「絕對保留在拖曳後的新坐標」，絕不倒退回進入全螢幕前的舊原地！
+        crate::window_manager::WindowManager::with_manager(|mgr| {
+            let mini = mgr.get_window(WindowKind::MiniPlayer).expect("mini exists");
+            assert_eq!(mini.canonical_rect.left, 800);
+            assert_eq!(mini.canonical_rect.top, 200);
+            assert_eq!(mini.canonical_rect.right, 1200);
+            assert_eq!(mini.canonical_rect.bottom, 500);
+
+            if let crate::window_entity::WindowLifecycleState::Floating { rect } = mini.state {
+                assert_eq!(rect.left, 800);
+                assert_eq!(rect.top, 200);
+            } else if let crate::window_entity::WindowLifecycleState::WorkstationDocked { rect, .. } = mini.state {
+                assert_eq!(rect.left, 800);
+                assert_eq!(rect.top, 200);
+            } else {
+                panic!("MiniPlayer state unexpected: {:?}", mini.state);
+            }
+        });
     }
 
     #[test]
