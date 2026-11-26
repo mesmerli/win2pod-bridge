@@ -249,6 +249,7 @@ pub fn hide_main_window_only(hwnd: HWND, _ctx: &egui::Context) {
 
         IS_TRAY_HIDDEN.store(true, Ordering::SeqCst);
         crate::spectrum::update_spectrum_needed_state();
+        let _ = crate::app_lifecycle::dispatch_app_lifecycle_event(crate::app_lifecycle::AppLifecycleEvent::HideToTray);
 
         // Capture window screenshot for Muelle Genie S-Curve effect before moving offscreen
         let w = rect.right - rect.left;
@@ -408,6 +409,7 @@ pub fn show_window_from_tray(hwnd: HWND, ctx: &egui::Context) {
         IS_APP_FLEET_HIDDEN.store(false, Ordering::SeqCst);
         IS_TRAY_HIDDEN.store(false, Ordering::SeqCst);
         crate::spectrum::update_spectrum_needed_state();
+        let _ = crate::app_lifecycle::dispatch_app_lifecycle_event(crate::app_lifecycle::AppLifecycleEvent::ShowUI);
 
         let mut x = LAST_POS_X.load(Ordering::SeqCst);
         let mut y = LAST_POS_Y.load(Ordering::SeqCst);
@@ -711,6 +713,7 @@ pub fn center_and_open_main_window(ctx: &egui::Context) {
                 IS_APP_FLEET_HIDDEN.store(false, Ordering::SeqCst);
                 IS_TRAY_HIDDEN.store(false, Ordering::SeqCst);
                 crate::spectrum::update_spectrum_needed_state();
+                let _ = crate::app_lifecycle::dispatch_app_lifecycle_event(crate::app_lifecycle::AppLifecycleEvent::ShowUI);
                 show_window_actual_finish(hwnd, cx, cy, ctx);
             } else {
                 if IsIconic(hwnd) != 0 {
@@ -784,6 +787,7 @@ pub fn bring_main_to_front() {
             if was_hidden {
                 IS_TRAY_HIDDEN.store(false, Ordering::SeqCst);
                 crate::spectrum::update_spectrum_needed_state();
+                let _ = crate::app_lifecycle::dispatch_app_lifecycle_event(crate::app_lifecycle::AppLifecycleEvent::ShowUI);
                 let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
                 let new_ex = (ex & !(WS_EX_TOOLWINDOW as i32)) | (WS_EX_APPWINDOW as i32);
                 SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);

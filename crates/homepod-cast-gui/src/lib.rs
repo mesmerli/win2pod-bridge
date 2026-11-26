@@ -1,5 +1,6 @@
 pub mod airpods;
 pub mod app_enumerator;
+pub mod app_lifecycle;
 pub mod autostart;
 pub mod controller;
 pub mod custom_cursor;

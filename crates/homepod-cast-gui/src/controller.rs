@@ -2758,6 +2758,13 @@ async fn transition_to_local_route(
     if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::RouteActiveChanged(is_ao_active)) {
         state.power_state = ps;
     }
+    if is_ao_active {
+        let _ = crate::app_lifecycle::dispatch_app_lifecycle_event(crate::app_lifecycle::AppLifecycleEvent::StreamStarted {
+            target_name: "Local AO".into(),
+        });
+    } else {
+        let _ = crate::app_lifecycle::dispatch_app_lifecycle_event(crate::app_lifecycle::AppLifecycleEvent::StreamStopped);
+    }
 
     let preliminary_status = if is_ao_active {
         let out_device_name = if has_target_device {
@@ -3321,6 +3328,9 @@ pub fn spawn_controller(
                                             if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::RouteActiveChanged(true)) {
                                                 state.power_state = ps;
                                             }
+                                            let _ = crate::app_lifecycle::dispatch_app_lifecycle_event(crate::app_lifecycle::AppLifecycleEvent::StreamStarted {
+                                                target_name: state.connected_name.clone().unwrap_or_else(|| "HomePod".into()),
+                                            });
                                             broadcast(&state);
                                             recovered = true;
                                             break;
@@ -3824,6 +3834,9 @@ pub fn spawn_controller(
                                         if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::RouteActiveChanged(true)) {
                                             state.power_state = ps;
                                         }
+                                        let _ = crate::app_lifecycle::dispatch_app_lifecycle_event(crate::app_lifecycle::AppLifecycleEvent::StreamStarted {
+                                            target_name: display_title.clone(),
+                                        });
 
                                         save_last_connected_device(&current_connected_devices, &display_title);
                                         save_last_route_type(LastRouteType::HomePod);
@@ -4149,6 +4162,9 @@ pub fn spawn_controller(
                                             if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::RouteActiveChanged(true)) {
                                                 state.power_state = ps;
                                             }
+                                            let _ = crate::app_lifecycle::dispatch_app_lifecycle_event(crate::app_lifecycle::AppLifecycleEvent::StreamStarted {
+                                                target_name: state.connected_name.clone().unwrap_or_else(|| "HomePod".into()),
+                                            });
                                             if state.auto_mute_speakers && state.license_tier.is_auto_mute_allowed() {
                                                 record_and_configure_streaming_source(&state.audio_source);
                                             }
@@ -4891,6 +4907,7 @@ pub fn spawn_controller(
                                 }
                             }
                             GuiCmd::SystemSuspend => {
+                                let _ = crate::app_lifecycle::dispatch_app_lifecycle_event(crate::app_lifecycle::AppLifecycleEvent::SystemSuspend);
                                 if state.auto_mute_speakers && state.license_tier.is_auto_mute_allowed() && (state.selected_audio_device == "default" || state.selected_audio_device.is_empty()) {
                                     let guard = match SAVED_ENDPOINT_STATES.lock() {
                                         Ok(g) => g,
@@ -4919,6 +4936,7 @@ pub fn spawn_controller(
                                 }
                             }
                             GuiCmd::SystemResume => {
+                                let _ = crate::app_lifecycle::dispatch_app_lifecycle_event(crate::app_lifecycle::AppLifecycleEvent::SystemResume);
                                 tracing::info!("Power event: System resume from sleep. Reconnecting HomePod stream...");
                                 if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::SystemResume) {
                                     state.power_state = ps;
@@ -5058,27 +5076,45 @@ pub fn spawn_controller(
                                 }
                             }
                             GuiCmd::Quit => {
-                                static IS_SHUTTING_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-                                if IS_SHUTTING_DOWN.compare_exchange(false, true, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
-                                    tracing::warn!("[Controller] Duplicate GuiCmd::Quit received, ignoring.");
-                                    continue;
+                                let action = match crate::app_lifecycle::dispatch_app_lifecycle_event(crate::app_lifecycle::AppLifecycleEvent::QuitRequested) {
+                                    Ok(act) => act,
+                                    Err(e) => {
+                                        tracing::warn!("[Controller] AppLifecycle rejected Quit: {e}");
+                                        continue;
+                                    }
+                                };
+
+                                if let crate::app_lifecycle::AppLifecycleAction::InitiateTeardown(stages) = action {
+                                    tracing::info!("[Controller] AppLifecycle initiating ordered teardown: {:?}", stages);
+                                    for stage in stages {
+                                        match stage {
+                                            crate::app_lifecycle::AppTeardownStage::StopActiveStreams => {
+                                                if let Some(mut rx_server) = receiver_instance.take() {
+                                                    rx_server.stop().await;
+                                                    tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+                                                }
+                                                runtime.stop().await;
+                                            }
+                                            crate::app_lifecycle::AppTeardownStage::RestoreAudioHardware => {
+                                                unregister_notification_client();
+                                                unregister_local_endpoint_listener();
+                                                restore_original_speaker_mute();
+                                                restore_initial_default_device();
+                                            }
+                                            crate::app_lifecycle::AppTeardownStage::ShutdownSidecar => {
+                                                sidecar_client.shutdown().await;
+                                            }
+                                            crate::app_lifecycle::AppTeardownStage::CloseSubsidiaryPumps => {
+                                                dispatch_power_event(crate::power::PowerEvent::RouteActiveChanged(false));
+                                            }
+                                            crate::app_lifecycle::AppTeardownStage::ExitProcess => {
+                                                let _ = crate::app_lifecycle::dispatch_app_lifecycle_event(crate::app_lifecycle::AppLifecycleEvent::TeardownComplete);
+                                                tracing::info!("[Controller] Ordered teardown finalized cleanly. Exiting.");
+                                                std::process::exit(0);
+                                            }
+                                        }
+                                    }
                                 }
-                                tracing::info!("[Controller] Processing GuiCmd::Quit: restoring speaker and devices...");
-                                if let Some(mut rx_server) = receiver_instance.take() {
-                                    rx_server.stop().await;
-                                    tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
-                                }
-                                unregister_notification_client();
-                                unregister_local_endpoint_listener();
-                                sidecar_client.shutdown().await;
-                                restore_original_speaker_mute();
-                                restore_initial_default_device();
-                                runtime.stop().await;
-                                restore_original_speaker_mute();
-                                restore_initial_default_device();
-                                dispatch_power_event(crate::power::PowerEvent::RouteActiveChanged(false));
-                                tracing::info!("[Controller] Shutdown complete, exiting cleanly.");
-                                std::process::exit(0);
                             }
                         }
                     }

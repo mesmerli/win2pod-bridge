@@ -3,7 +3,7 @@
 // Hide console window in Windows subsystem
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use homepod_cast_gui::{controller, gui, single_instance, snapping, tray};
+use homepod_cast_gui::{app_lifecycle, controller, gui, single_instance, snapping, tray};
 
 use std::sync::{Arc, RwLock};
 use eframe::egui;
@@ -99,6 +99,9 @@ fn main() -> anyhow::Result<()> {
 
     // Capture initial default playback device before any audio routing or shields take effect
     crate::controller::capture_initial_default_device();
+
+    // Initialize global application lifecycle finite state machine
+    app_lifecycle::init_app_lifecycle(start_minimized);
 
     // Register atexit handler so original speaker mute and default device are restored on any exit
     crate::controller::register_exit_handler();
