@@ -377,13 +377,13 @@ impl ActiveStreamSession {
         info!("Streaming session stopped successfully");
     }
 
-    fn capture_loop(stop: Arc<AtomicBool>, sender: LiveFrameSender) -> Result<()> {
+    fn capture_loop(running: Arc<AtomicBool>, sender: LiveFrameSender) -> Result<()> {
         let _com = initialize_mta();
         let enumerator = DeviceEnumerator::new()?;
         let bytes_per_frame = CHANNELS as usize * 4; // f32 per sample
         let silence = vec![0i16; (RATE as usize / 20) * CHANNELS as usize];
 
-        while !stop.load(Ordering::Relaxed) {
+        while running.load(Ordering::Relaxed) {
             let device = match enumerator.get_default_device(&Direction::Render) {
                 Ok(d) => d,
                 Err(e) => {
@@ -454,7 +454,7 @@ impl ActiveStreamSession {
 
             info!("Sidecar loopback capture stream started ({RATE} Hz, {CHANNELS}ch, f32)");
 
-            while !stop.load(Ordering::Relaxed) {
+            while running.load(Ordering::Relaxed) {
                 match capture_client.read_from_device_to_deque(&mut queue) {
                     Ok(_) => {
                         let n_frames = queue.len() / bytes_per_frame;
