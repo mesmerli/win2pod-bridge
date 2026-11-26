@@ -182,3 +182,73 @@ impl SidecarClient {
         }
     }
 }
+
+pub fn device_to_ipc(d: &airplay_core::Device) -> DeviceIpc {
+    let is_stereo = d.tight_sync_id.is_some() && d.group_public_name.is_some();
+    DeviceIpc {
+        id: d.id.to_mac_string(),
+        name: d.name.clone(),
+        model: d.model.clone(),
+        addresses: d.addresses.iter().map(|a| a.to_string()).collect(),
+        port: d.port,
+        is_stereo_pair: is_stereo,
+        is_group: false,
+        stereo_role: if is_stereo {
+            if d.is_group_leader {
+                Some("leader".into())
+            } else {
+                Some("follower".into())
+            }
+        } else {
+            None
+        },
+    }
+}
+
+pub fn device_items_to_target(items: &[crate::controller::DeviceItem]) -> ConnectTargetIpc {
+    if items.is_empty() {
+        return ConnectTargetIpc::Group {
+            name: "Empty".into(),
+            devices: vec![],
+        };
+    }
+
+    if items.len() == 1 {
+        let item = &items[0];
+        if item.is_stereo_pair && item.member_devices.len() >= 2 {
+            let left = device_to_ipc(&item.member_devices[0]);
+            let right = device_to_ipc(&item.member_devices[1]);
+            ConnectTargetIpc::StereoPair {
+                name: item.name.clone(),
+                left,
+                right,
+            }
+        } else if !item.member_devices.is_empty() {
+            let mut devs = Vec::new();
+            for m in &item.member_devices {
+                devs.push(device_to_ipc(m));
+            }
+            ConnectTargetIpc::Group {
+                name: item.name.clone(),
+                devices: devs,
+            }
+        } else {
+            ConnectTargetIpc::Single(device_to_ipc(&item.raw_device))
+        }
+    } else {
+        let mut all_devs = Vec::new();
+        for item in items {
+            if item.member_devices.is_empty() {
+                all_devs.push(device_to_ipc(&item.raw_device));
+            } else {
+                for m in &item.member_devices {
+                    all_devs.push(device_to_ipc(m));
+                }
+            }
+        }
+        ConnectTargetIpc::Group {
+            name: items[0].name.clone(),
+            devices: all_devs,
+        }
+    }
+}

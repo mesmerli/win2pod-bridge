@@ -2605,11 +2605,16 @@ enum AudioRouteRuntime {
     Idle,
     AoMode(AoRunner),
     Streaming(Session),
+    SidecarStreaming {
+        client: Arc<crate::sidecar::SidecarClient>,
+        target_name: String,
+        device_ids: Vec<String>,
+    },
 }
 
 impl AudioRouteRuntime {
     fn is_streaming(&self) -> bool {
-        matches!(self, Self::Streaming(_))
+        matches!(self, Self::Streaming(_) | Self::SidecarStreaming { .. })
     }
 
     fn session_mut(&mut self) -> Option<&mut Session> {
@@ -2630,6 +2635,9 @@ impl AudioRouteRuntime {
         match std::mem::replace(self, Self::Idle) {
             Self::Streaming(session) => {
                 session.stop().await;
+            }
+            Self::SidecarStreaming { client, .. } => {
+                let _ = client.send_request(win2pod_ipc::protocol::IpcRequest::Disconnect).await;
             }
             Self::AoMode(runner) => {
                 runner.stop().await;
@@ -3097,6 +3105,13 @@ pub fn spawn_controller(
 
             let mut last_sent_track: Option<(String, String, String)> = None;
             let mut saved_homepod_volume: f32 = load_volume();
+            let sidecar_client = Arc::new(crate::sidecar::SidecarClient::new());
+            let sc_prewarm = sidecar_client.clone();
+            tokio::spawn(async move {
+                if let Err(e) = sc_prewarm.ensure_started(None).await {
+                    tracing::warn!("Sidecar engine pre-warm postponed until connection: {e:#}");
+                }
+            });
 
             let _ = CONTROLLER_CMD_TX.set(cmd_tx.clone());
             ensure_notification_client_registered();
@@ -3668,11 +3683,34 @@ pub fn spawn_controller(
                                 broadcast(&state);
 
                                 let eff_vol = state.volume;
-                                match Session::start(dev_items, eff_vol, &state.device_volumes, state.audio_source.clone(), state.low_latency, state.eq_enabled, &state.eq_gains, state.sound_enhancer_mode, state.warmth_enhancer_mode).await {
-                                    Ok(sess) => {
+                                tracing::info!("Routing connection request to SidecarClient for [{display_title}]...");
+                                let sc = sidecar_client.clone();
+                                let target = crate::sidecar::device_items_to_target(&dev_items);
+                                let is_low_lat = state.low_latency;
+                                let sidecar_res: anyhow::Result<()> = async {
+                                    sc.ensure_started(None).await?;
+                                    let req = win2pod_ipc::protocol::IpcRequest::Connect {
+                                        target,
+                                        volume: eff_vol,
+                                        low_latency: is_low_lat,
+                                    };
+                                    match sc.send_request(req).await? {
+                                        win2pod_ipc::protocol::IpcResponse::Ok => Ok(()),
+                                        win2pod_ipc::protocol::IpcResponse::Error(e) => Err(anyhow::anyhow!(e)),
+                                        other => Err(anyhow::anyhow!("Unexpected response from sidecar: {other:?}")),
+                                    }
+                                }.await;
+
+                                match sidecar_res {
+                                    Ok(()) => {
+                                        tracing::info!("Sidecar engine connected successfully to [{display_title}]");
                                         state.status = DeviceStatus::Streaming;
-                                        state.diagnostics.timing_mode = sess.timing_desc.clone();
-                                        runtime = AudioRouteRuntime::Streaming(sess);
+                                        state.diagnostics.timing_mode = "Sidecar PTP".to_string();
+                                        runtime = AudioRouteRuntime::SidecarStreaming {
+                                            client: sidecar_client.clone(),
+                                            target_name: display_title.clone(),
+                                            device_ids: dev_items.iter().map(|d| d.id_string()).collect(),
+                                        };
 
                                         // Configure target device speakers for streaming if auto-mute is active
                                         if state.auto_mute_speakers && state.license_tier.is_auto_mute_allowed() {
@@ -3694,7 +3732,7 @@ pub fn spawn_controller(
                                     }
                                     Err(err) => {
                                         let msg = format_clean_error(&err);
-                                        tracing::error!("Connection error: {msg}");
+                                        tracing::error!("Sidecar connection error: {msg}");
                                         state.notice_message = None;
                                         current_connected_devices.clear();
                                         
@@ -3850,6 +3888,30 @@ pub fn spawn_controller(
                                                 let _ = sess.set_volume(clamped).await;
                                             }
                                         }
+                                    }
+                                } else if let AudioRouteRuntime::SidecarStreaming { ref client, .. } = runtime {
+                                    saved_homepod_volume = clamped;
+                                    save_volume(clamped);
+
+                                    if state.is_muted && clamped > 0.001 {
+                                        state.is_muted = false;
+                                        set_source_mute(false);
+                                    }
+
+                                    for id in &state.connected_device_ids {
+                                        let cur = state.device_volumes.get(id).copied().unwrap_or(clamped);
+                                        let new_dev_vol = (cur + delta).clamp(0.0, 1.0);
+                                        state.device_volumes.insert(id.clone(), new_dev_vol);
+                                    }
+
+                                    if !state.is_muted {
+                                        let sc = client.clone();
+                                        tokio::spawn(async move {
+                                            let _ = sc.send_request(win2pod_ipc::protocol::IpcRequest::SetVolume {
+                                                volume: clamped,
+                                                device_id: None,
+                                            }).await;
+                                        });
                                     }
                                 } else {
                                     // When not connected to HomePod, directly set the Windows audio endpoint volume!
