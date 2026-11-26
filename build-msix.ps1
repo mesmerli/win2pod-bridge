@@ -41,6 +41,10 @@ Remove-Item -Recurse -Force $staging -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $staging | Out-Null
 
 Copy-Item $distExe (Join-Path $staging "win2pod.exe") -Force
+$distEngine = Join-Path $dist "win2pod-engine.exe"
+if (Test-Path $distEngine) {
+    Copy-Item $distEngine (Join-Path $staging "win2pod-engine.exe") -Force
+}
 Copy-Item (Join-Path $root "package\msix\AppxManifest.xml") (Join-Path $staging "AppxManifest.xml") -Force
 Copy-Item (Join-Path $root "package\msix\Assets") (Join-Path $staging "Assets") -Recurse -Force
 

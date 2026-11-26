@@ -13,6 +13,8 @@ members = [
     "crates/airplay-bluetooth",
     "crates/airplay-resampler",
     "crates/airplay-receiver",
+    "crates/win2pod-ipc",
+    "crates/win2pod-engine",
     "crates/homepod-cast",
     "crates/homepod-cast-gui",
 ]

@@ -12,6 +12,7 @@ pub mod local_renderer;
 pub mod media_control;
 pub mod policy_config;
 pub mod process_loopback;
+pub mod sidecar;
 pub mod single_instance;
 pub mod snapping;
 pub mod spectrum;

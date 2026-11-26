@@ -2634,6 +2634,7 @@ dependencies = [
  "tracing-subscriber",
  "tray-icon",
  "wasapi",
+ "win2pod-ipc",
  "windows 0.62.2",
  "windows-core 0.62.2",
  "windows-sys 0.59.0",
@@ -6703,6 +6704,40 @@ checksum = "d920ac99c3c8edce110cb8d07dbb324d6d026011dce85b1e9355b70f0adacc4f"
 dependencies = [
  "bytemuck",
  "safe_arch",
+]
+
+[[package]]
+name = "win2pod-engine"
+version = "0.1.24"
+dependencies = [
+ "airplay-audio",
+ "airplay-client",
+ "airplay-core",
+ "airplay-discovery",
+ "airplay-receiver",
+ "anyhow",
+ "crossbeam-channel",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "wasapi",
+ "win2pod-ipc",
+ "windows 0.62.2",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "win2pod-ipc"
+version = "0.1.24"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

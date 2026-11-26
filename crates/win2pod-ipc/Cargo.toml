@@ -1,0 +1,14 @@
+[package]
+name = "win2pod-ipc"
+version.workspace = true
+edition.workspace = true
+license = "MIT OR Apache-2.0"
+description = "Lightweight IPC protocol and transport for Win2Pod Bridge"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1.0"
+anyhow = { workspace = true }
+tokio = { workspace = true, features = ["sync", "io-util", "net", "time", "macros"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }

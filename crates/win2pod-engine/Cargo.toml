@@ -1,0 +1,48 @@
+[package]
+name = "win2pod-engine"
+version.workspace = true
+edition.workspace = true
+license = "GPL-3.0-or-later"
+description = "Headless GPL AirPlay 2 and Continuity Engine Sidecar for Win2Pod Bridge"
+
+[[bin]]
+name = "win2pod-engine"
+path = "src/main.rs"
+
+[dependencies]
+win2pod-ipc = { path = "../win2pod-ipc" }
+airplay-core = { path = "../airplay-core" }
+airplay-client = { path = "../airplay-client" }
+airplay-discovery = { path = "../airplay-discovery" }
+airplay-audio = { path = "../airplay-audio" }
+airplay-receiver = { path = "../airplay-receiver" }
+
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "io-util"] }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+serde = { workspace = true }
+serde_json = "1.0"
+crossbeam-channel = "0.5"
+
+# Windows Audio Loopback & Win32 API
+wasapi = "0.23"
+windows = { version = "0.62", features = [
+    "Win32_Media_Audio_Endpoints",
+    "Win32_Media_Audio",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+    "Win32_System_Threading",
+    "Win32_Foundation",
+    "Devices_Bluetooth_Advertisement",
+    "Devices_Bluetooth",
+    "Foundation",
+    "Foundation_Collections",
+] }
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_System_Power",
+    "Win32_System_Com",
+] }
