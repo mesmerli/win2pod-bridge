@@ -102,4 +102,9 @@ This project builds upon foundational research and code from [**airplay2-rs**](h
 - Real-time 3D Audio Motion Visualizer with impressionist painterly rendering (`wry`, `three.js`, `three-painterly`, `baked-debris`)
 - MSIX packaging, Microsoft Store licensing integration, and 11-language localization
 
-**License**: GPL-3.0-or-later, inherited from upstream `airplay2-rs`. See [`LICENSE`](LICENSE).
+**License**:
+- **Win2Pod GUI Frontend (`crates/homepod-cast-gui`)**: Copyright © 2024-2026 mesmerli. All Rights Reserved. Proprietary Commercial License.
+- **Win2Pod IPC Protocol (`crates/win2pod-ipc`)**: Dual-licensed under MIT OR Apache-2.0.
+- **Win2Pod Backend Engine (`crates/win2pod-engine`, `crates/airplay-*`)**: Free software licensed under GPL-3.0-or-later, honoring upstream projects.
+
+See [`LICENSE`](LICENSE) for complete licensing details.

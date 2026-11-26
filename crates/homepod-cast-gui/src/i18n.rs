@@ -3180,20 +3180,20 @@ impl Language {
 
     pub fn about_copyright_notice(&self) -> &'static str {
         match self {
-            Self::TraditionalChinese => "版權宣告：版權所有 © 2024-2026 mesmerli。本軟體為自由軟體，依據 GNU 通用公眾授權條款第三版或後續版本 (GPL-3.0-or-later) 發布。",
-            Self::SimplifiedChinese => "版权宣告：版权所有 © 2024-2026 mesmerli。本软件为自由软件，依据 GNU 通用公共许可证第三版或后续版本 (GPL-3.0-or-later) 发布。",
-            Self::English => "Copyright Notice: Copyright © 2024-2026 mesmerli. Free software released under the GNU General Public License v3.0 or later (GPL-3.0-or-later).",
-            Self::French => "Mentions de droits d'auteur : Copyright © 2024-2026 mesmerli. Logiciel libre publié sous licence GNU General Public License v3.0 ou ultérieure (GPL-3.0-or-later).",
-            Self::German => "Urheberrechtshinweis: Copyright © 2024-2026 mesmerli. Freie Software, veröffentlicht unter der GNU General Public License v3.0 oder neuer (GPL-3.0-or-later).",
-            Self::Italian => "Avviso di copyright: Copyright © 2024-2026 mesmerli. Software libero distribuito sotto GNU General Public License v3.0 o successiva (GPL-3.0-or-later).",
-            Self::Japanese => "著作権表記：Copyright © 2024-2026 mesmerli。本ソフトウェアは GNU General Public License v3.0 以降 (GPL-3.0-or-later) の下で配布されるフリーソフトウェアです。",
-            Self::Korean => "저작권 고지: Copyright © 2024-2026 mesmerli. 본 소프트웨어는 GNU General Public License v3.0 이상 (GPL-3.0-or-later)에 따라 배포되는 자유 소프트웨어입니다.",
-            Self::PortugueseBrazil => "Aviso de direitos autorais: Copyright © 2024-2026 mesmerli. Software livre distribuído sob a GNU General Public License v3.0 ou posterior (GPL-3.0-or-later).",
-            Self::PortuguesePortugal => "Aviso de direitos de autor: Copyright © 2024-2026 mesmerli. Software livre distribuído sob a Licença Pública Geral GNU v3.0 ou posterior (GPL-3.0-or-later).",
-            Self::Indonesian => "Pemberitahuan Hak Cipta: Hak Cipta © 2024-2026 mesmerli. Perangkat lunak gratis yang dirilis di bawah GNU General Public License v3.0 atau yang lebih baru (GPL-3.0-or-later).",
-            Self::Vietnamese => "Thông báo bản quyền: Bản quyền © 2024-2026 mesmerli. Phần mềm miễn phí phát hành theo Giấy phép Công cộng GNU v3.0 trở lên (GPL-3.0-or-later).",
-            Self::Russian => "Уведомление об авторских правах: Copyright © 2024-2026 mesmerli. Свободное ПО, распространяемое под лицензией GNU General Public License v3.0 или более поздней (GPL-3.0-or-later).",
-            Self::Spanish => "Aviso de copyright: Copyright © 2024-2026 mesmerli. Software libre distribuido bajo la GNU General Public License v3.0 o posterior (GPL-3.0-or-later).",
+            Self::TraditionalChinese => "版權宣告：Win2Pod 介面版權所有 © 2024-2026 mesmerli。保留一切權利（專屬商業授權）。後端串流引擎 win2pod-engine.exe 為自由軟體，依據 GNU 通用公眾授權條款第三版或後續版本 (GPL-3.0-or-later) 發布。",
+            Self::SimplifiedChinese => "版权宣告：Win2Pod 界面版权所有 © 2024-2026 mesmerli。保留一切权利（专有商业授权）。后端流引擎 win2pod-engine.exe 为自由软件，依据 GNU 通用公共许可证第三版或后续版本 (GPL-3.0-or-later) 发布。",
+            Self::English => "Copyright Notice: Win2Pod GUI Copyright © 2024-2026 mesmerli. All Rights Reserved (Proprietary). Backend audio engine win2pod-engine.exe is free software released under the GNU General Public License v3.0 or later (GPL-3.0-or-later).",
+            Self::French => "Mentions de droits d'auteur : Win2Pod GUI Copyright © 2024-2026 mesmerli. Tous droits réservés (Propriétaire). Le moteur audio win2pod-engine.exe est un logiciel libre publié sous GNU GPL v3.0 ou ultérieure.",
+            Self::German => "Urheberrechtshinweis: Win2Pod GUI Copyright © 2024-2026 mesmerli. Alle Rechte vorbehalten (Proprietär). Das Audio-Backend win2pod-engine.exe ist freie Software unter GNU GPL v3.0 oder neuer.",
+            Self::Italian => "Avviso di copyright: Win2Pod GUI Copyright © 2024-2026 mesmerli. Tutti i diritti riservati (Proprietario). Il motore audio win2pod-engine.exe è software libero sotto licenza GNU GPL v3.0 o successiva.",
+            Self::Japanese => "著作権表記：Win2Pod GUI Copyright © 2024-2026 mesmerli。不許複製・禁無断転載（商用プロプライエタリ）。バックエンドエンジン win2pod-engine.exe は GNU GPL v3.0 以降で配布されるフリーソフトウェアです。",
+            Self::Korean => "저작권 고지: Win2Pod GUI Copyright © 2024-2026 mesmerli. 판권 소유 (상용 독점 라이선스). 백엔드 오디오 엔진 win2pod-engine.exe는 GNU GPL v3.0 이상에 따라 배포되는 자유 소프트웨어입니다.",
+            Self::PortugueseBrazil => "Aviso de direitos autorais: Win2Pod GUI Copyright © 2024-2026 mesmerli. Todos os direitos reservados (Proprietário). O mecanismo win2pod-engine.exe é software livre sob a GNU GPL v3.0 ou posterior.",
+            Self::PortuguesePortugal => "Aviso de direitos de autor: Win2Pod GUI Copyright © 2024-2026 mesmerli. Todos os direitos reservados (Proprietário). O motor áudio win2pod-engine.exe é software livre sob a GNU GPL v3.0 ou posterior.",
+            Self::Indonesian => "Pemberitahuan Hak Cipta: Win2Pod GUI Hak Cipta © 2024-2026 mesmerli. Hak cipta dilindungi undang-undang (Hak Milik). Mesin audio win2pod-engine.exe dirilis di bawah GNU GPL v3.0 atau yang lebih baru.",
+            Self::Vietnamese => "Thông báo bản quyền: Giao diện Win2Pod Bản quyền © 2024-2026 mesmerli. Đã đăng ký bản quyền (Độc quyền). Động cơ win2pod-engine.exe phát hành theo Giấy phép GNU GPL v3.0 trở lên.",
+            Self::Russian => "Уведомление об авторских правах: Win2Pod GUI Copyright © 2024-2026 mesmerli. Все права защищены (Проприетарное ПО). Аудиодвижок win2pod-engine.exe распространяется под лицензией GNU GPL v3.0 или более поздней.",
+            Self::Spanish => "Aviso de copyright: Win2Pod GUI Copyright © 2024-2026 mesmerli. Todos los derechos reservados (Propietario). El motor de audio win2pod-engine.exe es software libre bajo GNU GPL v3.0 o posterior.",
         }
     }
 

@@ -102,4 +102,9 @@ rustup default stable-x86_64-pc-windows-gnu
 - 即時 3D 音訊動態律動視覺化視窗與印象派油畫筆觸渲染（`wry`, `three.js`, `three-painterly`, `baked-debris`）
 - MSIX 打包支援、微軟商店（Microsoft Store）授權模組與 11 國語系
 
-**開源授權**：依循上游專案採用 GPL-3.0-or-later 授權條款，詳見 [`LICENSE`](LICENSE)。
+**授權條款**：
+- **Win2Pod GUI 前端介面 (`crates/homepod-cast-gui`)**：版權所有 © 2024-2026 mesmerli。保留一切權利（專屬商業授權）。
+- **Win2Pod IPC 通訊協議層 (`crates/win2pod-ipc`)**：採用 MIT OR Apache-2.0 雙重授權。
+- **Win2Pod 後端串流引擎 (`crates/win2pod-engine`, `crates/airplay-*`)**：依循上游開源專案採用 GPL-3.0-or-later 自由軟體授權。
+
+詳見 [`LICENSE`](LICENSE)。

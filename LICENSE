@@ -1,3 +1,22 @@
+# Win2Pod Bridge Licensing Notice
+
+This repository contains components governed by separate licenses:
+
+1. **Win2Pod GUI Frontend (`crates/homepod-cast-gui`)**:
+   Copyright (C) 2024-2026 mesmerli. All Rights Reserved.
+   Licensed under the Win2Pod Commercial / Proprietary End User License.
+
+2. **Win2Pod IPC Protocol & Transport (`crates/win2pod-ipc`)**:
+   Copyright (C) 2026 mesmerli.
+   Dual-licensed under either the MIT License or the Apache License (Version 2.0).
+
+3. **Win2Pod Backend Engine & AirPlay Core (`crates/win2pod-engine`, `crates/airplay-*`)**:
+   Licensed under the GNU General Public License (GPL) Version 3 or later,
+   incorporating code and research from airplay2-rs, UxPlay, windows-airplay-homepod,
+   and AirPodsDesktop.
+   See full text of GNU GPL-3.0 below.
+
+================================================================================
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 

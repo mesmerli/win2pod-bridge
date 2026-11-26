@@ -7032,7 +7032,7 @@ impl FlyoutApp {
                         // License
                         ui.horizontal(|ui| {
                             ui.label(egui::RichText::new(lang.about_license_label()).size(11.5).strong());
-                            ui.label(egui::RichText::new("GNU General Public License v3.0 or later (GPL-3.0-or-later)").size(11.5));
+                            ui.label(egui::RichText::new("GUI: Proprietary / Engine: GPL-3.0-or-later").size(11.5));
                         });
                         ui.add_space(6.0);
 

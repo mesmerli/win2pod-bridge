@@ -9,7 +9,7 @@
   <Identity
     Name="mesmerli.Win2PodBridge"
     Publisher="CN=B50F36C9-7E5E-4652-A715-0185D35ADE64"
-    Version="0.1.24.0"
+    Version="0.2.0.0"
     ProcessorArchitecture="x64" />
 
   <Properties>
