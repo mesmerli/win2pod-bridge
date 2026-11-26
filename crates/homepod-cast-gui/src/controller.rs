@@ -3772,11 +3772,7 @@ pub fn spawn_controller(
                                         volume: eff_vol,
                                         low_latency: is_low_lat,
                                     };
-                                    match sc.send_request(req).await? {
-                                        win2pod_ipc::protocol::IpcResponse::Ok => Ok(()),
-                                        win2pod_ipc::protocol::IpcResponse::Error(e) => Err(anyhow::anyhow!(e)),
-                                        other => Err(anyhow::anyhow!("Unexpected response from sidecar: {other:?}")),
-                                    }
+                                    sc.send_request(req).await?.ok().map_err(|e| anyhow::anyhow!("{e}"))
                                 }.await;
 
                                 match sidecar_res {

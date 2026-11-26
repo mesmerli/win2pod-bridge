@@ -4,8 +4,10 @@
 //! the GPL-3.0 backend engine daemon (`win2pod-engine.exe`) under a formal
 //! finite state machine lifecycle.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use anyhow::{anyhow, Context, Result};
@@ -21,7 +23,8 @@ pub use crate::sidecar_fsm::{
 pub struct SidecarClient {
     fsm: Arc<std::sync::Mutex<SidecarLifecycleFsm>>,
     writer: Arc<Mutex<Option<PipeWriter<tokio::io::WriteHalf<tokio::net::windows::named_pipe::NamedPipeClient>>>>>,
-    pending_response: Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<IpcResponse>>>>,
+    next_req_id: Arc<AtomicU64>,
+    pending_responses: Arc<std::sync::Mutex<HashMap<u64, tokio::sync::oneshot::Sender<IpcResponse>>>>,
     request_lock: Arc<Mutex<()>>,
     event_sender: Arc<std::sync::Mutex<Option<mpsc::Sender<IpcEvent>>>>,
     child_process: Arc<Mutex<Option<Child>>>,
@@ -75,7 +78,8 @@ impl SidecarClient {
         Self {
             fsm: Arc::new(std::sync::Mutex::new(SidecarLifecycleFsm::new())),
             writer: Arc::new(Mutex::new(None)),
-            pending_response: Arc::new(std::sync::Mutex::new(None)),
+            next_req_id: Arc::new(AtomicU64::new(1)),
+            pending_responses: Arc::new(std::sync::Mutex::new(HashMap::new())),
             request_lock: Arc::new(Mutex::new(())),
             event_sender: Arc::new(std::sync::Mutex::new(None)),
             child_process: Arc::new(Mutex::new(None)),
@@ -131,7 +135,7 @@ impl SidecarClient {
     fn spawn_reader_task(
         mut reader: PipeReader<tokio::io::ReadHalf<tokio::net::windows::named_pipe::NamedPipeClient>>,
         fsm: Arc<std::sync::Mutex<SidecarLifecycleFsm>>,
-        pending_response: Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<IpcResponse>>>>,
+        pending_responses: Arc<std::sync::Mutex<HashMap<u64, tokio::sync::oneshot::Sender<IpcResponse>>>>,
         event_sender: Arc<std::sync::Mutex<Option<mpsc::Sender<IpcEvent>>>>,
     ) {
         tokio::spawn(async move {
@@ -146,18 +150,27 @@ impl SidecarClient {
                 }
 
                 match reader.read_message().await {
-                    Ok(Some(IpcMessage::Event(evt))) => {
+                    Ok(Some(IpcMessage::Event { payload: evt })) => {
                         let tx_opt = event_sender.lock().unwrap().clone();
                         if let Some(tx) = tx_opt {
                             let _ = tx.send(evt).await;
                         }
                     }
-                    Ok(Some(IpcMessage::Response(resp))) => {
-                        let tx_opt = pending_response.lock().unwrap().take();
+                    Ok(Some(IpcMessage::Response { req_id, payload: resp })) => {
+                        let tx_opt = {
+                            let mut map = pending_responses.lock().unwrap();
+                            if req_id != 0 {
+                                map.remove(&req_id)
+                            } else {
+                                // Fallback for legacy sidecar sending req_id = 0
+                                let first_key = map.keys().next().copied();
+                                first_key.and_then(|k| map.remove(&k))
+                            }
+                        };
                         if let Some(tx) = tx_opt {
                             let _ = tx.send(resp);
                         } else {
-                            warn!("Received unexpected or timed-out IPC response: {:?}", resp);
+                            warn!("Received unexpected or timed-out IPC response for req_id={req_id}: {:?}", resp);
                         }
                     }
                     Ok(Some(msg)) => {
@@ -233,7 +246,7 @@ impl SidecarClient {
             Self::spawn_reader_task(
                 reader,
                 self.fsm.clone(),
-                self.pending_response.clone(),
+                self.pending_responses.clone(),
                 self.event_sender.clone(),
             );
             return Ok(());
@@ -302,7 +315,7 @@ impl SidecarClient {
         Self::spawn_reader_task(
             reader,
             self.fsm.clone(),
-            self.pending_response.clone(),
+            self.pending_responses.clone(),
             self.event_sender.clone(),
         );
 
@@ -315,18 +328,19 @@ impl SidecarClient {
         // Sequentialize requests so only one request is in flight at a time
         let _req_guard = self.request_lock.lock().await;
 
+        let req_id = self.next_req_id.fetch_add(1, Ordering::SeqCst);
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         {
-            let mut pending = self.pending_response.lock().unwrap();
-            *pending = Some(resp_tx);
+            let mut pending = self.pending_responses.lock().unwrap();
+            pending.insert(req_id, resp_tx);
         }
 
         {
             let mut writer_lock = self.writer.lock().await;
             let writer = writer_lock.as_mut().ok_or_else(|| anyhow!("Sidecar writer not connected"))?;
-            if let Err(e) = writer.write_message(&IpcMessage::Request(req)).await {
-                let mut pending = self.pending_response.lock().unwrap();
-                *pending = None;
+            if let Err(e) = writer.write_message(&IpcMessage::Request { req_id, payload: req }).await {
+                let mut pending = self.pending_responses.lock().unwrap();
+                pending.remove(&req_id);
                 return Err(e);
             }
         }
@@ -334,14 +348,14 @@ impl SidecarClient {
         match tokio::time::timeout(timeout, resp_rx).await {
             Ok(Ok(resp)) => Ok(resp),
             Ok(Err(_)) => {
-                let mut pending = self.pending_response.lock().unwrap();
-                *pending = None;
-                Err(anyhow!("Sidecar channel closed before sending response"))
+                let mut pending = self.pending_responses.lock().unwrap();
+                pending.remove(&req_id);
+                Err(anyhow!("Sidecar channel closed before sending response (req_id={req_id})"))
             }
             Err(_) => {
-                let mut pending = self.pending_response.lock().unwrap();
-                *pending = None;
-                Err(anyhow!("Sidecar request timed out after {:?}", timeout))
+                let mut pending = self.pending_responses.lock().unwrap();
+                pending.remove(&req_id);
+                Err(anyhow!("Sidecar request timed out after {:?} (req_id={req_id})", timeout))
             }
         }
     }
@@ -355,6 +369,15 @@ impl SidecarClient {
         self.send_request_internal(req, Duration::from_secs(5)).await
     }
 
+    /// Send a strongly-typed request and directly extract its typed response.
+    pub async fn send_typed_request<R: IpcRequestPayload>(&self, req: R) -> Result<R::ExpectedResponse> {
+        if !self.is_connected() {
+            return Err(anyhow!("Sidecar not connected (state: {:?})", self.state()));
+        }
+        let resp = self.send_request_internal(req.into(), Duration::from_secs(5)).await?;
+        R::extract_response(resp).map_err(|e| anyhow!("{e}"))
+    }
+
     /// Start listening for async events in the background.
     pub fn start_event_listener(
         &self,
@@ -364,44 +387,46 @@ impl SidecarClient {
         *guard = Some(event_sender);
     }
 
+    /// Ping the backend Sidecar engine and receive verified Pong nonce.
+    pub async fn ping(&self, nonce: u64) -> Result<u64> {
+        self.ensure_started(None).await?;
+        self.send_typed_request(PingRequest { nonce }).await
+    }
+
+    /// Query full Engine status.
+    pub async fn get_status(&self) -> Result<EngineStatusIpc> {
+        self.ensure_started(None).await?;
+        self.send_typed_request(GetStatusRequest).await
+    }
+
     /// Enumerate audio endpoints via the unified engine.
     pub async fn enumerate_audio_endpoints(&self) -> Result<Vec<AudioEndpointIpc>> {
         self.ensure_started(None).await?;
-        match self.send_request(IpcRequest::EnumerateAudioEndpoints).await? {
-            IpcResponse::AudioEndpoints(endpoints) => Ok(endpoints),
-            IpcResponse::Error(e) => Err(anyhow!("EnumerateAudioEndpoints error: {e}")),
-            other => Err(anyhow!("Unexpected response to EnumerateAudioEndpoints: {:?}", other)),
-        }
+        self.send_typed_request(EnumerateAudioEndpointsRequest).await
     }
 
     /// Set hardware speaker mute on an audio endpoint via the unified engine.
     pub async fn set_speaker_mute(&self, mute: bool, device_id: Option<String>) -> Result<()> {
         self.ensure_started(None).await?;
-        match self.send_request(IpcRequest::SetSpeakerMute { mute, device_id }).await? {
-            IpcResponse::Ok => Ok(()),
-            IpcResponse::Error(e) => Err(anyhow!("SetSpeakerMute error: {e}")),
-            other => Err(anyhow!("Unexpected response to SetSpeakerMute: {:?}", other)),
-        }
+        self.send_request(IpcRequest::SetSpeakerMute { mute, device_id }).await?
+            .ok()
+            .map_err(|e| anyhow!("{e}"))
     }
 
     /// Set Stand-in device redirection ID for AirPods protection.
     pub async fn set_standin_redirection(&self, standin_id: Option<String>) -> Result<()> {
         self.ensure_started(None).await?;
-        match self.send_request(IpcRequest::SetStandinRedirection { standin_id }).await? {
-            IpcResponse::Ok => Ok(()),
-            IpcResponse::Error(e) => Err(anyhow!("SetStandinRedirection error: {e}")),
-            other => Err(anyhow!("Unexpected response to SetStandinRedirection: {:?}", other)),
-        }
+        self.send_request(IpcRequest::SetStandinRedirection { standin_id }).await?
+            .ok()
+            .map_err(|e| anyhow!("{e}"))
     }
 
     /// Switch the engine operating mode (Idle, AirPlay, LocalAo).
     pub async fn set_engine_mode(&self, mode: EngineModeIpc) -> Result<()> {
         self.ensure_started(None).await?;
-        let res = match self.send_request(IpcRequest::SetEngineMode { mode: mode.clone() }).await? {
-            IpcResponse::Ok => Ok(()),
-            IpcResponse::Error(e) => Err(anyhow!("SetEngineMode error: {e}")),
-            other => Err(anyhow!("Unexpected response to SetEngineMode: {:?}", other)),
-        };
+        let res = self.send_request(IpcRequest::SetEngineMode { mode: mode.clone() }).await?
+            .ok()
+            .map_err(|e| anyhow!("{e}"));
 
         if res.is_ok() {
             let mut fsm = self.fsm.lock().unwrap();
@@ -419,6 +444,38 @@ impl SidecarClient {
         }
 
         res
+    }
+
+    /// Disconnect any active AirPlay streaming session.
+    pub async fn disconnect(&self) -> Result<()> {
+        self.ensure_started(None).await?;
+        self.send_request(IpcRequest::Disconnect).await?
+            .ok()
+            .map_err(|e| anyhow!("{e}"))
+    }
+
+    /// Set stream volume for all or a specific target device.
+    pub async fn set_volume(&self, volume: f32, device_id: Option<String>) -> Result<()> {
+        self.ensure_started(None).await?;
+        self.send_request(IpcRequest::SetVolume { volume, device_id }).await?
+            .ok()
+            .map_err(|e| anyhow!("{e}"))
+    }
+
+    /// Set audio equalizer and enhancer settings.
+    pub async fn set_eq(&self, enabled: bool, gains: [f32; 10], enhancer_mode: u8, warmth_mode: u8) -> Result<()> {
+        self.ensure_started(None).await?;
+        self.send_request(IpcRequest::SetEq { enabled, gains, enhancer_mode, warmth_mode }).await?
+            .ok()
+            .map_err(|e| anyhow!("{e}"))
+    }
+
+    /// Trigger mDNS device discovery.
+    pub async fn discover_devices(&self, timeout_secs: u64) -> Result<()> {
+        self.ensure_started(None).await?;
+        self.send_request(IpcRequest::DiscoverDevices { timeout_secs }).await?
+            .ok()
+            .map_err(|e| anyhow!("{e}"))
     }
 
     /// Gracefully shutdown sidecar under FSM management.
@@ -534,5 +591,23 @@ pub fn device_items_to_target(items: &[crate::controller::DeviceItem]) -> Connec
             name: items[0].name.clone(),
             devices: all_devs,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sidecar_client_initialization_and_req_id() {
+        let client = SidecarClient::new();
+        assert_eq!(client.state(), SidecarLifecycleState::Unstarted);
+        assert!(!client.is_connected());
+        assert!(!client.is_shutting_down());
+
+        let id1 = client.next_req_id.fetch_add(1, Ordering::SeqCst);
+        let id2 = client.next_req_id.fetch_add(1, Ordering::SeqCst);
+        assert_eq!(id1, 1);
+        assert_eq!(id2, 2);
     }
 }

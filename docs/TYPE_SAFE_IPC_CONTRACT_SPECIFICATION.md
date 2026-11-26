@@ -170,18 +170,37 @@ pub enum WebToHostCommand {
 
 ### 3.1 協定架構 (`crates/win2pod-ipc`)
 
+#### (1) 全域 IPC 封包信封 (`IpcMessage`)
+支援單元多工與非同步請求-應答配對（`req_id` 關聯機制），同時透過 `#[serde(default)]` 保證對歷史舊版本封包的 100% 向後相容：
+
 ```rust
-/// 全域 IPC 封包信封
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", content = "payload")]
+/// 全域 IPC 封包信封（支援多工 req_id 與向下相容）
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type")]
 pub enum IpcMessage {
-    Request(IpcRequest),
-    Response(IpcResponse),
-    Event(IpcEvent),
+    #[serde(rename = "Request")]
+    Request {
+        #[serde(default)]
+        req_id: u64,
+        payload: IpcRequest,
+    },
+    #[serde(rename = "Response")]
+    Response {
+        #[serde(default)]
+        req_id: u64,
+        payload: IpcResponse,
+    },
+    #[serde(rename = "Event")]
+    Event {
+        payload: IpcEvent,
+    },
 }
 ```
 
-#### (1) GUI 主動請求 (`IpcRequest`)
+* **向前向後相容**：若 JSON 缺少 `req_id`（例如舊版 client 發送的 `{"type":"Request","payload":{...}}`），Serde 將預設設定為 `req_id = 0`，接收端降級相容處理，永不破壞反序列化。
+* **建構子與輔助方法**：提供 `IpcMessage::request(req_id, payload)`、`IpcMessage::response(req_id, payload)`、`IpcMessage::event(payload)` 及 `req_id(&self)`。
+
+#### (2) GUI 主動請求 (`IpcRequest`)
 涵蓋完整控制指令：
 * `Ping { nonce: u64 }`
 * `DiscoverDevices { timeout_secs: u64 }`
@@ -194,17 +213,60 @@ pub enum IpcMessage {
 * `SetAirPodsMonitoring { enabled: bool }`
 * `EnumerateAudioEndpoints`
 * `SetEngineMode { mode: EngineModeIpc }`
+* `SetSpeakerMute { mute: bool, device_id: Option<String> }`
+* `SetStandinRedirection { standin_id: Option<String> }`
 * `GetStatus`
 * `Shutdown`
 
-#### (2) Sidecar 引擎應答 (`IpcResponse`)
+#### (3) Sidecar 引擎應答 (`IpcResponse`) 與強型別提取
 * `Pong { nonce: u64 }`
 * `Ok`
 * `Error(String)`
 * `Status(EngineStatusIpc)`
 * `AudioEndpoints(Vec<AudioEndpointIpc>)`
 
-#### (3) 異步事件串流 (`IpcEvent`)
+為杜絕上層呼叫端散落的模式匹配與錯誤處理樣板代碼，`IpcResponse` 內建型別安全提取器與標準錯誤 `IpcError`：
+```rust
+#[derive(Debug, thiserror::Error, Clone, PartialEq)]
+pub enum IpcError {
+    #[error("Sidecar IPC remote error: {0}")]
+    Remote(String),
+    #[error("Unexpected IPC response: expected {expected}, got {actual}")]
+    UnexpectedResponse { expected: &'static str, actual: String },
+    #[error("IPC channel closed")]
+    ChannelClosed,
+    #[error("IPC request timed out after {0:?}")]
+    Timeout(std::time::Duration),
+}
+
+impl IpcResponse {
+    pub fn ok(self) -> Result<(), IpcError>;
+    pub fn into_pong(self) -> Result<u64, IpcError>;
+    pub fn into_status(self) -> Result<EngineStatusIpc, IpcError>;
+    pub fn into_audio_endpoints(self) -> Result<Vec<AudioEndpointIpc>, IpcError>;
+    pub fn is_ok(&self) -> bool;
+    pub fn is_error(&self) -> bool;
+}
+```
+
+#### (4) 強型別請求關聯 Trait (`IpcRequestPayload`)
+將每個請求型別直接與其預期的應答型別做編譯期繫結：
+```rust
+pub trait IpcRequestPayload: Sized + Into<IpcRequest> {
+    type ExpectedResponse;
+    fn extract_response(resp: IpcResponse) -> Result<Self::ExpectedResponse, IpcError>;
+}
+
+// 範例：PingRequest 繫結預期傳回值為 u64
+impl IpcRequestPayload for PingRequest {
+    type ExpectedResponse = u64;
+    fn extract_response(resp: IpcResponse) -> Result<Self::ExpectedResponse, IpcError> {
+        resp.into_pong()
+    }
+}
+```
+
+#### (5) 異步事件串流 (`IpcEvent`)
 引擎主動向 GUI 推送的高頻非同步廣播：
 * `DeviceDiscovered(DeviceIpc)`
 * `StreamingStateChanged { state: StreamStateIpc, ... }`
@@ -213,8 +275,31 @@ pub enum IpcMessage {
 * `ReceiverStateUpdate(ReceiverStatusIpc)`（AirPlay 接收端曲目中繼資料、封面位元組）
 * `AudioActivityChanged { is_active: bool, peak_level: f32 }`
 * `RawSpectrumUpdate(Vec<u8>)`
+* `AudioEndpointsChanged(Vec<AudioEndpointIpc>)`
+* `RemoteMediaControl(RemoteCmdIpc)`
 
-### 3.2 傳輸層實踐 (`crates/win2pod-ipc/src/transport.rs`)
+### 3.2 多工請求佇列與客戶端實踐 (`crates/homepod-cast-gui/src/sidecar.rs`)
+
+1. **單元多工 `req_id` 分派器**：
+   * `SidecarClient` 維護單調遞增的 `next_req_id: Arc<AtomicU64>`。
+   * 將發出的請求記錄於 `pending_responses: Arc<Mutex<HashMap<u64, oneshot::Sender<IpcResponse>>>>`。
+   * 讀取迴圈（`spawn_reader_task`）收到 `IpcMessage::Response { req_id, payload }` 時，精確取出對應之通道並喚醒等待中的 Future。
+   * 徹底杜絕過去單一全域回應鎖在請求逾時（Timeout）後，晚到的舊封包污染下一筆新請求的競態條件。
+
+2. **強型別客戶端 API**：
+   `SidecarClient` 對外全面暴露型別安全的高階方法：
+   * `ping(&self, nonce: u64) -> Result<u64>`
+   * `get_status(&self) -> Result<EngineStatusIpc>`
+   * `enumerate_audio_endpoints(&self) -> Result<Vec<AudioEndpointIpc>>`
+   * `set_speaker_mute(&self, mute: bool, device_id: Option<String>) -> Result<()>`
+   * `set_standin_redirection(&self, standin_id: Option<String>) -> Result<()>`
+   * `set_engine_mode(&self, mode: EngineModeIpc) -> Result<()>`
+   * `disconnect(&self) -> Result<()>`
+   * `set_volume(&self, volume: f32, device_id: Option<String>) -> Result<()>`
+   * `set_eq(&self, enabled: bool, gains: [f32; 10], enhancer_mode: u8, warmth_mode: u8) -> Result<()>`
+   * `discover_devices(&self, timeout_secs: u64) -> Result<()>`
+
+### 3.3 傳輸層實踐 (`crates/win2pod-ipc/src/transport.rs`)
 * 換行定界 JSON（Newline-Delimited JSON / NDJSON），確保在 Windows 命名管道傳輸流中具備清晰的封包邊界。
 * 具備指數退避自動重試的連線機制（`connect_pipe_client`）。
 

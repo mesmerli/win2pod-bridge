@@ -100,14 +100,14 @@ async fn main() -> Result<()> {
             tokio::select! {
                 read_res = transport.read_message() => {
                     match read_res {
-                        Ok(Some(IpcMessage::Request(req))) => {
+                        Ok(Some(IpcMessage::Request { req_id, payload: req })) => {
                             let is_shutdown = matches!(req, win2pod_ipc::protocol::IpcRequest::Shutdown);
                             let resp = match engine_clone.handle_request(req).await {
                                 Ok(r) => r,
                                 Err(e) => win2pod_ipc::protocol::IpcResponse::Error(e.to_string()),
                             };
-                            if let Err(e) = transport.write_message(&IpcMessage::Response(resp)).await {
-                                warn!("Failed to write IPC response: {e:#}");
+                            if let Err(e) = transport.write_message(&IpcMessage::Response { req_id, payload: resp }).await {
+                                warn!("Failed to write IPC response for req_id={req_id}: {e:#}");
                                 break;
                             }
                             if is_shutdown {
@@ -129,7 +129,7 @@ async fn main() -> Result<()> {
                     }
                 }
                 Some(event) = event_rx.recv() => {
-                    if let Err(e) = transport.write_message(&IpcMessage::Event(event)).await {
+                    if let Err(e) = transport.write_message(&IpcMessage::Event { payload: event }).await {
                         warn!("Failed to write IPC event: {e:#}");
                         break;
                     }
