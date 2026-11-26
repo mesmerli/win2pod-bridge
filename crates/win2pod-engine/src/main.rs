@@ -45,9 +45,13 @@ async fn main() -> Result<()> {
     let (event_tx, mut event_rx) = mpsc::channel(128);
     let engine = Arc::new(Engine::new(event_tx));
 
+    let mut is_first = true;
     loop {
-        let server = match create_pipe_server(Some(&pipe_name)) {
-            Ok(s) => s,
+        let server = match create_pipe_server(Some(&pipe_name), is_first) {
+            Ok(s) => {
+                is_first = false;
+                s
+            }
             Err(e) => {
                 error!("Failed to create pipe server: {e:#}, retrying in 2s...");
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;

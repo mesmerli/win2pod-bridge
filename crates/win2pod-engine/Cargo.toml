@@ -19,6 +19,7 @@ airplay-receiver = { path = "../airplay-receiver" }
 
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "io-util"] }
 anyhow = { workspace = true }
+uuid = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 serde = { workspace = true }

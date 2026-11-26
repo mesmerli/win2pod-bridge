@@ -1,18 +1,20 @@
 //! AirPlay 2 Sender implementation for win2pod-engine.
 
 use std::collections::{HashMap, VecDeque};
+use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::Duration;
 use anyhow::{anyhow, Context, Result};
 use tokio::sync::mpsc;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use win2pod_ipc::protocol::{ConnectTargetIpc, DeviceIpc, IpcEvent};
 
 use airplay_audio::{AlacEncoder, AudioStreamer, LiveAudioDecoder, LiveFrameSender, LivePcmFrame};
 use airplay_client::Connection;
-use airplay_core::device::Device;
+use airplay_core::device::{Device, DeviceId};
+use airplay_core::features::Features;
 use airplay_core::stream::{PtpMode, StreamType, TimingProtocol};
 use airplay_core::{AudioCodec, AudioFormat, StreamConfig};
 use airplay_discovery::{Discovery, ServiceBrowser};
@@ -20,6 +22,67 @@ use wasapi::{initialize_mta, DeviceEnumerator, Direction, SampleType, StreamMode
 
 const RATE: u32 = 44_100;
 const CHANNELS: u8 = 2;
+
+fn to_core_device(ipc: &DeviceIpc) -> Result<Device> {
+    let id = DeviceId::from_mac_string(&ipc.id)
+        .map_err(|e| anyhow!("Invalid MAC address {}: {e}", ipc.id))?;
+    let addresses: Vec<IpAddr> = ipc.addresses.iter()
+        .filter_map(|s| s.parse::<IpAddr>().ok())
+        .collect();
+    if addresses.is_empty() {
+        return Err(anyhow!("No valid IP addresses provided for device {}", ipc.name));
+    }
+    let port = if ipc.port == 0 { 7000 } else { ipc.port };
+    let features = Features::from_txt_value("0x4A7FCA00,0x3C354BD0")
+        .unwrap_or_default();
+
+    let is_leader = ipc.stereo_role.as_deref() == Some("leader");
+    let tight_sync_id = if ipc.is_stereo_pair {
+        Some(uuid::Uuid::nil())
+    } else {
+        None
+    };
+
+    Ok(Device {
+        id,
+        name: ipc.name.clone(),
+        model: if ipc.model.is_empty() { "AudioAccessory5,1".to_string() } else { ipc.model.clone() },
+        manufacturer: None,
+        serial_number: None,
+        addresses,
+        port,
+        features,
+        required_sender_features: None,
+        public_key: None,
+        source_version: Default::default(),
+        firmware_version: None,
+        os_version: None,
+        protocol_version: None,
+        requires_password: false,
+        status_flags: 0,
+        access_control: None,
+        pairing_identity: None,
+        system_pairing_identity: None,
+        bluetooth_address: None,
+        homekit_home_id: None,
+        group_id: None,
+        is_group_leader: is_leader,
+        group_public_name: if ipc.is_stereo_pair { Some(ipc.name.clone()) } else { None },
+        group_contains_discoverable_leader: false,
+        home_group_id: None,
+        household_id: None,
+        parent_group_id: None,
+        parent_group_contains_discoverable_leader: false,
+        tight_sync_id,
+        raop_port: None,
+        raop_encryption_types: None,
+        raop_codecs: None,
+        raop_transport: None,
+        raop_metadata_types: None,
+        raop_digest_auth: false,
+        vodka_version: None,
+    })
+}
 
 pub struct ActiveStreamSession {
     connections: Vec<Connection>,
@@ -49,17 +112,6 @@ impl ActiveStreamSession {
             None
         };
 
-        let config = StreamConfig {
-            stream_type: StreamType::Realtime,
-            audio_format,
-            timing_protocol: TimingProtocol::Ptp,
-            ptp_mode: PtpMode::Master,
-            latency_min,
-            latency_max,
-            supports_dynamic_stream_id: true,
-            asc,
-        };
-
         let target_ipc_devices: Vec<DeviceIpc> = match target {
             ConnectTargetIpc::Single(dev) => vec![dev],
             ConnectTargetIpc::StereoPair { left, right, .. } => vec![left, right],
@@ -70,24 +122,62 @@ impl ActiveStreamSession {
             return Err(anyhow!("No target devices provided"));
         }
 
-        // Resolve core Device objects from cache or discovery
+        // Resolve core Device objects from cache or reconstruct directly from IPC DTO
         let mut core_devices = Vec::new();
         for ipc_d in &target_ipc_devices {
             if let Some(dev) = cache.get(&ipc_d.id) {
                 core_devices.push(dev.clone());
             } else {
-                info!("Device {} not in cache, doing quick scan...", ipc_d.name);
-                let browser = ServiceBrowser::new()?;
-                let scanned = browser.scan(Duration::from_secs(2)).await?;
-                if let Some(found) = scanned.into_iter().find(|d| d.id.to_mac_string().eq_ignore_ascii_case(&ipc_d.id)) {
-                    core_devices.push(found);
-                } else {
-                    return Err(anyhow!("Target device {} ({}) could not be resolved on the network", ipc_d.name, ipc_d.id));
+                match to_core_device(ipc_d) {
+                    Ok(dev) => {
+                        info!("Reconstructed device from IPC metadata: {} ({:?})", dev.name, dev.addresses);
+                        core_devices.push(dev);
+                    }
+                    Err(e) => {
+                        warn!("Could not reconstruct device from IPC metadata: {e:#}. Trying quick scan...");
+                        let browser = ServiceBrowser::new()?;
+                        let scanned = browser.scan(Duration::from_secs(2)).await?;
+                        if let Some(found) = scanned.into_iter().find(|d| d.id.to_mac_string().eq_ignore_ascii_case(&ipc_d.id)) {
+                            core_devices.push(found);
+                        } else {
+                            return Err(anyhow!("Target device {} ({}) could not be resolved on the network", ipc_d.name, ipc_d.id));
+                        }
+                    }
                 }
             }
         }
 
+        // Sort so group leader comes first
+        core_devices.sort_by_key(|d| {
+            if d.is_group_leader {
+                0
+            } else if d.tight_sync_id.is_some() || d.group_public_name.is_some() {
+                1
+            } else if d.group_id.is_some() {
+                2
+            } else {
+                3
+            }
+        });
+
         let is_group = core_devices.len() > 1;
+
+        let (timing_proto, ptp_m) = if is_group {
+            (TimingProtocol::Ptp, PtpMode::Master)
+        } else {
+            (TimingProtocol::Ntp, PtpMode::Master)
+        };
+
+        let config = StreamConfig {
+            stream_type: StreamType::Realtime,
+            audio_format,
+            timing_protocol: timing_proto,
+            ptp_mode: ptp_m,
+            latency_min,
+            latency_max,
+            supports_dynamic_stream_id: true,
+            asc,
+        };
 
         if is_group {
             info!("Starting group streaming to {} devices", core_devices.len());

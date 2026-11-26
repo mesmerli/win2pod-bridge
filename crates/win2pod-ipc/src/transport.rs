@@ -47,13 +47,13 @@ impl<S: tokio::io::AsyncRead + tokio::io::AsyncWrite> PipeTransport<S> {
 }
 
 /// Create a new Named Pipe server instance.
-pub fn create_pipe_server(pipe_name: Option<&str>) -> Result<NamedPipeServer> {
+pub fn create_pipe_server(pipe_name: Option<&str>, is_first: bool) -> Result<NamedPipeServer> {
     let name = pipe_name.unwrap_or(DEFAULT_PIPE_NAME);
-    let server = ServerOptions::new()
-        .first_pipe_instance(true)
-        .max_instances(4)
-        .create(name)
-        .with_context(|| format!("Failed to create named pipe server on {name}"))?;
+    let mut opts = ServerOptions::new();
+    opts.first_pipe_instance(is_first)
+        .max_instances(16);
+    let server = opts.create(name)
+        .with_context(|| format!("Failed to create named pipe server on {name} (is_first={is_first})"))?;
     Ok(server)
 }
 

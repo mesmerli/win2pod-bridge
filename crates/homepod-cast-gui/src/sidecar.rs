@@ -60,6 +60,10 @@ impl SidecarClient {
 
     /// Start the sidecar engine process and bind it to a Windows Job Object.
     pub async fn ensure_started(&self, pipe_name: Option<&str>) -> Result<()> {
+        if self.is_connected() {
+            return Ok(());
+        }
+
         let name = pipe_name.unwrap_or(DEFAULT_PIPE_NAME);
 
         // First attempt a fast connection in case it's already running
