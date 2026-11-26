@@ -3,6 +3,7 @@ pub mod app_enumerator;
 pub mod autostart;
 pub mod controller;
 pub mod custom_cursor;
+pub mod firewall;
 pub mod genie_effect;
 pub mod gui;
 pub mod handoff;

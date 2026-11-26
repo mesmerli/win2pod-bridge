@@ -80,10 +80,12 @@ impl SidecarClient {
 
         info!("Launching sidecar engine: {:?}", engine_path);
 
+        crate::firewall::ensure_firewall_rule_for_engine(&engine_path);
+
         let mut cmd = Command::new(&engine_path);
         cmd.arg("--pipe-name").arg(name);
 
-        #[cfg(all(windows, not(debug_assertions)))]
+        #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
             const CREATE_NO_WINDOW: u32 = 0x08000000;
