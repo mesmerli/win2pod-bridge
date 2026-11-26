@@ -337,12 +337,17 @@ unsafe extern "system" fn unified_window_subclass_proc(
                         if IsIconic(hwnd) != 0 || crate::tray::is_window_hidden_to_tray() {
                             return DefSubclassProc(hwnd, msg, wparam, lparam);
                         }
-                        let root = get_component_root(kind);
-                        let was_collapsed = can_start_cluster_restore(root);
-                        if was_collapsed {
-                            expand_cluster_animated(root, hwnd);
-                        } else {
-                            restore_and_realign_all_children(root, hwnd);
+                        let role = get_window_role(kind);
+                        // 關鍵防護：只有 Master 根節點視窗或獨立視窗，才被允許發起群組的聯動還原！
+                        // 附屬子視窗（Slave）嚴禁在收到內部縮放訊息時喧賓奪主展開母體，徹底杜絕根視窗時序衝突與縮圖損毀！
+                        if role == WindowRole::ClusterMaster || role == WindowRole::Standalone {
+                            let root = get_component_root(kind);
+                            let was_collapsed = can_start_cluster_restore(root);
+                            if was_collapsed {
+                                expand_cluster_animated(root, hwnd);
+                            } else {
+                                restore_and_realign_all_children(root, hwnd);
+                            }
                         }
                     }
                 }
@@ -387,20 +392,10 @@ unsafe extern "system" fn unified_window_subclass_proc(
                 if crate::genie_effect::has_cached_snapshot_for_hwnd(hwnd as usize) {
                     restore_window_animated(kind, hwnd);
                     return 0;
-                } else {
-                    let nr = get_window_normal_rect(kind);
-                    ShowWindow(hwnd, SW_RESTORE);
-                    SetWindowPos(
-                        hwnd,
-                        HWND_NOTOPMOST,
-                        nr.left,
-                        nr.top,
-                        nr.right - nr.left,
-                        nr.bottom - nr.top,
-                        SWP_SHOWWINDOW | SWP_NOACTIVATE,
-                    );
-                    return 0;
                 }
+                // 重要：若無神燈快照，放行給 DefSubclassProc 執行 Win32 原生還原與前台激活，
+                // 緊接著系統派發的 WM_SIZE(SIZE_RESTORED) 會由下方統一觸發 expand_cluster_animated，
+                // 絕不攔截 SC_RESTORE 返回 0，杜絕工作列縮圖鎖死或無法點開！
             }
             let is_slave = role == WindowRole::ClusterSlave;
             if is_slave && sc == SC_MAXIMIZE {

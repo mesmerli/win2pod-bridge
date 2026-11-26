@@ -66,9 +66,9 @@ impl WindowKind {
     /// 視窗最小邊界限制 [寬, 高]
     pub fn min_size(&self) -> [f32; 2] {
         match self {
-            WindowKind::Equalizer => [380.0, 240.0],
-            WindowKind::MiniPlayer => [380.0, 295.0],
-            WindowKind::Main => [380.0, 500.0],
+            WindowKind::Equalizer => [460.0, 340.0],
+            WindowKind::MiniPlayer => [460.0, 295.0],
+            WindowKind::Main => [460.0, 500.0],
             WindowKind::Visualizer => [500.0, 400.0],
         }
     }

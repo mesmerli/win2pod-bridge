@@ -512,10 +512,17 @@ impl eframe::App for FlyoutApp {
         );
         self.mini_player_needs_initial_dock = mini_dock;
 
-        if is_main_hidden || is_fleet_hidden {
-            // Main window itself is hidden in system tray (or whole fleet hidden to tray):
+        let main_hwnd = crate::snapping::get_window_hwnd(crate::snapping::WindowKind::Main);
+        let is_main_iconic = !main_hwnd.is_null() && unsafe { windows_sys::Win32::UI::WindowsAndMessaging::IsIconic(main_hwnd) != 0 };
+        let is_main_cluster_min = matches!(
+            crate::snapping::get_cluster_state(crate::snapping::WindowKind::Main),
+            crate::snapping::ClusterState::Minimized | crate::snapping::ClusterState::Minimizing(_)
+        );
+
+        if is_main_hidden || is_fleet_hidden || is_main_iconic || is_main_cluster_min {
+            // Main window itself is hidden in system tray, or minimized to taskbar:
             // secondary viewports were already rendered above with live spectrum and dynamic framerate.
-            // Skip main window UI widget rendering (footer, central panels).
+            // Skip main window UI widget rendering (footer, central panels) to prevent squashing egui layout into 160x28!
             return;
         }
 
@@ -873,13 +880,16 @@ impl FlyoutApp {
 
         let mut def_size = kind.default_size();
         let ppp = ctx.pixels_per_point();
-        if kind == crate::snapping::WindowKind::MiniPlayer || kind == crate::snapping::WindowKind::Equalizer {
+        if self.equalizer_window_open && self.mini_player_window_open {
             let main_hwnd = crate::snapping::get_window_hwnd(crate::snapping::WindowKind::Main);
-            if !main_hwnd.is_null() && unsafe { windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(main_hwnd) != 0 } {
+            if !main_hwnd.is_null() && unsafe {
+                windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(main_hwnd) != 0
+                    && windows_sys::Win32::UI::WindowsAndMessaging::IsIconic(main_hwnd) == 0
+            } {
                 let mut mr: windows_sys::Win32::Foundation::RECT = unsafe { std::mem::zeroed() };
                 unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect(main_hwnd, &mut mr); }
                 let mh = (mr.bottom - mr.top) as f32 / ppp;
-                if mh > 100.0 {
+                if mh >= 600.0 {
                     def_size[1] = (mh / 2.0).round();
                 }
             }
@@ -901,6 +911,18 @@ impl FlyoutApp {
             .with_transparent(true)  // 啟用透明 Viewport 背景支援
             .with_window_level(init_level);
 
+        let root = crate::snapping::get_component_root(kind);
+        let is_cluster_min = matches!(
+            crate::snapping::get_cluster_state(root),
+            crate::snapping::ClusterState::Minimized | crate::snapping::ClusterState::Minimizing(_)
+        );
+        let is_self_min = matches!(
+            crate::snapping::get_cluster_state(kind),
+            crate::snapping::ClusterState::Minimized | crate::snapping::ClusterState::Minimizing(_)
+        );
+        let is_minimized = is_cluster_min || is_self_min;
+        let should_be_visible = !is_fleet_hidden && !is_minimized;
+
         if *needs_initial_dock {
             // 預先計算初次停靠目標座標，且在建立時先保持 hidden (visible: false)，
             // 避免 winit 內部在 CreateWindowExW(..., CW_USEDEFAULT) 時瞬間閃現 800x600 預設視窗
@@ -911,11 +933,11 @@ impl FlyoutApp {
             let init_pos = egui::pos2(best_rect.left as f32 / ppp, best_rect.top as f32 / ppp);
             builder = builder.with_position(init_pos).with_visible(false);
         } else {
-            builder = builder.with_visible(!is_fleet_hidden);
+            builder = builder.with_visible(should_be_visible);
         }
 
         ctx.show_viewport_immediate(viewport_id, builder, |ctx, _class| {
-            if is_fleet_hidden {
+            if is_fleet_hidden || is_minimized {
                 return;
             }
 

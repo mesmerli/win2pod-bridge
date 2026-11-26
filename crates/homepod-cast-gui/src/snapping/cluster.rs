@@ -795,9 +795,13 @@ pub fn compute_cluster_docked_targets(
 
 /// 以主控視窗為發射中心，執行順向階梯彈簧過衝外擴飛回動畫並還原群組視窗（與最小化吸攏形成 100% 鏡像對稱閉環）
 pub unsafe fn expand_cluster_animated(root: WindowKind, root_hwnd: HWND) {
+    let effective_root_hwnd = {
+        let h = get_window_hwnd(root);
+        if !h.is_null() && IsWindow(h) != 0 { h } else { root_hwnd }
+    };
     if !SNAPPING_ENABLED.load(Ordering::Relaxed) {
-        if !root_hwnd.is_null() && IsWindow(root_hwnd) != 0 {
-            ShowWindow(root_hwnd, SW_RESTORE);
+        if !effective_root_hwnd.is_null() && IsWindow(effective_root_hwnd) != 0 {
+            ShowWindow(effective_root_hwnd, SW_RESTORE);
         }
         finish_cluster_restore(root);
         return;
@@ -808,12 +812,12 @@ pub unsafe fn expand_cluster_animated(root: WindowKind, root_hwnd: HWND) {
     let members = get_cluster_members(root);
     let root_r = get_window_normal_rect(root);
     if members.len() <= 1 {
-        if !root_hwnd.is_null() && IsWindow(root_hwnd) != 0 {
-            if IsIconic(root_hwnd) != 0 {
-                ShowWindow(root_hwnd, SW_RESTORE);
+        if !effective_root_hwnd.is_null() && IsWindow(effective_root_hwnd) != 0 {
+            if IsIconic(effective_root_hwnd) != 0 {
+                ShowWindow(effective_root_hwnd, SW_RESTORE);
             }
             SetWindowPos(
-                root_hwnd,
+                effective_root_hwnd,
                 HWND_NOTOPMOST,
                 root_r.left,
                 root_r.top,
@@ -826,12 +830,12 @@ pub unsafe fn expand_cluster_animated(root: WindowKind, root_hwnd: HWND) {
         return;
     }
 
-    if !root_hwnd.is_null() && IsWindow(root_hwnd) != 0 {
-        if IsIconic(root_hwnd) != 0 {
-            ShowWindow(root_hwnd, SW_RESTORE);
+    if !effective_root_hwnd.is_null() && IsWindow(effective_root_hwnd) != 0 {
+        if IsIconic(effective_root_hwnd) != 0 {
+            ShowWindow(effective_root_hwnd, SW_RESTORE);
         }
         SetWindowPos(
-            root_hwnd,
+            effective_root_hwnd,
             HWND_NOTOPMOST,
             root_r.left,
             root_r.top,

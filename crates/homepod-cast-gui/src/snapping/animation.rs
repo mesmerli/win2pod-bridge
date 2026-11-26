@@ -725,6 +725,16 @@ pub unsafe fn collapse_cluster_animated(kind: WindowKind) {
             // 最後最小化主視窗（母體）：由母體代表整個群組單一、流暢地飛向工作列圖示！
             let m_h = root_hwnd_val as HWND;
             if IsWindow(m_h) != 0 {
+                // 若處於全螢幕 HUD 狀態，先撤銷 HWND_TOPMOST，防止 Windows DWM 在最上層留下畸形縮圖快取
+                SetWindowPos(
+                    m_h,
+                    HWND_NOTOPMOST,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                );
                 crate::genie_effect::disable_window_dwm_transitions(m_h);
                 let (hbmp, rect) = crate::genie_effect::capture_window_snapshot(m_h);
                 if hbmp != 0 {

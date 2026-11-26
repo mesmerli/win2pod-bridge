@@ -1086,8 +1086,8 @@ use super::*;
         crate::visualizer::toggle_main_window_hud();
         assert!(crate::visualizer::is_hud_shown());
 
-        // 4. 使用者在全螢幕 HUD 下拖曳移動 MiniPlayer 視窗到新位置（寬 400，高 300 > min_size 295）
-        let new_mini_r = RECT { left: 800, top: 200, right: 1200, bottom: 500 };
+        // 4. 使用者在全螢幕 HUD 下拖曳移動 MiniPlayer 視窗到新位置（寬 460，高 300 > min_size 295）
+        let new_mini_r = RECT { left: 800, top: 200, right: 1260, bottom: 500 };
         crate::window_manager::WindowManager::with_manager(|mgr| {
             mgr.on_user_move(WindowKind::MiniPlayer, new_mini_r);
         });
@@ -1102,7 +1102,7 @@ use super::*;
             let mini = mgr.get_window(WindowKind::MiniPlayer).expect("mini exists");
             assert_eq!(mini.canonical_rect.left, 800);
             assert_eq!(mini.canonical_rect.top, 200);
-            assert_eq!(mini.canonical_rect.right, 1200);
+            assert_eq!(mini.canonical_rect.right, 1260);
             assert_eq!(mini.canonical_rect.bottom, 500);
 
             if let crate::window_entity::WindowLifecycleState::Floating { rect } = mini.state {
