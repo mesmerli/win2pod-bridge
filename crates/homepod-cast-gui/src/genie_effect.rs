@@ -748,7 +748,9 @@ fn locate_taskbar_coord(hwnd: windows_sys::Win32::Foundation::HWND, win_center_x
             if !tasklist.is_null() {
                 let mut rc_task: RECT = std::mem::zeroed();
                 if GetWindowRect(tasklist, &mut rc_task) != 0 && rc_task.right > rc_task.left + 40 {
-                    let clamped_x = win_center_x.clamp(rc_task.left + 24, rc_task.right - 24);
+                    let min_x = rc_task.left + 24;
+                    let max_x = (rc_task.right - 24).max(min_x);
+                    let clamped_x = win_center_x.clamp(min_x, max_x);
                     return (clamped_x, taskbar_y);
                 }
             }
@@ -760,13 +762,13 @@ fn locate_taskbar_coord(hwnd: windows_sys::Win32::Foundation::HWND, win_center_x
             // Left-aligned: Start (~48px) + Search (~260px) + TaskView/Widgets (~80px) = ~390px.
             // App icons start around mon_rect.left + 480. Clamped to safe range avoiding search box.
             let min_x = mon_rect.left + 480;
-            let max_x = (mon_rect.left + 900).min(mon_rect.right - 100);
+            let max_x = (mon_rect.left + 900).min(mon_rect.right - 100).max(min_x);
             win_center_x.clamp(min_x, max_x)
         } else {
             // Center-aligned: Buttons clustered around center of monitor
             let center_x = (mon_rect.left + mon_rect.right) / 2;
             let min_x = (center_x - 160).max(mon_rect.left + 100);
-            let max_x = (center_x + 160).min(mon_rect.right - 100);
+            let max_x = (center_x + 160).min(mon_rect.right - 100).max(min_x);
             win_center_x.clamp(min_x, max_x)
         };
 

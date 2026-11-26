@@ -3399,7 +3399,7 @@ impl FlyoutApp {
                             let target_w = target.default_size()[0];
                             let target_h = target.default_size()[1];
                             self.mascot_pos.x = target_w - 12.0;
-                            self.mascot_pos.y = self.mascot_pos.y.clamp(12.0, target_h - 16.0);
+                            self.mascot_pos.y = self.mascot_pos.y.clamp(12.0, (target_h - 16.0).max(12.0));
                             self.mascot_dir_x = -1.0;
                             self.mascot_bounce = -14.0;
                             self.mascot_squash = 0.65;
@@ -3423,7 +3423,7 @@ impl FlyoutApp {
                             self.mascot_window = target;
                             let target_h = target.default_size()[1];
                             self.mascot_pos.x = 12.0;
-                            self.mascot_pos.y = self.mascot_pos.y.clamp(12.0, target_h - 16.0);
+                            self.mascot_pos.y = self.mascot_pos.y.clamp(12.0, (target_h - 16.0).max(12.0));
                             self.mascot_dir_x = 1.0;
                             self.mascot_bounce = -14.0;
                             self.mascot_squash = 0.65;
@@ -3560,8 +3560,13 @@ impl FlyoutApp {
         // 確保幽靈從眨眼、身體到裙擺的所有像素 100% 完整呈現在視窗邊界內！
         let safe_margin_x = (mascot_size.x * 0.5 + 2.0).ceil();
         let safe_margin_y = (mascot_size.y * 0.5 + 2.0).ceil();
-        final_pos.x = final_pos.x.clamp(min_x + safe_margin_x, min_x + w - safe_margin_x);
-        final_pos.y = final_pos.y.clamp(min_y + safe_margin_y, min_y + h - safe_margin_y);
+        let min_bound_x = min_x + safe_margin_x;
+        let max_bound_x = (min_x + w - safe_margin_x).max(min_bound_x);
+        final_pos.x = final_pos.x.clamp(min_bound_x, max_bound_x);
+
+        let min_bound_y = min_y + safe_margin_y;
+        let max_bound_y = (min_y + h - safe_margin_y).max(min_bound_y);
+        final_pos.y = final_pos.y.clamp(min_bound_y, max_bound_y);
 
         let mascot_rect = egui::Rect::from_center_size(final_pos, mascot_size.max(egui::vec2(28.0, 28.0)));
         let hover_hint = if self.state.license_tier.is_supporter_or_unpackaged() {
@@ -3708,10 +3713,12 @@ impl FlyoutApp {
 
         if self.state.license_tier.is_supporter_or_unpackaged() {
             self.mascot_spectrum_privilege = true; // 啟動右鍵彩蛋特權！
+            let min_spec_x = spec_rect.min.x + 8.0;
+            let max_spec_x = (spec_rect.max.x - 8.0).max(min_spec_x);
             let target_x = pointer_pos
                 .map(|p| p.x)
                 .unwrap_or(spec_rect.center().x)
-                .clamp(spec_rect.min.x + 8.0, spec_rect.max.x - 8.0);
+                .clamp(min_spec_x, max_spec_x);
             let (bar_top, effective) = Self::get_spectrum_bar_surface(
                 spec_rect,
                 target_x,
@@ -4116,9 +4123,11 @@ impl FlyoutApp {
         }
 
         // 3. 實心淺天藍色旋鈕 (圓心精準落在滑桿軌道中心線上)
+        let min_knob_x = slider_rect.min.x + 5.5;
+        let max_knob_x = (slider_rect.max.x - 5.5).max(min_knob_x);
         let knob_x = (track_rect.min.x + track_rect.width() * progress).clamp(
-            slider_rect.min.x + 5.5,
-            slider_rect.max.x - 5.5,
+            min_knob_x,
+            max_knob_x,
         );
         let knob_center = egui::pos2(knob_x, track_rect.center().y);
         let is_knob_active = slider_resp.hovered() || slider_resp.dragged();
