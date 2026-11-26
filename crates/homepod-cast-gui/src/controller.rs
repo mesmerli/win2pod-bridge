@@ -3432,7 +3432,7 @@ pub fn spawn_controller(
                         }
                     }
                     _ = tick_interval.tick() => {
-                        if let Some(ref session) = runtime.session() {
+                        let last_active = if let Some(ref session) = runtime.session() {
                             state.diagnostics.sample_rate = RATE;
                             state.diagnostics.channels = CHANNELS;
                             state.diagnostics.frames_captured = session.counters.frames_captured.load(Ordering::Relaxed);
@@ -3440,32 +3440,35 @@ pub fn spawn_controller(
                             if state.diagnostics.timing_mode != session.timing_desc {
                                 state.diagnostics.timing_mode = session.timing_desc.clone();
                             }
+                            session.counters.last_active_ts.load(Ordering::Relaxed)
+                        } else {
+                            crate::spectrum::get_last_audio_active_ts()
+                        };
 
-                            let last_active = session.counters.last_active_ts.load(Ordering::Relaxed);
-                            let now = monotonic_now_ms();
-                            // Active if non-silent audio was captured within the last 30 seconds and not muted (Scenario B)
-                            let is_active = !state.is_muted && last_active > 0 && now.saturating_sub(last_active) <= 30_000;
-                            if state.is_audio_active != is_active {
-                                state.is_audio_active = is_active;
-                                update_thread_execution_state(state.prevent_sleep, state.is_audio_active);
-                                tracing::info!(
-                                    "Audio activity state changed: active={}, sleep_suppressed={}",
-                                    state.is_audio_active,
-                                    state.prevent_sleep && state.is_audio_active
-                                );
-                            }
+                        let now = monotonic_now_ms();
+                        // Active if non-silent audio was captured within the last 30 seconds and not muted (Scenario B)
+                        let is_active = !state.is_muted && last_active > 0 && now.saturating_sub(last_active) <= 30_000;
+                        if state.is_audio_active != is_active {
+                            state.is_audio_active = is_active;
+                            let is_streaming_and_active = runtime.is_streaming() && state.is_audio_active;
+                            update_thread_execution_state(state.prevent_sleep, is_streaming_and_active);
+                            tracing::info!(
+                                "Audio activity state changed: active={}, sleep_suppressed={}",
+                                state.is_audio_active,
+                                state.prevent_sleep && is_streaming_and_active
+                            );
+                        }
 
-                            // Update shared state in-place without cloning large device/volume structures
-                            if let Ok(mut lock) = shared_state.write() {
-                                lock.diagnostics.sample_rate = RATE;
-                                lock.diagnostics.channels = CHANNELS;
-                                lock.diagnostics.frames_captured = state.diagnostics.frames_captured;
-                                lock.diagnostics.underruns = state.diagnostics.underruns;
-                                if lock.diagnostics.timing_mode != state.diagnostics.timing_mode {
-                                    lock.diagnostics.timing_mode = state.diagnostics.timing_mode.clone();
-                                }
-                                lock.is_audio_active = state.is_audio_active;
+                        // Update shared state in-place without cloning large device/volume structures
+                        if let Ok(mut lock) = shared_state.write() {
+                            lock.diagnostics.sample_rate = RATE;
+                            lock.diagnostics.channels = CHANNELS;
+                            lock.diagnostics.frames_captured = state.diagnostics.frames_captured;
+                            lock.diagnostics.underruns = state.diagnostics.underruns;
+                            if lock.diagnostics.timing_mode != state.diagnostics.timing_mode {
+                                lock.diagnostics.timing_mode = state.diagnostics.timing_mode.clone();
                             }
+                            lock.is_audio_active = state.is_audio_active;
                         }
 
                         if let Some(removed_at) = airpods_both_removed_at {
@@ -4089,20 +4092,8 @@ pub fn spawn_controller(
                             GuiCmd::SetMute(muted) => {
                                 state.is_muted = muted;
                                 set_source_mute(muted);
-                                if let Some(ref mut sess) = runtime.session_mut() {
-                                    let last_active = sess.counters.last_active_ts.load(Ordering::Relaxed);
-                                    let now = monotonic_now_ms();
-                                    let is_active = !muted && last_active > 0 && now.saturating_sub(last_active) <= 30_000;
-                                    if state.is_audio_active != is_active {
-                                        state.is_audio_active = is_active;
-                                        update_thread_execution_state(state.prevent_sleep, state.is_audio_active);
-                                        tracing::info!(
-                                            "Mute changed to {}: audio active={}, sleep_suppressed={}",
-                                            muted,
-                                            state.is_audio_active,
-                                            state.prevent_sleep && state.is_audio_active
-                                        );
-                                    }
+                                let last_active = if let Some(ref mut sess) = runtime.session_mut() {
+                                    sess.counters.last_active_ts.load(Ordering::Relaxed)
                                 } else {
                                     let target_dev = if state.ao_output_device != "default" && !state.ao_output_device.is_empty() {
                                         Some(state.ao_output_device.as_str())
@@ -4110,6 +4101,20 @@ pub fn spawn_controller(
                                         None
                                     };
                                     let _ = set_endpoint_mute(target_dev, muted);
+                                    crate::spectrum::get_last_audio_active_ts()
+                                };
+                                let now = monotonic_now_ms();
+                                let is_active = !muted && last_active > 0 && now.saturating_sub(last_active) <= 30_000;
+                                if state.is_audio_active != is_active {
+                                    state.is_audio_active = is_active;
+                                    let is_streaming_and_active = runtime.is_streaming() && state.is_audio_active;
+                                    update_thread_execution_state(state.prevent_sleep, is_streaming_and_active);
+                                    tracing::info!(
+                                        "Mute changed to {}: audio active={}, sleep_suppressed={}",
+                                        muted,
+                                        state.is_audio_active,
+                                        state.prevent_sleep && is_streaming_and_active
+                                    );
                                 }
                                 broadcast(&state);
                             }

@@ -520,15 +520,50 @@ pub fn run_ao_system_engine(
             }
 
             // Zero-CPU Smart Sleep:
-            // When capture and render devices are the same (Feedback Shield active, renderer is None),
-            // and neither the flyout panel nor the visualizer window is open, there is zero audio output
-            // and zero visible UI. Skip all DSP, FFT, and sample conversions.
-            if is_feedback_risk && renderer.is_none() && !crate::tray::is_any_window_visible() {
-                queue.clear();
-                crate::spectrum::reset_spectrum_levels();
-                crate::controller::set_audio_peak_level(0.0);
-                std::thread::sleep(Duration::from_millis(150));
-                continue;
+            // When capture and render devices are the same (Feedback Shield active, renderer is None):
+            // 1) If neither the flyout panel nor the visualizer window is open, skip all processing.
+            // 2) If windows are visible, but audio has been silent for > 30s, throttle polling to 50ms
+            //    and skip DSP/spectrum while frames remain silent, allowing the CPU & OS to idle.
+            if is_feedback_risk && renderer.is_none() {
+                if !crate::tray::is_any_window_visible() {
+                    queue.clear();
+                    crate::spectrum::reset_spectrum_levels();
+                    crate::controller::set_audio_peak_level(0.0);
+                    std::thread::sleep(Duration::from_millis(150));
+                    continue;
+                } else if !crate::spectrum::is_audio_active_30s() {
+                    if let Ok(_) = capture_client.read_from_device_to_deque(&mut queue) {
+                        let n_frames = queue.len() / bytes_per_frame;
+                        if n_frames > 0 {
+                            let n_bytes = n_frames * bytes_per_frame;
+                            let slice = &queue.make_contiguous()[..n_bytes];
+                            let mut has_audio = false;
+                            for b in slice.chunks_exact(4) {
+                                let f = f32::from_le_bytes([b[0], b[1], b[2], b[3]]);
+                                if f.abs() > 0.001 {
+                                    has_audio = true;
+                                    break;
+                                }
+                            }
+                            if has_audio {
+                                crate::spectrum::record_audio_activity();
+                                // Audio revived! Fall through to DSP & spectrum below immediately
+                            } else {
+                                queue.clear();
+                                crate::spectrum::reset_spectrum_levels();
+                                crate::controller::set_audio_peak_level(0.0);
+                                std::thread::sleep(Duration::from_millis(50));
+                                continue;
+                            }
+                        } else {
+                            std::thread::sleep(Duration::from_millis(50));
+                            continue;
+                        }
+                    } else {
+                        std::thread::sleep(Duration::from_millis(50));
+                        continue;
+                    }
+                }
             }
 
             // Periodic retry to establish / recover LocalAudioRenderer if it failed or was dropped

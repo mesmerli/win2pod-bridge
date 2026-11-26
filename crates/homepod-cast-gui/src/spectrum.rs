@@ -22,6 +22,33 @@ static RAW_SPECTRUM: Mutex<[u8; RAW_SPECTRUM_SIZE]> = Mutex::new([0u8; RAW_SPECT
 static ANALYZER: Mutex<Option<SpectrumAnalyzer>> = Mutex::new(None);
 static WAS_AUDIO_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static IS_SPECTRUM_NEEDED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static LAST_AUDIO_ACTIVE_TS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Get the monotonic timestamp (ms) of the most recent non-silent audio activity.
+pub fn get_last_audio_active_ts() -> u64 {
+    LAST_AUDIO_ACTIVE_TS.load(Ordering::Relaxed)
+}
+
+/// Explicitly record audio activity timestamp and trigger zero-latency wake if needed.
+pub fn record_audio_activity() {
+    let now = crate::controller::monotonic_now_ms().max(1);
+    LAST_AUDIO_ACTIVE_TS.store(now, Ordering::Relaxed);
+    let prev = WAS_AUDIO_ACTIVE.swap(true, Ordering::Relaxed);
+    if !prev {
+        crate::gui::request_ui_repaint();
+        crate::visualizer::wake_visualizer_from_eco();
+    }
+}
+
+/// Checks whether non-silent audio was active within the last 30 seconds.
+pub fn is_audio_active_30s() -> bool {
+    let last = LAST_AUDIO_ACTIVE_TS.load(Ordering::Relaxed);
+    if last == 0 {
+        return false;
+    }
+    let now = crate::controller::monotonic_now_ms();
+    now.saturating_sub(last) <= 30_000
+}
 
 /// Fast path query for the audio DSP thread:
 /// Checks if any spectrum-consuming window is currently active and visible on screen.
@@ -49,7 +76,7 @@ pub fn set_spectrum_needed_override(needed: bool) {
 
 /// Process post-DSP audio samples (interleaved stereo i16) to update real-time spectrum and peak level.
 pub fn process_post_dsp_pcm(samples: &[i16]) {
-    if samples.is_empty() || !is_spectrum_needed() {
+    if samples.is_empty() {
         return;
     }
     let mut mono = Vec::with_capacity(samples.len() / 2);
@@ -80,14 +107,22 @@ pub fn process_post_dsp_pcm(samples: &[i16]) {
 
     let is_active = max_abs > 0.001;
     let prev = WAS_AUDIO_ACTIVE.swap(is_active, Ordering::Relaxed);
-    if is_active && !prev {
-        // Audio transitioned from silence to active: wake UI immediately for zero-latency animation
-        crate::gui::request_ui_repaint();
+    if is_active {
+        LAST_AUDIO_ACTIVE_TS.store(crate::controller::monotonic_now_ms().max(1), Ordering::Relaxed);
+        if !prev {
+            // Audio transitioned from silence to active: wake UI and visualizer immediately for zero-latency animation
+            crate::gui::request_ui_repaint();
+            crate::visualizer::wake_visualizer_from_eco();
+        }
     }
 
     if max_abs < 0.0001 {
         WAS_AUDIO_ACTIVE.store(false, Ordering::Relaxed);
         reset_spectrum_levels();
+        return;
+    }
+
+    if !is_spectrum_needed() {
         return;
     }
 
@@ -274,5 +309,27 @@ mod tests {
 
         // Restore clean state
         set_spectrum_needed_override(false);
+    }
+
+    #[test]
+    fn test_audio_activity_tracking_and_30s_timeout() {
+        let dummy_silence = vec![0i16; 512];
+        process_post_dsp_pcm(&dummy_silence);
+
+        // Feed non-silent samples
+        let active_samples = vec![5000i16; 512];
+        process_post_dsp_pcm(&active_samples);
+
+        assert!(get_last_audio_active_ts() > 0);
+        assert!(is_audio_active_30s());
+
+        // Simulate time advancing 31 seconds
+        let past = crate::controller::monotonic_now_ms().saturating_sub(31_000);
+        LAST_AUDIO_ACTIVE_TS.store(past, Ordering::SeqCst);
+        assert!(!is_audio_active_30s());
+
+        // Call record_audio_activity to wake
+        record_audio_activity();
+        assert!(is_audio_active_30s());
     }
 }

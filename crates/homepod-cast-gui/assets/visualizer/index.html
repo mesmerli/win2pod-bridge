@@ -2313,8 +2313,16 @@ function adapt(ms, now) {
     painter.resolutionScale = AQ.steps[++AQ.i]; AQ.slow = 0; AQ.calm = 0;
   } else if (AQ.i > 0 && AQ.calm > AQ.wait) { painter.resolutionScale = AQ.steps[--AQ.i]; AQ.calm = 0; AQ.upAt = now; }
 }
+let isEcoMode = false;
+let animRunning = true;
 let prev = performance.now(), prevWall = prev;
-renderer.setAnimationLoop(nowMs => {
+
+function renderFrame(nowMs) {
+  if (isEcoMode) {
+    animRunning = false;
+    renderer.setAnimationLoop(null);
+    return;
+  }
   const rawMs = nowMs - prev, dt = Math.min(0.05, rawMs / 1000); prev = nowMs; const now = nowMs / 1000;
   const wall = performance.now(); adapt(wall - prevWall, now); prevWall = wall;   // wall clock: some browsers pace rAF stamps
   listen(now, dt);
@@ -2333,7 +2341,19 @@ renderer.setAnimationLoop(nowMs => {
   BS.forEach((s, n) => { specBars[n].style.transform = `scaleY(${(0.04 + 0.96 * clamp01(s.show)).toFixed(3)})`; });
   [A.beat, Math.max(...BS.map(s => s.tShow)) / T_MAX].forEach((v, i) => { bars[i].style.width = (clamp01(v) * 100).toFixed(1) + '%'; });
   fps.n++; if (nowMs - fps.t0 > 1000) { fps.value = fps.n * 1000 / (nowMs - fps.t0); fps.n = 0; fps.t0 = nowMs; }
-});
+}
+
+window.setEcoMode = function(eco) {
+  isEcoMode = !!eco;
+  if (!isEcoMode && !animRunning) {
+    animRunning = true;
+    prev = performance.now();
+    prevWall = prev;
+    renderer.setAnimationLoop(renderFrame);
+  }
+};
+
+renderer.setAnimationLoop(renderFrame);
 window.__pp = { boom, painter, A, fps, T_MAX, LITE, setPainted, controls,
   BS, BANDS, get t() { return Math.max(...BS.map(s => s.tShow)); }, get ts() { return BS.map(s => s.tShow); }, NB, hold(v) { hold = v; }, flow, setFlow, AQ };
 sendIpc('vis_ready');

@@ -524,6 +524,7 @@ const WM_USER_SET_PIN: u32 = WM_USER + 105;
 const WM_USER_FOCUS_WEBVIEW: u32 = WM_USER + 106;
 const WM_USER_UPDATE_TITLE: u32 = WM_USER + 107;
 const WM_USER_SYNC_OPACITY: u32 = WM_USER + 108;
+const WM_USER_WAKE_ECO: u32 = WM_USER + 109;
 
 pub fn sync_visualizer_opacity(pct: u32, show_hud: bool) {
     let hwnd = get_visualizer_hwnd();
@@ -547,6 +548,17 @@ pub fn focus_visualizer() {
     }
 }
 
+/// Wakes the visualizer from 30s silence Eco Mode with zero latency.
+pub fn wake_visualizer_from_eco() {
+    let hwnd = get_visualizer_hwnd();
+    if !hwnd.is_null() && unsafe { IsWindow(hwnd) != 0 } {
+        unsafe {
+            PostMessageW(hwnd, WM_USER_WAKE_ECO, 0, 0);
+        }
+    }
+}
+
+static VISUALIZER_ECO_MODE: AtomicBool = AtomicBool::new(false);
 static VIS_HOVERED: AtomicBool = AtomicBool::new(false);
 
 pub unsafe fn apply_visualizer_opacity(hwnd: HWND) {
@@ -652,6 +664,8 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
             state.is_fullscreen = true;
             VISUALIZER_FULLSCREEN.store(true, Ordering::SeqCst);
             VISUALIZER_HUD_MAIN_SHOWN.store(false, Ordering::SeqCst);
+            VISUALIZER_ECO_MODE.store(false, Ordering::SeqCst);
+            SetTimer(hwnd, TIMER_AUDIO_SPECTRUM, 16, None);
             crate::snapping::break_dock_bond();
 
             SetWindowLongW(hwnd, GWL_STYLE, (style & !WS_THICKFRAME) as i32);
@@ -689,6 +703,8 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
         state.is_fullscreen = false;
         VISUALIZER_FULLSCREEN.store(false, Ordering::SeqCst);
         VISUALIZER_HUD_MAIN_SHOWN.store(false, Ordering::SeqCst);
+        VISUALIZER_ECO_MODE.store(false, Ordering::SeqCst);
+        SetTimer(hwnd, TIMER_AUDIO_SPECTRUM, 16, None);
         let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
         SetWindowLongW(hwnd, GWL_STYLE, (style | WS_THICKFRAME) as i32);
         SetWindowPlacement(hwnd, &state.saved_placement);
@@ -1195,6 +1211,17 @@ unsafe extern "system" fn visualizer_wnd_proc(
             }
             0
         }
+        WM_USER_WAKE_ECO => {
+            if VISUALIZER_ECO_MODE.swap(false, Ordering::SeqCst) {
+                SetTimer(hwnd, TIMER_AUDIO_SPECTRUM, 16, None);
+                if !state_ptr.is_null() {
+                    if let Some(ref wv) = (*state_ptr).webview {
+                        let _ = wv.evaluate_script("if (typeof window.setEcoMode === 'function') window.setEcoMode(false);");
+                    }
+                }
+            }
+            0
+        }
         WM_SETCURSOR => {
             if let Some(hcursor) = crate::custom_cursor::current_custom_cursor(crate::snapping::WindowKind::Visualizer) {
                 SetCursor(hcursor);
@@ -1446,11 +1473,12 @@ unsafe extern "system" fn visualizer_wnd_proc(
         WM_TIMER => {
             if wparam == TIMER_AUDIO_SPECTRUM {
                 let mut pt = POINT { x: 0, y: 0 };
+                let mut inside = false;
                 if GetCursorPos(&mut pt) != 0 {
                     let mut rc = RECT { left: 0, top: 0, right: 0, bottom: 0 };
                     if GetWindowRect(hwnd, &mut rc) != 0 {
                         let in_rect = pt.x >= rc.left && pt.x < rc.right && pt.y >= rc.top && pt.y < rc.bottom;
-                        let inside = if in_rect {
+                        inside = if in_rect {
                             let w = WindowFromPoint(pt);
                             !w.is_null() && (w == hwnd || GetAncestor(w, GA_ROOT) == hwnd)
                         } else {
@@ -1462,6 +1490,38 @@ unsafe extern "system" fn visualizer_wnd_proc(
                         }
                         apply_visualizer_opacity(hwnd);
                     }
+                }
+
+                // Smart Eco Mode:
+                // When visualizer is not fullscreen, mouse is not hovering, and audio has been silent for > 30s,
+                // pause 3D WebGL rendering loop and switch timer to low frequency (250ms).
+                // This stops all GPU presents and allows Windows to enter natural display/system sleep!
+                let is_fullscreen = is_visualizer_fullscreen();
+                let is_audio_active = crate::spectrum::is_audio_active_30s();
+                let should_eco = !is_fullscreen && !inside && !is_audio_active;
+                let was_eco = VISUALIZER_ECO_MODE.load(Ordering::Relaxed);
+
+                if should_eco != was_eco {
+                    VISUALIZER_ECO_MODE.store(should_eco, Ordering::SeqCst);
+                    if should_eco {
+                        SetTimer(hwnd, TIMER_AUDIO_SPECTRUM, 250, None);
+                        if !state_ptr.is_null() {
+                            if let Some(ref wv) = (*state_ptr).webview {
+                                let _ = wv.evaluate_script("if (typeof window.setEcoMode === 'function') window.setEcoMode(true);");
+                            }
+                        }
+                    } else {
+                        SetTimer(hwnd, TIMER_AUDIO_SPECTRUM, 16, None);
+                        if !state_ptr.is_null() {
+                            if let Some(ref wv) = (*state_ptr).webview {
+                                let _ = wv.evaluate_script("if (typeof window.setEcoMode === 'function') window.setEcoMode(false);");
+                            }
+                        }
+                    }
+                }
+
+                if should_eco {
+                    return 0;
                 }
 
                 if !state_ptr.is_null() && !VISUALIZER_CLOSING.load(Ordering::SeqCst) {
