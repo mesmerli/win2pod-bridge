@@ -6627,14 +6627,25 @@ impl FlyoutApp {
 
                 // Prevent Sleep
                 let mut prevent_sleep = self.state.prevent_sleep;
-                let cb = ui.checkbox(
-                    &mut prevent_sleep,
-                    egui::RichText::new(lang.prevent_sleep_checkbox()).size(12.0),
-                );
-                if cb.changed() {
-                    let _ = self.cmd_tx.send_blocking(GuiCmd::SetPreventSleep(prevent_sleep));
-                }
-                cb.on_hover_text(lang.prevent_sleep_tooltip());
+                ui.horizontal(|ui| {
+                    let cb = ui.checkbox(
+                        &mut prevent_sleep,
+                        egui::RichText::new(lang.prevent_sleep_checkbox()).size(12.0),
+                    );
+                    if cb.changed() {
+                        let _ = self.cmd_tx.send_blocking(GuiCmd::SetPreventSleep(prevent_sleep));
+                    }
+                    cb.on_hover_text(lang.prevent_sleep_tooltip());
+
+                    let (badge_text, badge_color) = match self.state.power_state {
+                        crate::power::PowerState::AwakeStreaming => ("● AWAKE", egui::Color32::from_rgb(76, 175, 80)),
+                        crate::power::PowerState::AwakePresentation => ("● DISPLAY AWAKE", egui::Color32::from_rgb(33, 150, 243)),
+                        crate::power::PowerState::EcoSilent => ("● ECO (SILENT >30S)", egui::Color32::from_rgb(255, 152, 0)),
+                        crate::power::PowerState::Standby => ("○ STANDBY", egui::Color32::from_rgb(158, 158, 158)),
+                        crate::power::PowerState::Suspended => ("○ SUSPENDED", egui::Color32::from_rgb(120, 120, 120)),
+                    };
+                    ui.label(egui::RichText::new(badge_text).size(10.5).color(badge_color));
+                });
 
                 ui.add_space(2.0);
                 ui.horizontal(|ui| {

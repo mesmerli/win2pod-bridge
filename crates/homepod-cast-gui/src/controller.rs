@@ -180,6 +180,7 @@ pub struct ControllerState {
     pub last_connected_name: Option<String>,
     pub device_volumes: std::collections::HashMap<String, f32>,
     pub is_audio_active: bool,
+    pub power_state: crate::power::PowerState,
     pub notice_message: Option<(NoticeKind, std::time::Instant)>,
     pub hotkey: (u32, u32),
     pub language: Language,
@@ -306,6 +307,7 @@ impl Default for ControllerState {
             last_connected_name: load_last_connected_device().map(|t| t.name),
             device_volumes: std::collections::HashMap::new(),
             is_audio_active: false,
+            power_state: crate::power::PowerState::Standby,
             notice_message: None,
             hotkey: load_hotkey(),
             language: load_language(),
@@ -466,6 +468,7 @@ pub enum GuiCmd {
     SetAirPodsAutoPause(bool),
     SetWindowSnapping(bool),
     SetSnapDistance(i32),
+    VisualizerFullscreenChanged(bool),
     AirPodsEventReceived(crate::airpods::AirPodsEvent),
     SetAirPlayReceiverEnabled(bool),
     SetAirPlayReceiverName(String),
@@ -712,6 +715,27 @@ unsafe impl Sync for ActiveLocalEndpointListener {}
 
 static LOCAL_ENDPOINT_LISTENER: std::sync::Mutex<Option<ActiveLocalEndpointListener>> = std::sync::Mutex::new(None);
 static CONTROLLER_CMD_TX: std::sync::OnceLock<async_channel::Sender<GuiCmd>> = std::sync::OnceLock::new();
+
+/// Dispatches a command to the controller event loop if available
+pub fn send_controller_cmd(cmd: GuiCmd) -> bool {
+    if let Some(tx) = CONTROLLER_CMD_TX.get() {
+        tx.try_send(cmd).is_ok()
+    } else {
+        false
+    }
+}
+
+static POWER_ARBITER: std::sync::Mutex<Option<crate::power::PowerArbiter>> = std::sync::Mutex::new(None);
+
+/// Dispatches an event to the dedicated Power Arbiter and returns the new state if initialized
+pub fn dispatch_power_event(event: crate::power::PowerEvent) -> Option<crate::power::PowerState> {
+    if let Ok(mut guard) = POWER_ARBITER.lock() {
+        if let Some(ref mut arbiter) = *guard {
+            return Some(arbiter.dispatch_event(event));
+        }
+    }
+    None
+}
 
 /// Returns true if a device friendly name matches AirPods/Beats.
 pub fn is_airpods_playback_device(name: &str) -> bool {
@@ -2540,18 +2564,6 @@ impl Drop for Session {
     fn drop(&mut self) {}
 }
 
-fn update_thread_execution_state(prevent_sleep: bool, is_streaming: bool) {
-    unsafe {
-        let flags = if is_streaming && prevent_sleep {
-            windows_sys::Win32::System::Power::ES_CONTINUOUS
-                | windows_sys::Win32::System::Power::ES_SYSTEM_REQUIRED
-        } else {
-            windows_sys::Win32::System::Power::ES_CONTINUOUS
-        };
-        windows_sys::Win32::System::Power::SetThreadExecutionState(flags);
-    }
-}
-
 /// Helper to deduplicate repeated nested error messages in anyhow error chains
 fn format_clean_error(err: &anyhow::Error) -> String {
     let mut messages: Vec<String> = Vec::new();
@@ -2740,10 +2752,14 @@ async fn transition_to_local_route(
     state.connected_device_ids.clear();
     state.device_volumes.clear();
     state.diagnostics = StreamDiagnostics::default();
-    update_thread_execution_state(state.prevent_sleep, false);
 
     let has_target_device = !state.ao_output_device.is_empty() && state.ao_output_device != "default";
-    let preliminary_status = if state.auto_ao_mode || has_target_device {
+    let is_ao_active = state.auto_ao_mode || has_target_device;
+    if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::RouteActiveChanged(is_ao_active)) {
+        state.power_state = ps;
+    }
+
+    let preliminary_status = if is_ao_active {
         let out_device_name = if has_target_device {
             state.audio_devices
                 .iter()
@@ -3124,6 +3140,11 @@ pub fn spawn_controller(
             });
 
             let _ = CONTROLLER_CMD_TX.set(cmd_tx.clone());
+            let arbiter = crate::power::PowerArbiter::new(state.prevent_sleep);
+            state.power_state = arbiter.current_state();
+            if let Ok(mut g) = POWER_ARBITER.lock() {
+                *g = Some(arbiter);
+            }
             ensure_notification_client_registered();
 
             if let Ok(enumerator) = wasapi::DeviceEnumerator::new() {
@@ -3297,7 +3318,9 @@ pub fn spawn_controller(
                                             state.diagnostics.timing_mode = sess.timing_desc.clone();
                                             state.notice_message = Some((NoticeKind::ConnectionRestored(dead_title.clone()), std::time::Instant::now()));
                                             runtime = AudioRouteRuntime::Streaming(sess);
-                                            update_thread_execution_state(state.prevent_sleep, true);
+                                            if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::RouteActiveChanged(true)) {
+                                                state.power_state = ps;
+                                            }
                                             broadcast(&state);
                                             recovered = true;
                                             break;
@@ -3374,13 +3397,12 @@ pub fn spawn_controller(
                         let is_active = !state.is_muted && last_active > 0 && now.saturating_sub(last_active) <= 30_000;
                         if state.is_audio_active != is_active {
                             state.is_audio_active = is_active;
-                            let is_streaming_and_active = runtime.is_streaming() && state.is_audio_active;
-                            update_thread_execution_state(state.prevent_sleep, is_streaming_and_active);
-                            tracing::info!(
-                                "Audio activity state changed: active={}, sleep_suppressed={}",
-                                state.is_audio_active,
-                                state.prevent_sleep && is_streaming_and_active
-                            );
+                            if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::AudioActivityChanged {
+                                is_active,
+                                peak_level: get_audio_peak_level(),
+                            }) {
+                                state.power_state = ps;
+                            }
                         }
 
                         // Update shared state in-place without cloning large device/volume structures
@@ -3761,9 +3783,11 @@ pub fn spawn_controller(
                                             restore_original_speaker_state();
                                         }
 
-                                        // Update power keepalive (initially false until audio activity is detected)
+                                        // Update power keepalive via Power Arbiter
                                         state.is_audio_active = false;
-                                        update_thread_execution_state(state.prevent_sleep, false);
+                                        if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::RouteActiveChanged(true)) {
+                                            state.power_state = ps;
+                                        }
 
                                         save_last_connected_device(&current_connected_devices, &display_title);
                                         save_last_route_type(LastRouteType::HomePod);
@@ -4024,14 +4048,9 @@ pub fn spawn_controller(
                                 let is_active = !muted && last_active > 0 && now.saturating_sub(last_active) <= 30_000;
                                 if state.is_audio_active != is_active {
                                     state.is_audio_active = is_active;
-                                    let is_streaming_and_active = runtime.is_streaming() && state.is_audio_active;
-                                    update_thread_execution_state(state.prevent_sleep, is_streaming_and_active);
-                                    tracing::info!(
-                                        "Mute changed to {}: audio active={}, sleep_suppressed={}",
-                                        muted,
-                                        state.is_audio_active,
-                                        state.prevent_sleep && is_streaming_and_active
-                                    );
+                                }
+                                if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::MuteChanged(muted)) {
+                                    state.power_state = ps;
                                 }
                                 broadcast(&state);
                             }
@@ -4074,8 +4093,9 @@ pub fn spawn_controller(
                             GuiCmd::SetPreventSleep(enabled) => {
                                 state.prevent_sleep = enabled;
                                 save_prevent_sleep(enabled);
-                                let is_active = runtime.is_streaming() && state.is_audio_active;
-                                update_thread_execution_state(state.prevent_sleep, is_active);
+                                if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::UserPreventSleepChanged(enabled)) {
+                                    state.power_state = ps;
+                                }
                                 broadcast(&state);
                             }
                             GuiCmd::SetLowLatency(enabled) => {
@@ -4090,7 +4110,9 @@ pub fn spawn_controller(
                                             state.status = DeviceStatus::Streaming;
                                             state.diagnostics.timing_mode = sess.timing_desc.clone();
                                             runtime = AudioRouteRuntime::Streaming(sess);
-                                            update_thread_execution_state(state.prevent_sleep, true);
+                                            if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::RouteActiveChanged(true)) {
+                                                state.power_state = ps;
+                                            }
                                             if state.auto_mute_speakers && state.license_tier.is_auto_mute_allowed() {
                                                 record_and_configure_streaming_source(&state.audio_source);
                                             }
@@ -4264,6 +4286,12 @@ pub fn spawn_controller(
                                     crate::snapping::break_dock_bond();
                                 }
                                 broadcast(&state);
+                            }
+                            GuiCmd::VisualizerFullscreenChanged(fullscreen) => {
+                                if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::VisualizerFullscreenChanged(fullscreen)) {
+                                    state.power_state = ps;
+                                    broadcast(&state);
+                                }
                             }
                             GuiCmd::SetAirPlayReceiverEnabled(enabled) => {
                                 state.airplay_receiver_enabled = enabled;
@@ -4849,10 +4877,15 @@ pub fn spawn_controller(
 
                                 crate::spectrum::reset_spectrum_levels();
                                 set_audio_peak_level(0.0);
-                                update_thread_execution_state(state.prevent_sleep, false);
+                                if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::SystemSuspend) {
+                                    state.power_state = ps;
+                                }
                             }
                             GuiCmd::SystemResume => {
                                 tracing::info!("Power event: System resume from sleep. Reconnecting HomePod stream...");
+                                if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::SystemResume) {
+                                    state.power_state = ps;
+                                }
                                 if state.auto_mute_speakers && state.license_tier.is_auto_mute_allowed() && (state.selected_audio_device == "default" || state.selected_audio_device.is_empty()) {
                                     let guard = match SAVED_ENDPOINT_STATES.lock() {
                                         Ok(g) => g,
@@ -4878,7 +4911,6 @@ pub fn spawn_controller(
                                     let sel_source = state.audio_source.clone();
                                     let dev_vols = state.device_volumes.clone();
                                     let low_lat = state.low_latency;
-                                    let prevent_slp = state.prevent_sleep;
                                     let auto_mute = state.auto_mute_speakers && state.license_tier.is_auto_mute_allowed();
                                     let eq_enabled = state.eq_enabled;
                                     let eq_gains = state.eq_gains;
@@ -4926,7 +4958,9 @@ pub fn spawn_controller(
                                                 state.diagnostics.timing_mode = sess.timing_desc.clone();
                                                 state.notice_message = Some((NoticeKind::ResumeRestored(display_title.clone()), std::time::Instant::now()));
                                                 runtime = AudioRouteRuntime::Streaming(sess);
-                                                update_thread_execution_state(prevent_slp, true);
+                                                if let Some(ps) = dispatch_power_event(crate::power::PowerEvent::RouteActiveChanged(true)) {
+                                                    state.power_state = ps;
+                                                }
                                                 if auto_mute {
                                                     record_and_configure_streaming_source(&sel_source);
                                                 }
@@ -5004,7 +5038,7 @@ pub fn spawn_controller(
                                 runtime.stop().await;
                                 restore_original_speaker_mute();
                                 restore_initial_default_device();
-                                update_thread_execution_state(state.prevent_sleep, false);
+                                dispatch_power_event(crate::power::PowerEvent::RouteActiveChanged(false));
                                 tracing::info!("[Controller] Shutdown complete, exiting cleanly.");
                                 std::process::exit(0);
                             }

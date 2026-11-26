@@ -679,11 +679,7 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
                 SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
             );
             apply_visualizer_opacity(hwnd);
-            windows_sys::Win32::System::Power::SetThreadExecutionState(
-                windows_sys::Win32::System::Power::ES_CONTINUOUS
-                    | windows_sys::Win32::System::Power::ES_SYSTEM_REQUIRED
-                    | windows_sys::Win32::System::Power::ES_DISPLAY_REQUIRED,
-            );
+            crate::controller::send_controller_cmd(crate::controller::GuiCmd::VisualizerFullscreenChanged(true));
 
             if let Some(ref wv) = state.webview {
                 let _ = wv.evaluate_script("document.body.classList.add('fullscreen');");
@@ -724,9 +720,7 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
         if let Some(ref wv) = state.webview {
             let _ = wv.evaluate_script("document.body.classList.remove('fullscreen');");
         }
-        windows_sys::Win32::System::Power::SetThreadExecutionState(
-            windows_sys::Win32::System::Power::ES_CONTINUOUS,
-        );
+        crate::controller::send_controller_cmd(crate::controller::GuiCmd::VisualizerFullscreenChanged(false));
 
         let main_hwnd = crate::tray::get_main_hwnd();
         if !main_hwnd.is_null() {
@@ -1587,9 +1581,7 @@ unsafe extern "system" fn visualizer_wnd_proc(
             crate::snapping::break_dock_bond();
             restore_hud_pinned_states();
             VISUALIZER_FULLSCREEN.store(false, Ordering::SeqCst);
-            windows_sys::Win32::System::Power::SetThreadExecutionState(
-                windows_sys::Win32::System::Power::ES_CONTINUOUS,
-            );
+            crate::controller::send_controller_cmd(crate::controller::GuiCmd::VisualizerFullscreenChanged(false));
             KillTimer(hwnd, TIMER_AUDIO_SPECTRUM);
             if let Ok(mut applied) = APPLIED_LANG.lock() {
                 *applied = None;
