@@ -22,5 +22,6 @@ pub mod snapping;
 pub mod spectrum;
 pub mod tray;
 pub mod visualizer;
+pub mod visualizer_ipc;
 pub mod window_entity;
 pub mod window_manager;

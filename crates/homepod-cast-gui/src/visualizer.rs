@@ -35,6 +35,8 @@ pub fn restore_hud_pinned_states() {
     }
 }
 
+use crate::visualizer_ipc::{HostToWebMessage, WebToHostCommand};
+
 pub fn reset_hud_main_shown() {
     VISUALIZER_HUD_MAIN_SHOWN.store(false, Ordering::SeqCst);
 }
@@ -49,6 +51,13 @@ pub fn post_web_message_json(wv: &wry::WebView, json_str: &str) {
     let holder = webview2_com::CoTaskMemPWSTR::from(json_str);
     unsafe {
         let _ = wv.webview().PostWebMessageAsJson(*holder.as_ref().as_pcwstr());
+    }
+}
+
+/// 透過強型別契約發送訊息至 WebView2 前端（零動態字典分配，編譯期型別安全）
+pub fn post_web_message(wv: &wry::WebView, msg: &HostToWebMessage) {
+    if let Ok(json_str) = serde_json::to_string(msg) {
+        post_web_message_json(wv, &json_str);
     }
 }
 
@@ -416,12 +425,13 @@ pub unsafe fn update_visualizer_title(hwnd: HWND) {
         if !state_ptr.is_null() {
             if let Some(ref wv) = (*state_ptr).webview {
                 let is_docked = crate::snapping::is_main_in_cluster(crate::snapping::WindowKind::Visualizer);
-                let msg = serde_json::json!({
-                    "type": "title_badge",
-                    "badge": badge_str,
-                    "docked": is_docked
-                });
-                post_web_message_json(wv, &msg.to_string());
+                post_web_message(
+                    wv,
+                    &HostToWebMessage::TitleBadge {
+                        badge: badge_str,
+                        docked: is_docked,
+                    },
+                );
             }
         }
     } else {
@@ -618,12 +628,13 @@ unsafe fn set_pin(hwnd: HWND, state: &mut VisualizerState, pinned: bool) {
     }
 
     if let Some(ref wv) = state.webview {
-        let msg = serde_json::json!({
-            "type": "vis_pin_changed",
-            "pinned": state.is_pinned,
-            "from_host": true
-        });
-        post_web_message_json(wv, &msg.to_string());
+        post_web_message(
+            wv,
+            &HostToWebMessage::VisPinChanged {
+                pinned: state.is_pinned,
+                from_host: true,
+            },
+        );
     }
 }
 
@@ -685,11 +696,10 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
             crate::controller::send_controller_cmd(crate::controller::GuiCmd::VisualizerFullscreenChanged(true));
 
             if let Some(ref wv) = state.webview {
-                let msg = serde_json::json!({
-                    "type": "vis_fullscreen_changed",
-                    "fullscreen": true
-                });
-                post_web_message_json(wv, &msg.to_string());
+                post_web_message(
+                    wv,
+                    &HostToWebMessage::VisFullscreenChanged { fullscreen: true },
+                );
             }
 
             hide_hud_cluster();
@@ -728,11 +738,10 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
         apply_visualizer_theme(hwnd);
         update_visualizer_title(hwnd);
         if let Some(ref wv) = state.webview {
-            let msg = serde_json::json!({
-                "type": "vis_fullscreen_changed",
-                "fullscreen": false
-            });
-            post_web_message_json(wv, &msg.to_string());
+            post_web_message(
+                wv,
+                &HostToWebMessage::VisFullscreenChanged { fullscreen: false },
+            );
         }
         crate::controller::send_controller_cmd(crate::controller::GuiCmd::VisualizerFullscreenChanged(false));
 
@@ -765,11 +774,12 @@ unsafe fn toggle_fullscreen(hwnd: HWND, state: &mut VisualizerState) {
             size: Size::Physical(PhysicalSize::new(w, h)),
         });
 
-        let msg = serde_json::json!({
-            "type": "vis_fullscreen_changed",
-            "fullscreen": state.is_fullscreen
-        });
-        post_web_message_json(wv, &msg.to_string());
+        post_web_message(
+            wv,
+            &HostToWebMessage::VisFullscreenChanged {
+                fullscreen: state.is_fullscreen,
+            },
+        );
     }
 }
 
@@ -922,81 +932,88 @@ unsafe fn run_visualizer_window() {
         })
         .with_ipc_handler(move |msg| {
             let body = msg.body();
-            if body.contains("close_cluster") {
-                crate::gui::request_close_cluster(crate::snapping::WindowKind::Visualizer);
-            } else if body.contains("close") {
-                unsafe {
-                    PostMessageW(hwnd_capture as HWND, WM_CLOSE, 0, 0);
-                }
-            } else if body.contains("minimize_solo") {
-                unsafe {
-                    crate::snapping::minimize_window_solo(crate::snapping::WindowKind::Visualizer);
-                }
-            } else if body.contains("minimize") {
-                unsafe {
-                    PostMessageW(hwnd_capture as HWND, WM_SYSCOMMAND, SC_MINIMIZE as usize, 0);
-                }
-            } else if body.contains("start_drag") {
-                unsafe {
-                    windows_sys::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture();
-                    SendMessageW(hwnd_capture as HWND, WM_NCLBUTTONDOWN, HTCAPTION as usize, 0);
-                }
-            } else if body.contains("fullscreen") {
-                unsafe {
-                    PostMessageW(hwnd_capture as HWND, WM_USER_TOGGLE_FULLSCREEN, 0, 0);
-                }
-            } else if body.contains("toggle_pin") {
-                unsafe {
-                    PostMessageW(hwnd_capture as HWND, WM_USER_TOGGLE_PIN, 0, 0);
-                }
-            } else if body.contains("vis_ready") || body.contains("ready") {
-                tracing::info!("visualizer IPC: webview ready signal received");
-                unsafe {
-                    update_visualizer_title(hwnd_capture as HWND);
-                }
-            } else if body.contains("show_main") {
-                tracing::info!("visualizer IPC: show_main received");
-                if crate::visualizer::is_visualizer_fullscreen() {
-                    toggle_main_window_hud();
+            let cmd = match WebToHostCommand::parse(body) {
+                Some(c) => c,
+                None => {
+                    tracing::warn!("visualizer IPC: unrecognized command: {}", body);
                     return;
                 }
-                unsafe {
-                    crate::snapping::handle_home_summon_request(crate::snapping::WindowKind::Visualizer);
+            };
+            match cmd {
+                WebToHostCommand::CloseCluster => {
+                    crate::gui::request_close_cluster(crate::snapping::WindowKind::Visualizer);
                 }
-            } else if body.contains("wake_ghost_solo") {
-                crate::snapping::wake_single_window_ghost(crate::snapping::WindowKind::Visualizer);
-                unsafe {
-                    PostMessageW(hwnd_capture as HWND, WM_USER_SET_PIN, 1, 0);
-                    apply_visualizer_opacity(hwnd_capture as HWND);
+                WebToHostCommand::Close => unsafe {
+                    PostMessageW(hwnd_capture as HWND, WM_CLOSE, 0, 0);
+                },
+                WebToHostCommand::MinimizeSolo => unsafe {
+                    crate::snapping::minimize_window_solo(crate::snapping::WindowKind::Visualizer);
+                },
+                WebToHostCommand::Minimize => unsafe {
+                    PostMessageW(hwnd_capture as HWND, WM_SYSCOMMAND, SC_MINIMIZE as usize, 0);
+                },
+                WebToHostCommand::StartDrag => unsafe {
+                    windows_sys::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture();
+                    SendMessageW(hwnd_capture as HWND, WM_NCLBUTTONDOWN, HTCAPTION as usize, 0);
+                },
+                WebToHostCommand::ToggleFullscreen => unsafe {
+                    PostMessageW(hwnd_capture as HWND, WM_USER_TOGGLE_FULLSCREEN, 0, 0);
+                },
+                WebToHostCommand::TogglePin => unsafe {
+                    PostMessageW(hwnd_capture as HWND, WM_USER_TOGGLE_PIN, 0, 0);
+                },
+                WebToHostCommand::VisReady => {
+                    tracing::info!("visualizer IPC: webview ready signal received");
+                    unsafe {
+                        update_visualizer_title(hwnd_capture as HWND);
+                    }
                 }
-            } else if body.contains("wake_ghost") {
-                let role = crate::snapping::get_window_role(crate::snapping::WindowKind::Visualizer);
-                if role == crate::snapping::WindowRole::Standalone {
+                WebToHostCommand::ShowMain => {
+                    tracing::info!("visualizer IPC: show_main received");
+                    if crate::visualizer::is_visualizer_fullscreen() {
+                        toggle_main_window_hud();
+                        return;
+                    }
+                    unsafe {
+                        crate::snapping::handle_home_summon_request(crate::snapping::WindowKind::Visualizer);
+                    }
+                }
+                WebToHostCommand::WakeGhostSolo => {
                     crate::snapping::wake_single_window_ghost(crate::snapping::WindowKind::Visualizer);
-                } else {
-                    crate::snapping::wake_cluster_ghost(crate::snapping::WindowKind::Visualizer);
+                    unsafe {
+                        PostMessageW(hwnd_capture as HWND, WM_USER_SET_PIN, 1, 0);
+                        apply_visualizer_opacity(hwnd_capture as HWND);
+                    }
                 }
-                unsafe {
-                    PostMessageW(hwnd_capture as HWND, WM_USER_SET_PIN, 1, 0);
-                    apply_visualizer_opacity(hwnd_capture as HWND);
+                WebToHostCommand::WakeGhost => {
+                    let role = crate::snapping::get_window_role(crate::snapping::WindowKind::Visualizer);
+                    if role == crate::snapping::WindowRole::Standalone {
+                        crate::snapping::wake_single_window_ghost(crate::snapping::WindowKind::Visualizer);
+                    } else {
+                        crate::snapping::wake_cluster_ghost(crate::snapping::WindowKind::Visualizer);
+                    }
+                    unsafe {
+                        PostMessageW(hwnd_capture as HWND, WM_USER_SET_PIN, 1, 0);
+                        apply_visualizer_opacity(hwnd_capture as HWND);
+                    }
                 }
-            } else if body.contains("toggle_opacity_solo") {
-                let _next_pct = crate::snapping::toggle_single_window_opacity_quick(crate::snapping::WindowKind::Visualizer);
-                let is_pinned = crate::snapping::is_window_pinned(crate::snapping::WindowKind::Visualizer);
-                unsafe {
-                    PostMessageW(hwnd_capture as HWND, WM_USER_SET_PIN, if is_pinned { 1 } else { 0 }, 0);
-                    apply_visualizer_opacity(hwnd_capture as HWND);
+                WebToHostCommand::ToggleOpacitySolo => {
+                    let _next_pct = crate::snapping::toggle_single_window_opacity_quick(crate::snapping::WindowKind::Visualizer);
+                    let is_pinned = crate::snapping::is_window_pinned(crate::snapping::WindowKind::Visualizer);
+                    unsafe {
+                        PostMessageW(hwnd_capture as HWND, WM_USER_SET_PIN, if is_pinned { 1 } else { 0 }, 0);
+                        apply_visualizer_opacity(hwnd_capture as HWND);
+                    }
                 }
-            } else if body.contains("toggle_opacity") {
-                let _next_pct = crate::snapping::toggle_cluster_opacity_quick(crate::snapping::WindowKind::Visualizer);
-                let is_pinned = crate::snapping::is_window_pinned(crate::snapping::WindowKind::Visualizer);
-                unsafe {
-                    PostMessageW(hwnd_capture as HWND, WM_USER_SET_PIN, if is_pinned { 1 } else { 0 }, 0);
-                    apply_visualizer_opacity(hwnd_capture as HWND);
+                WebToHostCommand::ToggleOpacity => {
+                    let _next_pct = crate::snapping::toggle_cluster_opacity_quick(crate::snapping::WindowKind::Visualizer);
+                    let is_pinned = crate::snapping::is_window_pinned(crate::snapping::WindowKind::Visualizer);
+                    unsafe {
+                        PostMessageW(hwnd_capture as HWND, WM_USER_SET_PIN, if is_pinned { 1 } else { 0 }, 0);
+                        apply_visualizer_opacity(hwnd_capture as HWND);
+                    }
                 }
-            } else if body.starts_with("set_opacity_solo:") {
-                let val_str = body.trim_start_matches("set_opacity_solo:");
-                if let Ok(pct) = val_str.parse::<f32>() {
+                WebToHostCommand::SetOpacitySolo { pct } => {
                     let op = (pct / 100.0).clamp(0.2, 1.0);
                     crate::snapping::set_single_window_opacity_tuning(crate::snapping::WindowKind::Visualizer, op);
                     if op < 1.0 && !crate::snapping::is_window_pinned(crate::snapping::WindowKind::Visualizer) {
@@ -1008,9 +1025,7 @@ unsafe fn run_visualizer_window() {
                         apply_visualizer_opacity(hwnd_capture as HWND);
                     }
                 }
-            } else if body.starts_with("set_opacity:") {
-                let val_str = body.trim_start_matches("set_opacity:");
-                if let Ok(pct) = val_str.parse::<f32>() {
+                WebToHostCommand::SetOpacity { pct } => {
                     let op = (pct / 100.0).clamp(0.2, 1.0);
                     crate::snapping::set_cluster_opacity(crate::snapping::WindowKind::Visualizer, op);
                     if op < 1.0 && !crate::snapping::is_window_pinned(crate::snapping::WindowKind::Visualizer) {
@@ -1022,38 +1037,37 @@ unsafe fn run_visualizer_window() {
                         apply_visualizer_opacity(hwnd_capture as HWND);
                     }
                 }
-            } else if body.starts_with("opacity_menu_open:") {
-                let val_str = body.trim_start_matches("opacity_menu_open:");
-                let is_open = val_str == "1" || val_str == "true";
-                crate::snapping::set_opacity_menu_open(crate::snapping::WindowKind::Visualizer, is_open);
-                unsafe {
-                    apply_visualizer_opacity(hwnd_capture as HWND);
+                WebToHostCommand::OpacityMenuOpen { is_open } => {
+                    crate::snapping::set_opacity_menu_open(crate::snapping::WindowKind::Visualizer, is_open);
+                    unsafe {
+                        apply_visualizer_opacity(hwnd_capture as HWND);
+                    }
                 }
-            } else if body.starts_with("set_hover_peek:") {
-                let val_str = body.trim_start_matches("set_hover_peek:");
-                let enabled = val_str == "1" || val_str == "true";
-                crate::snapping::set_hover_peek_enabled(enabled);
-                unsafe {
-                    apply_visualizer_opacity(hwnd_capture as HWND);
+                WebToHostCommand::SetHoverPeek { enabled } => {
+                    crate::snapping::set_hover_peek_enabled(enabled);
+                    unsafe {
+                        apply_visualizer_opacity(hwnd_capture as HWND);
+                    }
                 }
-            } else if body.starts_with("suppress_peek:") {
-                let val_str = body.trim_start_matches("suppress_peek:");
-                let suppress = val_str == "1" || val_str == "true";
-                if suppress {
-                    crate::snapping::trigger_cluster_opacity_tuning(crate::snapping::WindowKind::Visualizer);
+                WebToHostCommand::SuppressPeek { suppress } => {
+                    if suppress {
+                        crate::snapping::trigger_cluster_opacity_tuning(crate::snapping::WindowKind::Visualizer);
+                    }
+                    unsafe {
+                        apply_visualizer_opacity(hwnd_capture as HWND);
+                    }
                 }
-                unsafe {
-                    apply_visualizer_opacity(hwnd_capture as HWND);
+                WebToHostCommand::MouseEnter => {
+                    VIS_HOVERED.store(true, Ordering::SeqCst);
+                    unsafe {
+                        apply_visualizer_opacity(hwnd_capture as HWND);
+                    }
                 }
-            } else if body.contains("vis_mouse_enter") {
-                VIS_HOVERED.store(true, Ordering::SeqCst);
-                unsafe {
-                    apply_visualizer_opacity(hwnd_capture as HWND);
-                }
-            } else if body.contains("vis_mouse_leave") {
-                VIS_HOVERED.store(false, Ordering::SeqCst);
-                unsafe {
-                    apply_visualizer_opacity(hwnd_capture as HWND);
+                WebToHostCommand::MouseLeave => {
+                    VIS_HOVERED.store(false, Ordering::SeqCst);
+                    unsafe {
+                        apply_visualizer_opacity(hwnd_capture as HWND);
+                    }
                 }
             }
         });
@@ -1099,14 +1113,15 @@ unsafe fn run_visualizer_window() {
                 crate::snapping::WindowRole::ClusterSlave => "📎",
                 crate::snapping::WindowRole::Standalone => "",
             };
-            let msg = serde_json::json!({
-                "type": "init_state",
-                "lang": lang_code,
-                "pinned": initial_pinned,
-                "badge": badge_str,
-                "docked": init_docked
-            });
-            post_web_message_json(&wv, &msg.to_string());
+            post_web_message(
+                &wv,
+                &HostToWebMessage::InitState {
+                    lang: &lang_code,
+                    pinned: initial_pinned,
+                    badge: badge_str,
+                    docked: init_docked,
+                },
+            );
             if let Ok(mut applied) = APPLIED_LANG.lock() {
                 *applied = Some(lang_code.clone());
             }
@@ -1185,11 +1200,10 @@ unsafe extern "system" fn visualizer_wnd_proc(
                             if let Ok(mut applied) = APPLIED_LANG.lock() {
                                 *applied = Some(current.clone());
                             }
-                            let msg = serde_json::json!({
-                                "type": "set_language",
-                                "lang": current
-                            });
-                            post_web_message_json(wv, &msg.to_string());
+                            post_web_message(
+                                wv,
+                                &HostToWebMessage::SetLanguage { lang: current },
+                            );
                         }
                     }
                 }
@@ -1209,12 +1223,13 @@ unsafe extern "system" fn visualizer_wnd_proc(
             if !state_ptr.is_null() {
                 unsafe {
                     if let Some(ref wv) = (*state_ptr).webview {
-                        let msg = serde_json::json!({
-                            "type": "sync_opacity",
-                            "val": pct,
-                            "show_hud": show_hud
-                        });
-                        post_web_message_json(wv, &msg.to_string());
+                        post_web_message(
+                            wv,
+                            &HostToWebMessage::SyncOpacity {
+                                val: pct,
+                                show_hud,
+                            },
+                        );
                     }
                 }
             }
@@ -1540,22 +1555,22 @@ unsafe extern "system" fn visualizer_wnd_proc(
                                 if let Ok(mut applied) = APPLIED_LANG.lock() {
                                     if applied.as_deref() != Some(current.as_str()) {
                                         *applied = Some(current.clone());
-                                        let msg = serde_json::json!({
-                                            "type": "set_language",
-                                            "lang": current
-                                        });
-                                        post_web_message_json(wv, &msg.to_string());
+                                        post_web_message(
+                                            wv,
+                                            &HostToWebMessage::SetLanguage { lang: current },
+                                        );
                                     }
                                 }
                             }
                         }
 
                         let spectrum = crate::spectrum::get_raw_spectrum();
-                        let msg = serde_json::json!({
-                            "type": "spectrum",
-                            "data": &spectrum[..]
-                        });
-                        post_web_message_json(wv, &msg.to_string());
+                        post_web_message(
+                            wv,
+                            &HostToWebMessage::Spectrum {
+                                data: &spectrum[..],
+                            },
+                        );
                     }
                 }
             }

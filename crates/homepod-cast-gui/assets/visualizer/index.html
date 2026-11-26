@@ -1620,7 +1620,7 @@ if (window.chrome && window.chrome.webview) {
 window.addEventListener('message', e => handleHostAudio(e.data));
 
 function sendIpc(msg) {
-  const str = String(msg);
+  const str = (typeof msg === 'object' && msg !== null) ? JSON.stringify(msg) : String(msg);
   try {
     if (window.ipc && typeof window.ipc.postMessage === 'function') {
       window.ipc.postMessage(str);

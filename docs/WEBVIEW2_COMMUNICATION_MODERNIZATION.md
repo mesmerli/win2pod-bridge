@@ -137,6 +137,62 @@ function handleHostAudio(data) {
 }
 ```
 
+### 4.3 雙向嚴格型別化契約 (`visualizer_ipc.rs`)
+
+為了消滅 Rust 端散落的 `serde_json::json!` 動態字典構造，以及徹底根絕接收端脆弱的 `body.contains(...)` 子字串嗅探，我們在 `crates/homepod-cast-gui/src/visualizer_ipc.rs` 建立了專屬的雙向強型別契約：
+
+```rust
+/// Rust 發往 WebView2 的嚴格型別訊息 (零動態 Heap AST 分配)
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type")]
+pub enum HostToWebMessage<'a> {
+    #[serde(rename = "spectrum")]
+    Spectrum { data: &'a [u8] },
+    #[serde(rename = "init_state")]
+    InitState { lang: &'a str, pinned: bool, badge: &'a str, docked: bool },
+    #[serde(rename = "set_language")]
+    SetLanguage { lang: &'a str },
+    #[serde(rename = "title_badge")]
+    TitleBadge { badge: &'a str, docked: bool },
+    #[serde(rename = "vis_pin_changed")]
+    VisPinChanged { pinned: bool, from_host: bool },
+    #[serde(rename = "vis_fullscreen_changed")]
+    VisFullscreenChanged { fullscreen: bool },
+    #[serde(rename = "sync_opacity")]
+    SyncOpacity { val: u32, show_hud: bool },
+}
+
+/// WebView2 發往 Rust 的嚴格型別指令 (支援現代 JSON 物件與前置舊式字串安全解析)
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(tag = "action", content = "payload")]
+pub enum WebToHostCommand {
+    Close,
+    CloseCluster,
+    Minimize,
+    MinimizeSolo,
+    StartDrag,
+    ToggleFullscreen,
+    TogglePin,
+    VisReady,
+    ShowMain,
+    WakeGhost,
+    WakeGhostSolo,
+    ToggleOpacity,
+    ToggleOpacitySolo,
+    SetOpacity { pct: f32 },
+    SetOpacitySolo { pct: f32 },
+    OpacityMenuOpen { is_open: bool },
+    SetHoverPeek { enabled: bool },
+    SuppressPeek { suppress: bool },
+    MouseEnter,
+    MouseLeave,
+}
+```
+
+* **安全收益**：
+  1. `WebToHostCommand::parse` 杜絕了子字串混淆（例如 `"close_cluster"` 過去容易誤觸 `"close"` 分支）。
+  2. Rust 端 `post_web_message` 直接序列化借用結構體（借用切片 `&'a [u8]` 與字串 `&'a str`），達成零記憶體拷貝的 60 FPS 頻譜串流。
+
 ---
 
 ## 5. 訊息協定規範 (Message Protocol Specification)
