@@ -156,6 +156,10 @@ pub fn hide_hud_cluster() {
         }
     }
 
+    crate::window_manager::WindowManager::with_manager(|mgr| {
+        mgr.on_hud_toggled(false);
+    });
+
     if let Some(ctx) = crate::gui::get_egui_ctx() {
         ctx.request_repaint();
     }
@@ -163,6 +167,10 @@ pub fn hide_hud_cluster() {
 
 pub fn show_hud_cluster() {
     VISUALIZER_HUD_MAIN_SHOWN.store(true, Ordering::SeqCst);
+
+    crate::window_manager::WindowManager::with_manager(|mgr| {
+        mgr.on_hud_toggled(true);
+    });
 
     let members = get_all_hud_target_windows();
 
@@ -242,9 +250,11 @@ pub fn exit_visualizer_fullscreen() {
 }
 
 pub fn toggle_main_window_hud() {
-    crate::window_manager::WindowManager::with_manager(|mgr| {
-        mgr.toggle_fullscreen_hud();
-    });
+    if is_hud_shown() {
+        hide_hud_cluster();
+    } else {
+        show_hud_cluster();
+    }
 }
 
 pub fn set_language(lang_code: &str) {

@@ -1005,6 +1005,52 @@ use super::*;
     }
 
     #[test]
+    fn test_hud_binary_toggle_lifecycle() {
+        let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        reset_all();
+
+        let main_r = RECT { left: 100, top: 100, right: 500, bottom: 600 };
+        let mini_r = RECT { left: 500, top: 100, right: 900, bottom: 350 };
+        let eq_r = RECT { left: 500, top: 350, right: 900, bottom: 600 };
+        set_dock_relation(WindowKind::MiniPlayer, WindowKind::Main, &mini_r, &main_r);
+        set_dock_relation(WindowKind::Equalizer, WindowKind::MiniPlayer, &eq_r, &mini_r);
+
+        set_window_pinned(WindowKind::Main, false);
+        set_window_pinned(WindowKind::MiniPlayer, false);
+        set_window_pinned(WindowKind::Equalizer, false);
+
+        assert!(!crate::visualizer::is_hud_shown());
+
+        // Press 1: Toggle ON (All 3 windows appear in HUD)
+        crate::visualizer::toggle_main_window_hud();
+        assert!(crate::visualizer::is_hud_shown(), "HUD must be active on 1st toggle");
+        assert!(is_window_pinned(WindowKind::Main));
+        assert!(is_window_pinned(WindowKind::MiniPlayer));
+        assert!(is_window_pinned(WindowKind::Equalizer));
+
+        // Press 2: Toggle OFF (All 3 windows disappear, pure canvas)
+        crate::visualizer::toggle_main_window_hud();
+        assert!(!crate::visualizer::is_hud_shown(), "HUD must be inactive on 2nd toggle");
+        assert!(!is_window_pinned(WindowKind::Main));
+        assert!(!is_window_pinned(WindowKind::MiniPlayer));
+        assert!(!is_window_pinned(WindowKind::Equalizer));
+
+        // Press 3: Toggle ON again (1 ⇄ 0 binary toggle loop)
+        crate::visualizer::toggle_main_window_hud();
+        assert!(crate::visualizer::is_hud_shown(), "HUD must be active on 3rd toggle");
+        assert!(is_window_pinned(WindowKind::Main));
+        assert!(is_window_pinned(WindowKind::MiniPlayer));
+        assert!(is_window_pinned(WindowKind::Equalizer));
+
+        // Press 4: Toggle OFF again
+        crate::visualizer::toggle_main_window_hud();
+        assert!(!crate::visualizer::is_hud_shown(), "HUD must be inactive on 4th toggle");
+        assert!(!is_window_pinned(WindowKind::Main));
+        assert!(!is_window_pinned(WindowKind::MiniPlayer));
+        assert!(!is_window_pinned(WindowKind::Equalizer));
+    }
+
+    #[test]
     fn test_home_summon_joins_mini_cluster_with_visualizer() {
         let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_all();

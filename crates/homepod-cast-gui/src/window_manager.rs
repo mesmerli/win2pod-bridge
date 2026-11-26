@@ -191,22 +191,21 @@ impl WindowManager {
         }
     }
 
-    /// 全螢幕 HUD 懸浮層開關 (按 W 鍵切換)
-    pub fn toggle_fullscreen_hud(&mut self) {
-        let is_any_hud = self.windows.values().any(|w| w.state.is_hud());
-        if is_any_hud {
-            // 關閉 HUD
-            for w in self.windows.values_mut() {
-                if w.state.is_hud() {
-                    w.exit_hud();
-                }
-            }
-        } else {
-            // 開啟 HUD：喚醒當前所有可作用視窗（若處於最小化，則暫時還原至 HUD 浮層）
-            for w in self.windows.values_mut() {
-                if w.kind != WindowKind::Visualizer && w.is_alive() {
-                    let rect = w.canonical_rect;
-                    w.enter_hud(rect);
+    /// 全螢幕 HUD 懸浮層開關事件同步
+    pub fn on_hud_toggled(&mut self, is_shown: bool) {
+        for w in self.windows.values_mut() {
+            if w.kind != WindowKind::Visualizer && w.is_alive() {
+                if is_shown {
+                    if !w.state.is_hud() {
+                        let rect = w.canonical_rect;
+                        let prior = Box::new(w.state.clone());
+                        w.state = WindowLifecycleState::FullscreenHud {
+                            prior_state: prior,
+                            hud_rect: rect,
+                        };
+                    }
+                } else if let WindowLifecycleState::FullscreenHud { prior_state, .. } = &w.state {
+                    w.state = *prior_state.clone();
                 }
             }
         }
