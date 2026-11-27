@@ -929,7 +929,7 @@ pub unsafe fn layout_modular_workstation(
     let (main_rect, main_w, main_h) = get_window_safe_rect(WindowKind::Main, main_hwnd);
 
     // 2. 取得迷你播放器目前的實際寬高與矩形（若有開啟）
-    let (has_mini, mini_rect, mini_w, mut mini_h) = if !mini_hwnd.is_null()
+    let (has_mini, mini_rect, mini_w, _) = if !mini_hwnd.is_null()
         && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(mini_hwnd) != 0
     {
         let (r, w, h) = get_window_safe_rect(WindowKind::MiniPlayer, mini_hwnd);
@@ -939,7 +939,7 @@ pub unsafe fn layout_modular_workstation(
     };
 
     // 3. 取得等化器目前的實際寬高與矩形（若有開啟）
-    let (has_eq, eq_rect, eq_w, mut eq_h) = if !eq_hwnd.is_null()
+    let (has_eq, eq_rect, eq_w, _) = if !eq_hwnd.is_null()
         && windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(eq_hwnd) != 0
     {
         let (r, w, h) = get_window_safe_rect(WindowKind::Equalizer, eq_hwnd);
@@ -959,19 +959,29 @@ pub unsafe fn layout_modular_workstation(
         (false, std::mem::zeroed(), 0, 0)
     };
 
-    // 計算各欄寬度與集群整體尺寸（若兩者皆存在且主視窗足夠高，各分配一半，但保證絕不低於各視窗的 min_size）
-    if has_mini && has_eq {
-        let half = main_h / 2;
-        let mini_min_h = WindowKind::MiniPlayer.min_size()[1] as i32;
-        let eq_min_h = WindowKind::Equalizer.min_size()[1] as i32;
-        mini_h = half.max(mini_min_h);
-        eq_h = (main_h - mini_h).max(eq_min_h);
-    }
+    // 計算各欄寬度與集群整體尺寸
+    // 注意：迷你播放器與等化器在第二欄呈上下排列。
+    // 迷你播放器佔據上方，等化器緊隨其下。等化器的 Y 坐標必須嚴格以迷你播放器的實際高度為基準向下偏移，
+    // 絕不因主視窗高度偏小而相互交疊！
+    let mini_min_h = WindowKind::MiniPlayer.min_size()[1] as i32;
+    let eq_min_h = WindowKind::Equalizer.min_size()[1] as i32;
+    let actual_mini_h = if has_mini {
+        (mini_rect.bottom - mini_rect.top).max(mini_min_h)
+    } else {
+        0
+    };
+    let actual_eq_h = if has_eq {
+        (eq_rect.bottom - eq_rect.top).max(eq_min_h)
+    } else {
+        0
+    };
+    let mini_h = actual_mini_h;
+    let eq_h = actual_eq_h;
 
     let col2_w = if has_mini && has_eq {
         mini_w.max(eq_w).max(460)
     } else if has_mini {
-        mini_w.max(380)
+        mini_w.max(460)
     } else if has_eq {
         eq_w.max(460)
     } else {

@@ -334,7 +334,7 @@ unsafe extern "system" fn unified_window_subclass_proc(
                     }
                 } else if resize_type == SIZE_RESTORED {
                     if !is_kind_cluster_minimizing(kind) && !is_kind_cluster_restoring(kind) {
-                        if IsIconic(hwnd) != 0 || crate::tray::is_window_hidden_to_tray() {
+                        if crate::tray::is_window_hidden_to_tray() {
                             return DefSubclassProc(hwnd, msg, wparam, lparam);
                         }
                         let role = get_window_role(kind);
@@ -362,14 +362,43 @@ unsafe extern "system" fn unified_window_subclass_proc(
         WM_ACTIVATE => {
             let active_type = (wparam & 0xFFFF) as u32;
             let is_minimized = ((wparam >> 16) & 0xFFFF) != 0;
-            if active_type != WA_INACTIVE as u32
-                && !is_minimized
-                && IsIconic(hwnd) == 0
-                && !is_kind_cluster_minimizing(kind)
-                && !is_kind_cluster_restoring(kind)
-                && SNAPPING_ENABLED.load(Ordering::Relaxed)
-            {
-                bring_cluster_to_top(kind, hwnd);
+            if active_type != WA_INACTIVE as u32 {
+                if IsIconic(hwnd) != 0 {
+                    // 使用者點擊工作列縮圖激活了最小化視窗：自動觸發完整還原與群組展開！
+                    let root = get_component_root(kind);
+                    let root_hwnd = get_window_hwnd(root);
+                    let effective_hwnd = if !root_hwnd.is_null() && IsWindow(root_hwnd) != 0 { root_hwnd } else { hwnd };
+                    crate::genie_effect::disable_window_dwm_transitions(effective_hwnd);
+                    ShowWindow(effective_hwnd, SW_RESTORE);
+                    let nr = get_window_normal_rect(root);
+                    SetWindowPos(
+                        effective_hwnd,
+                        HWND_NOTOPMOST,
+                        nr.left,
+                        nr.top,
+                        nr.right - nr.left,
+                        nr.bottom - nr.top,
+                        SWP_SHOWWINDOW | SWP_FRAMECHANGED,
+                    );
+                    SetForegroundWindow(effective_hwnd);
+                    let was_collapsed = can_start_cluster_restore(root);
+                    if was_collapsed {
+                        expand_cluster_animated(root, effective_hwnd);
+                    } else {
+                        restore_and_realign_all_children(root, effective_hwnd);
+                        finish_cluster_restore(root);
+                    }
+                    if let Some(ctx) = crate::gui::get_egui_ctx() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                        ctx.request_repaint();
+                    }
+                } else if !is_minimized
+                    && !is_kind_cluster_minimizing(kind)
+                    && !is_kind_cluster_restoring(kind)
+                    && SNAPPING_ENABLED.load(Ordering::Relaxed)
+                {
+                    bring_cluster_to_top(kind, hwnd);
+                }
             }
         }
         WM_SYSCOMMAND => {
@@ -393,9 +422,39 @@ unsafe extern "system" fn unified_window_subclass_proc(
                     restore_window_animated(kind, hwnd);
                     return 0;
                 }
-                // 重要：若無神燈快照，放行給 DefSubclassProc 執行 Win32 原生還原與前台激活，
-                // 緊接著系統派發的 WM_SIZE(SIZE_RESTORED) 會由下方統一觸發 expand_cluster_animated，
-                // 絕不攔截 SC_RESTORE 返回 0，杜絕工作列縮圖鎖死或無法點開！
+                // 無邊框 (Frameless) 視窗標準還原：主動呼叫 SW_RESTORE、定位正常矩形、帶至前台並展開群組！
+                let root = get_component_root(kind);
+                let root_hwnd = get_window_hwnd(root);
+                let effective_hwnd = if !root_hwnd.is_null() && IsWindow(root_hwnd) != 0 { root_hwnd } else { hwnd };
+
+                crate::genie_effect::disable_window_dwm_transitions(effective_hwnd);
+                ShowWindow(effective_hwnd, SW_RESTORE);
+
+                let nr = get_window_normal_rect(root);
+                SetWindowPos(
+                    effective_hwnd,
+                    HWND_NOTOPMOST,
+                    nr.left,
+                    nr.top,
+                    nr.right - nr.left,
+                    nr.bottom - nr.top,
+                    SWP_SHOWWINDOW | SWP_FRAMECHANGED,
+                );
+                SetForegroundWindow(effective_hwnd);
+
+                let was_collapsed = can_start_cluster_restore(root);
+                if was_collapsed {
+                    expand_cluster_animated(root, effective_hwnd);
+                } else {
+                    restore_and_realign_all_children(root, effective_hwnd);
+                    finish_cluster_restore(root);
+                }
+
+                if let Some(ctx) = crate::gui::get_egui_ctx() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                    ctx.request_repaint();
+                }
+                return 0;
             }
             let is_slave = role == WindowRole::ClusterSlave;
             if is_slave && sc == SC_MAXIMIZE {
